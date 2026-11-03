@@ -170,7 +170,13 @@ void runFunctionalSmoke() {
             brls::Logger::error("[smoke] === 失败 {} 项 ===", g_failures);
         }
         // 让外层脚本能读到结果：成功退出码 0，失败非 0
-        std::quick_exit(g_failures == 0 ? 0 : 1);
+        //
+        // 用 std::_Exit 而不是 std::quick_exit：
+        // quick_exit 在部分 libc++ 版本里是「未解析的使用声明」
+        // （GitHub 的 macOS runner 实测报错），
+        // _Exit 属于 C 标准库最基础的部分，各平台都有。
+        // 两者语义相同：直接结束进程，不跑析构、不刷 stdio 缓冲。
+        std::_Exit(g_failures == 0 ? 0 : 1);
     }});
 
     // 在后台线程按时间表投递，所有动作回到主线程执行

@@ -111,18 +111,25 @@ jobs:
       - name: 配置 Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: 'platforms;android-34 build-tools;34.0.0 ndk;26.3.11579264 cmake;3.22.1'
+          packages: 'platforms;android-34 build-tools;34.0.0 ndk;28.2.13676358 cmake;3.22.1'
 
       - name: 生成 local.properties
         run: |
+          # 只写 sdk.dir。不要写 ndk.dir —— Gradle 会按 app/build.gradle
+          # 里的 android.ndkVersion 自动定位 NDK；
+          # 手写 ndk.dir 若版本不一致会直接报 CXX1104。
           echo "sdk.dir=$ANDROID_HOME" > android/local.properties
-          echo "ndk.dir=$ANDROID_HOME/ndk/26.3.11579264" >> android/local.properties
+
+      - name: 安装 Gradle 8.11
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          # AGP 8.7.x 不支持 Gradle 9。runner 自带的 gradle 版本太新，
+          # 会直接报 "Minimum supported Gradle version" 或行为异常。
+          gradle-version: '8.11.1'
 
       - name: 构建 APK
         working-directory: android
-        run: |
-          # Gradle wrapper 不在仓库里，用系统 gradle
-          gradle assembleDebug --no-daemon
+        run: gradle assembleDebug --no-daemon
 
       - name: 上传 APK
         uses: actions/upload-artifact@v4
