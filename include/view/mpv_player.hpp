@@ -151,6 +151,9 @@ private:
     // 当前「按下未松手」的按钮，用于绘制按下态（描边加粗）。
     TouchAction locked_action_ = TouchAction::Back;   // 仅当 has_locked_action_ 为真时有效
     bool has_locked_action_ = false;
+
+    // 上一次点击的落点，用于双击判定（要求两次位置接近）。
+    brls::Point last_touch_pos_{};
     void drawTouchControls(NVGcontext* vg, float x, float y, float width, float height);
     bool hitTouchControls(float px, float py);
     void performTouchAction(TouchAction action);

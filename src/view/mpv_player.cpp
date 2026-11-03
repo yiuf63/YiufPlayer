@@ -1012,16 +1012,37 @@ void MPVPlayerView::setupGestures() {
                 }
             }
 
-            if (gesture_double_tap_pending_ &&
-                std::chrono::duration_cast<std::chrono::milliseconds>(
-                    now - last_touch_down_time_).count() < 300) {
-                // 双击
+            // 双击判定：**时间 + 位置**双重条件。
+            //
+            // 原实现只比时间（间隔 < 300ms），不看两次点击的位置。
+            // 后果：用户先点左上角、300ms 内再点右下角，会被判成双击
+            // 而切换播放/暂停 —— 这是纯误触，在触屏上很容易发生。
+            //
+            // 现在要求两次落点相距 < 80 逻辑像素（约一个拇指宽度），
+            // 超出就当作两次独立单击。
+            const float kDoubleTapSlopPx = 80.0f;
+            const auto dt_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now - last_touch_down_time_).count();
+            const float dx = status.position.x - last_touch_pos_.x;
+            const float dy = status.position.y - last_touch_pos_.y;
+            const bool near_prev = (dx * dx + dy * dy) <
+                                   (kDoubleTapSlopPx * kDoubleTapSlopPx);
+
+            if (gesture_double_tap_pending_ && dt_ms < 300 && near_prev) {
+                // 双击：切换播放/暂停。
+                // 注意第一次单击已经切换过 OSD 了，这里把它切回来，
+                // 否则双击会在控制栏上闪现一下（观感很毛）。
                 gesture_double_tap_pending_ = false;
-                if (!touch_locked_) togglePlayPause();
+                if (!touch_locked_) {
+                    osd_visible_ = !osd_visible_;   // 抵消第一次单击的效果
+                    togglePlayPause();
+                    last_user_action_time_ = now;
+                }
             } else {
                 // 单击
                 gesture_double_tap_pending_ = true;
                 last_touch_down_time_ = now;
+                last_touch_pos_ = status.position;
                 if (!touch_locked_) {
                     osd_visible_ = !osd_visible_;
                     last_user_action_time_ = now;
@@ -1067,7 +1088,17 @@ void MPVPlayerView::setupGestures() {
                     // 直接用累加值除以灵敏度即为正向增量，无需取反。
                     // （此前误当作「当前 - 上一帧」而取了负号，导致
                     //   向上滑反而降低音量/亮度，方向完全相反。）
-                    float ratio = gesture_accumulatedY_ / 300.0f;
+                    // 灵敏度按**屏幕高度的比例**计算，而不是固定 300px。
+                    //
+                    // 原来写死 300：在 1280x906 的界面上，手指只滑三分之一屏
+                    // 就能把音量从 0 拉到 100%，几乎无法精调；而在小屏上
+                    // 又需要滑很多次才到头。同一个手势在不同设备上手感差异巨大。
+                    //
+                    // 现在：滑过约 1.2 个屏高 = 满量程，与尺寸无关。
+                    const float view_h = this->getHeight() > 0.0f
+                                             ? this->getHeight() : 906.0f;
+                    const float sensitivity = view_h * 1.2f;
+                    float ratio = gesture_accumulatedY_ / sensitivity;
                     if (current_gesture_ == GestureMode::Brightness) {
                         setBrightness(brightness_start_ + ratio);
                     } else if (current_gesture_ == GestureMode::Volume) {
