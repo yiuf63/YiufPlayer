@@ -62,6 +62,11 @@ jobs:
             libglfw3-dev libfmt-dev libtinyxml2-dev libdbus-1-dev \
             libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
 
+      - name: 编译 libromfs 生成器
+        # 它是**宿主机**工具（把资源打成 C++ 源码），不能入库：
+        # macOS 编的是 Mach-O，Linux runner 无法执行。
+        run: bash scripts/build-libromfs-generator.sh
+
       - name: 准备 romfs 资源
         run: bash scripts/prepare-romfs.sh
 
@@ -104,6 +109,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+
+      - name: 编译 libromfs 生成器
+        # 同 Linux job：宿主机工具，必须现编
+        run: bash scripts/build-libromfs-generator.sh
 
       - name: 准备 romfs 资源
         run: bash scripts/prepare-romfs.sh

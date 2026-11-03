@@ -1248,13 +1248,42 @@ void MPVPlayerView::initMPV() {
     mpv_set_option_string(mpv_, "keep-open", "yes");
     mpv_set_option_string(mpv_, "sub-auto", "fuzzy");
     mpv_set_option_string(mpv_, "sub-font", "sans-serif");
-    mpv_set_option_string(mpv_, "sub-font-size", "46");
-    // 字幕默认贴在画面最底部，会被底部的 OSD 控制栏（110px）遮住，
-    // 实测有 OSD 时字幕白像素从 3676 掉到 236，基本不可读。
-    // 抬高字幕位置并留出底部边距，使其始终位于控制栏之上。
+
+    // 字幕字号按**屏幕高度比例**计算，而不是写死 46。
+    //
+    // 写死的后果（实测推算）：
+    //   屏高  360 → 字幕占 12.8%（过大，遮挡画面）
+    //   屏高  906 → 占 5.1%（合适）
+    //   屏高 2400 → 占  1.9%（Android 平板上过小，看不清）
+    // 同一个数值在不同设备上观感完全不同。
+    //
+    // mpv 的 sub-font-size 以视频高度的 1/100 为缩放基准，
+    // 因此这里换算成「占屏高 5.5%」的等效字号。
+    // 注意：取的是**逻辑高度**（contentHeight），不是物理像素。
+    {
+        const float logical_h = brls::Application::contentHeight > 0.0f
+                                    ? brls::Application::contentHeight : 906.0f;
+        const int sub_size = (int)std::clamp(logical_h * 0.055f, 18.0f, 96.0f);
+        char buf[16];
+        std::snprintf(buf, sizeof(buf), "%d", sub_size);
+        mpv_set_option_string(mpv_, "sub-font-size", buf);
+        brls::Logger::info("字幕字号: {}（屏高 {:.0f} 的 5.5%）", sub_size, logical_h);
+    }
+
+    // 字幕默认贴在画面最底部，会被底部 OSD 控制栏遮住
+    // （实测有 OSD 时字幕白像素从 3676 掉到 236，基本不可读）。
+    // 抬高位置并留底部边距，使其始终位于控制栏之上。
     mpv_set_option_string(mpv_, "sub-pos", "80");
     mpv_set_option_string(mpv_, "sub-margin-y", "36");
-    mpv_set_option_string(mpv_, "sub-border-size", "2.5");
+    // 描边/阴影同样按比例，否则小屏上描边会吃掉字形、大屏上又看不见。
+    {
+        const float logical_h = brls::Application::contentHeight > 0.0f
+                                    ? brls::Application::contentHeight : 906.0f;
+        char buf[16];
+        std::snprintf(buf, sizeof(buf), "%.1f",
+                      std::clamp(logical_h * 0.0028f, 1.0f, 6.0f));
+        mpv_set_option_string(mpv_, "sub-border-size", buf);
+    }
     mpv_set_option_string(mpv_, "sub-shadow-offset", "1.5");
     mpv_set_option_string(mpv_, "ytdl", "no");
 

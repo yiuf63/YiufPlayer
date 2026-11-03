@@ -50,3 +50,11 @@ external/borealis/library/lib/extern/SDL/
 #   1. 它与 resources/ 内容重复，字体一份就 10MB
 #   2. 生成逻辑见 scripts/prepare-romfs.sh
 resources/romfs/
+
+# ── libromfs 生成器 ──
+# 这是**宿主机可执行文件**（macOS 上是 Mach-O arm64），
+# 由 borealis/build_libromfs_generator.sh 编译产出。
+# 绝不能入库：Linux/CI runner 拿到 Mach-O 无法执行，
+# 会直接报 "libromfs-generator has not been built"。
+# 构建前用 scripts/prepare-romfs.sh 或 borealis 的脚本现编。
+external/borealis/libromfs-generator
