@@ -1,0 +1,52 @@
+# ── 构建产物 ──
+build/
+build-*/
+cmake-build-*/
+
+# ── Android ──
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+android/app/.cxx/
+*.apk
+*.aab
+
+# ── 编译中间件 ──
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+
+# ── 测试产物 ──
+*.ppm
+*.png.tmp
+/tmp/
+test-results/
+asan.log
+*.log
+
+# ── 编辑器 / 系统 ──
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── 依赖（子模块请用 git submodule，不要提交）──
+# 注意：external/borealis 是**源码依赖**，需要提交；
+# 但它内部的 extern 子模块（glfw/SDL）应由 .gitmodules 管理。
+external/borealis/library/lib/extern/SDL/
+
+# ── libromfs 资源镜像 ──
+# resources/romfs/ 是 resources/ 的**构建期镜像**（由脚本生成，
+# 供 Android 的 libromfs 打进二进制）。不要提交：
+#   1. 它与 resources/ 内容重复，字体一份就 10MB
+#   2. 生成逻辑见 scripts/prepare-romfs.sh
+resources/romfs/

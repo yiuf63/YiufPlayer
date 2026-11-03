@@ -1,0 +1,92 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'org.deckplayer.android'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'org.deckplayer.android'
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName '0.7.0'
+        ndkVersion '28.2.13676358'
+
+        // 只构建 arm64-v8a：目标设备是 Steam Deck 类掌机与平板，
+        // 32 位 armeabi-v7a 需要单独的 libmpv 构建，暂不提供。
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+
+        externalNativeBuild {
+            cmake {
+                // 关键参数说明：
+                //   DECK_USE_GLES3 —— Android 只有 OpenGL ES，没有桌面 GL
+                //   USE_EGL        —— 必须走 EGL
+                //   PLATFORM_ANDROID —— 让 borealis 选择 Android 平台后端
+                // 这些选项在 CMakeLists.txt 里有对应处理。
+                arguments "-DCMAKE_BUILD_TYPE=Release",
+                          "-DANDROID_STL=c++_shared",
+                          "-DANDROID_CPP_FEATURES=rtti exceptions",
+                          "-DPLATFORM_ANDROID=ON",
+                          "-DDECK_USE_GLES3=ON",
+                          "-DDECK_USE_EGL=ON",
+                          // Android 上不需要 App Nap 这类桌面特性
+                          "-DPLATFORM_DESKTOP=OFF",
+                          // 用预编译的 libSDL2.so（仓库里没有 SDL 源码）。
+                          // 头文件与库的路径相对于仓库根目录。
+                          "-DUSE_SYSTEM_SDL2=ON",
+                          "-DANDROID_SDL2_INCLUDE_DIR=${rootDir}/../external/sdl2-headers",
+                          "-DANDROID_SDL2_LIBRARY=${rootDir}/app/src/main/jniLibs/arm64-v8a/libSDL2.so",
+                          // libromfs 生成器是**宿主机**（macOS）工具，
+                          // 用于把资源编译进二进制。borealis 默认在
+                          // library/ 下查找，而文件实际在 borealis/ 根目录，
+                          // 因此必须显式指定，否则交叉编译直接失败。
+                          "-DLIBROMFS_PREBUILT_GENERATOR=${rootDir}/../external/borealis/libromfs-generator"
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            // 先不混淆：这个阶段的目的是「能在设备上看到界面」，
+            // 混淆会掩盖符号问题，等验证通过后再考虑。
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
+                          'proguard-rules.pro'
+        }
+        debug {
+            // 用 debug 签名即可安装到自己的设备
+            debuggable true
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            // 必须是绝对路径：AGP 对相对路径的解析基准是模块目录（app/），
+            // 写成 '../CMakeLists.txt' 会被解析成 android/CMakeLists.txt。
+            path "${rootDir}/../CMakeLists.txt"
+            version '3.22.1'
+        }
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['src/main/jniLibs']
+        }
+    }
+
+    packagingOptions {
+        // 预编译的 libmpv 依赖这些 .so，必须一起打包
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+}
+
+dependencies {
+    // 本项目不依赖 AndroidX：UI 完全由 borealis 用 OpenGL ES 自绘，
+    // 不使用任何原生控件。保持零依赖能让 APK 更小、启动更快。
+}

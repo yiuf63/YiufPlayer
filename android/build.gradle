@@ -1,0 +1,8 @@
+// 顶层构建脚本：只声明插件版本，具体配置在 app/build.gradle
+//
+// 版本约束：AGP 8.7.x 需要 Gradle 8.9+，且不支持 Gradle 9。
+// 本机梯度为 Gradle 9.7，因此用 wrapper 固定到 8.11.1
+// （见 gradle/wrapper/gradle-wrapper.properties），不要直接跑系统 gradle。
+plugins {
+    id 'com.android.application' version '8.7.3' apply false
+}

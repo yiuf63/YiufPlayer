@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Android 15 (API 35) 起对 targetSdk>=35 的应用强制 edge-to-edge，
+        会让 SurfaceView 的 buffer 尺寸小于窗口（实测 3392x2253 vs 3392x2400），
+        buffer 被 BLASTBufferQueue 丢弃，屏幕停留在启动画面。
+
+        本项目 targetSdk=34，不触发强制 edge-to-edge；
+        这里只是把窗口背景设为黑色，避免启动瞬间的白色闪烁，
+        全屏由 Activity 的 hideSystemUi() 处理。
+    -->
+    <style name="DeckPlayerTheme" parent="@android:style/Theme.NoTitleBar.Fullscreen">
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+</resources>

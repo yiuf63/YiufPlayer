@@ -1,0 +1,13 @@
+#!/bin/sh
+# 最小化的 gradlew：本机已装 gradle，这里只做转发。
+# 正式项目应使用 `gradle wrapper` 生成完整的 wrapper，
+# 那样不依赖本机预装的 gradle，CI 也能直接用。
+set -e
+if command -v gradle >/dev/null 2>&1; then
+    exec gradle "$@"
+elif [ -x "./gradle-wrapper/gradlew" ]; then
+    exec ./gradle-wrapper/gradlew "$@"
+else
+    echo "未找到 gradle。请安装（brew install gradle）或生成 wrapper：gradle wrapper" >&2
+    exit 1
+fi
