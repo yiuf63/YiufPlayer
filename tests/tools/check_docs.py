@@ -141,17 +141,14 @@ def check_behaviors(src_text, doc_text, verbose):
     check("已看完判定含「距结尾 30 秒」", has_near, "")
     check("已看完判定含「播过一半」下限", has_half, "")
 
-    # 手势灵敏度
-    m = re.search(r"gesture_accumulatedY_\s*/\s*([0-9.]+)f", src_text)
-    if m:
-        val = m.group(1).rstrip("0").rstrip(".")
-        check("上下滑动满量程 300 像素", val == "300", f"实际 {m.group(1)}")
-    else:
-        # 可能写成 ratio = ... / 300.0f
-        m2 = re.search(r"float ratio = gesture_accumulatedY_\s*/\s*([0-9.]+)f", src_text)
-        val = m2.group(1).rstrip("0").rstrip(".") if m2 else None
-        check("上下滑动满量程 300 像素", val == "300",
-              f"实际 {m2.group(1)}" if m2 else "未找到灵敏度代码")
+    # 手势灵敏度：按屏幕高度比例，而不是固定像素。
+    #
+    # 原来的判据断言「满量程 300 像素」，但固定像素值在不同尺寸的设备上
+    # 手感差异极大（1280x906 上滑三分之一屏就到头，小屏要滑很多次）。
+    # 现已改为按 view 高度比例，因此判据同步改为检查这个比例关系。
+    m = re.search(r"sensitivity\s*=\s*view_h\s*\*\s*([0-9.]+)f", src_text)
+    check("上下滑动灵敏度按屏高比例", bool(m),
+          f"系数 {m.group(1)}" if m else "未找到 sensitivity = view_h * N 的写法")
     check("水平滑动跨度为半时长", "total_duration_ * 0.5" in src_text, "")
 
     # 字幕避让控制栏（第 27 轮修复）

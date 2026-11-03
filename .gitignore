@@ -15,10 +15,16 @@ android/app/.cxx/
 # ── 编译中间件 ──
 *.o
 *.a
-*.so
 *.dylib
 *.dll
 *.exe
+# 注意：**不要**全局忽略 *.so。
+# Android 的 jniLibs/ 里是预编译依赖（libmpv/libav*/libSDL2），
+# 必须入库，否则 CI 构建 APK 会报：
+#   ninja: error: '.../libSDL2.so', missing and no known rule to make it
+# 只忽略构建产出的 .so：
+build/*.so
+build-*/*.so
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
