@@ -65,32 +65,76 @@ function ic(name, size, sw) {
 
 const VIDEOS = [
   { title: '01. 漂流 冒険の島!', file: '01. 漂流 冒険の島!.mp4', sub: '403.4 KB · 含字幕',
-    badge: '已看 33%', progress: 0.33, dur: 206, pos: 68, meta: '640×360 · 软件解码', hw: false, tone: 't0' },
+    badge: '已看 33%', progress: 0.33, dur: 206, pos: 68, meta: '640×360 · 软件解码', hw: false, tone: 't0',
+    folder: '/home/deck/Videos', size: 0.4, added: 1 },
   { title: '02. Blade Runner 2049', file: '02. Blade Runner 2049.mp4', sub: '52.3 KB · 含字幕',
-    badge: '已看 64%', progress: 0.64, dur: 955, pos: 611, meta: '1920×1080 · 硬件解码', hw: true, tone: 't1' },
+    badge: '已看 64%', progress: 0.64, dur: 955, pos: 611, meta: '1920×1080 · 硬件解码', hw: true, tone: 't1',
+    folder: '/home/deck/Videos', size: 52.3, added: 2 },
   { title: '03. 大鱼海棠', file: '03. 大鱼海棠.mkv', sub: '162.5 KB · 含字幕',
-    badge: '已看完', progress: 1, dur: 5460, pos: 5460, meta: '1920×804 · 硬件解码', hw: true, tone: 't2' },
+    badge: '已看完', progress: 1, dur: 5460, pos: 5460, meta: '1920×804 · 硬件解码', hw: true, tone: 't2',
+    folder: '/home/deck/Videos', size: 162.5, added: 3 },
   { title: '04. 你的名字', file: '04. 你的名字.mp4', sub: '208.1 KB',
-    badge: '', progress: -1, dur: 6360, pos: 0, meta: '1920×1080 · 硬件解码', hw: true, tone: 't3' },
+    badge: '', progress: -1, dur: 6360, pos: 0, meta: '1920×1080 · 硬件解码', hw: true, tone: 't3',
+    folder: '/home/deck/Videos', size: 208.1, added: 12 },
   { title: '05. 千与千寻', file: '05. 千与千寻.mkv', sub: '2.4 GB · 含字幕',
-    badge: '', progress: -1, dur: 7380, pos: 0, meta: '1920×1038 · 硬件解码', hw: true, tone: 't4' },
+    badge: '', progress: -1, dur: 7380, pos: 0, meta: '1920×1038 · 硬件解码', hw: true, tone: 't4',
+    folder: '/home/deck/Videos', size: 2458, added: 15 },
   { title: '06. 攻壳机动队', file: '06. 攻壳机动队.mp4', sub: '1.8 GB · 含字幕',
-    badge: '已看 12%', progress: 0.12, dur: 4980, pos: 598, meta: '1920×1080 · 硬件解码', hw: true, tone: 't7' },
+    badge: '已看 12%', progress: 0.12, dur: 4980, pos: 598, meta: '1920×1080 · 硬件解码', hw: true, tone: 't7',
+    folder: '/home/deck/Videos', size: 1843, added: 21 },
   { title: '07. 蓝色巨星', file: '07. 蓝色巨星.mkv', sub: '3.1 GB',
-    badge: '', progress: -1, dur: 7200, pos: 0, meta: '1920×816 · 硬件解码', hw: true, tone: 't5' },
+    badge: '', progress: -1, dur: 7200, pos: 0, meta: '1920×816 · 硬件解码', hw: true, tone: 't5',
+    folder: '/run/media/deck/SD256/Anime', size: 3174, added: 30 },
   { title: '08. 沙丘', file: '08. 沙丘.mp4', sub: '4.7 GB · 含字幕',
-    badge: '已看完', progress: 1, dur: 9300, pos: 9300, meta: '3840×1600 · 硬件解码', hw: true, tone: 't6' },
+    badge: '已看完', progress: 1, dur: 9300, pos: 9300, meta: '3840×1600 · 硬件解码', hw: true, tone: 't6',
+    folder: '/run/media/deck/SD256/Anime', size: 4813, added: 33 },
   { title: '09. 星际穿越', file: '09. 星际穿越.mkv', sub: '5.2 GB · 含字幕',
-    badge: '已看 78%', progress: 0.78, dur: 10140, pos: 7909, meta: '1920×800 · 硬件解码', hw: true, tone: 't9' },
+    badge: '已看 78%', progress: 0.78, dur: 10140, pos: 7909, meta: '1920×800 · 硬件解码', hw: true, tone: 't9',
+    folder: '/run/media/deck/SD256/Live', size: 5325, added: 40 },
   { title: '10. 蜘蛛侠：平行宇宙', file: '10. 蜘蛛侠：平行宇宙.mp4', sub: '2.9 GB',
-    badge: '', progress: -1, dur: 7020, pos: 0, meta: '1920×804 · 硬件解码', hw: true, tone: 't8' },
+    badge: '', progress: -1, dur: 7020, pos: 0, meta: '1920×804 · 硬件解码', hw: true, tone: 't8',
+    folder: '/run/media/deck/SD256/Live', size: 2970, added: 45 },
 ];
 
+/* 音乐条目同样带 folder / size / added：
+   媒体库现在要按文件夹聚合，缺这两个字段就没法算「这个文件夹里有多少、多大」。 */
 const MUSIC = [
-  { title: '01. 夜に駆ける', sub: 'YOASOBI · 3:21 · MP3 320k', badge: '3:21', tone: 'm0' },
-  { title: '02. Interstellar Theme', sub: 'Hans Zimmer · 4:20 · FLAC', badge: '4:20', tone: 'm1' },
-  { title: '03. 花の唄', sub: 'Aimer · 3:10 · MP3 320k', badge: '3:10', tone: 'm2' },
+  { title: '01. 夜に駆ける', sub: 'YOASOBI · 3:21 · MP3 320k', badge: '3:21', tone: 'm0',
+    dur: 201, folder: '/home/deck/Music', size: 6.2, added: 4 },
+  { title: '02. Interstellar Theme', sub: 'Hans Zimmer · 4:20 · FLAC', badge: '4:20', tone: 'm1',
+    dur: 260, folder: '/home/deck/Music', size: 38, added: 9 },
+  { title: '03. 花の唄', sub: 'Aimer · 3:10 · MP3 320k', badge: '3:10', tone: 'm2',
+    dur: 190, folder: '/home/deck/Music', size: 5.9, added: 18 },
+  { title: '04. 千本桜 (Live)', sub: '初音ミク · 4:02 · FLAC', badge: '4:02', tone: 'm0',
+    dur: 242, folder: '/run/media/deck/SD256/Live', size: 41, added: 41 },
+  { title: '05. 残酷な天使のテーゼ', sub: '高橋洋子 · 4:05 · MP3 320k', badge: '4:05', tone: 'm1',
+    dur: 245, folder: '/run/media/deck/SD256/Live', size: 9.4, added: 42 },
+  { title: '06. 打上花火', sub: 'DAOKO × 米津玄師 · 4:40 · MP3 320k', badge: '4:40', tone: 'm2',
+    dur: 280, folder: '/run/media/deck/SD256/Live', size: 10.7, added: 44 },
 ];
+
+/* 文件夹：媒体库「按文件夹」分组的依据。
+   实机来自 MediaFolder 表（扫描时写入），这里手写一份以便演示混合内容 ——
+   Live 目录里既有视频又有音乐，正是「全放一起会乱」的现场。 */
+const FOLDERS = [
+  { path: '/home/deck/Videos', name: '影视收藏', drive: '内置存储' },
+  { path: '/home/deck/Music', name: '音乐收藏', drive: '内置存储' },
+  { path: '/run/media/deck/SD256/Anime', name: '动画 · SD 卡', drive: 'SD 卡' },
+  { path: '/run/media/deck/SD256/Live', name: '演唱会 · SD 卡', drive: 'SD 卡' },
+];
+
+const FOLDER_BY_PATH = FOLDERS.reduce((m, f) => { m[f.path] = f; return m; }, {});
+
+/* 媒体库的统一条目：视频与音乐进同一个池子，靠 kind 区分。
+   没有这一层，按文件夹聚合就只能分别算两遍再拼，数量永远对不上。 */
+const MEDIA = VIDEOS
+  .map((v, i) => Object.assign({}, v, {
+    idx: i, kind: 'video', search: (v.title + ' ' + v.file).toLowerCase(),
+  }))
+  .concat(MUSIC.map((m, i) => Object.assign({}, m, {
+    idx: i, kind: 'audio', search: m.title.toLowerCase(),
+  })));
+
 
 const HISTORY = [
   { title: '01. 漂流 冒険の島!', sub: '已播 0:02 / 3:26', badge: '刚刚', progress: 0.01, idx: 0 },
@@ -217,19 +261,8 @@ const TAB_LABEL = {
   plugins: '插件管理', player: '播放器',
 };
 
-/* 媒体库的类型与筛选。实机对应 MediaLibrary 的 getVideos() / getAudios()。 */
-const KINDS = [
-  { key: 'video', label: '视频' },
-  { key: 'audio', label: '音乐' },
-  { key: 'all',   label: '全部' },
-];
-
-const FILTERS = [
-  { key: 'all',      label: '不限' },
-  { key: 'resume',   label: '未看完' },
-  { key: 'recent',   label: '最近添加' },
-  { key: 'finished', label: '已看完' },
-];
+/* 媒体库的类型、排序与筛选的选项定义在「工具行与视图菜单」一节，
+   和呼出菜单放在一起 —— 选项和它的 UI 分开写，改一项总要翻两个地方。 */
 
 const RISKS = [
   { tag: '小屏', name: '掌机上的物理缩水',
@@ -244,6 +277,10 @@ const RISKS = [
     text: '抽「第一帧」会得到片头黑场或淡入前的纯黑，整面网格会有一半是黑的。实机按 min(时长×0.1, 30s) 抽帧，缓存到 ~/.cache/deck-player/thumbs。' },
   { tag: '主题', name: '浅色只管浏览页',
     text: '浅色主题不作用于播放页 OSD：亮底控件压在亮画面上会直接消失。切浅色时播放器仍然是暗的，这是有意为之，不是漏做。' },
+  { tag: '视图', name: '视图设置不记忆',
+    text: '分组 / 排序 / 筛选只活在当前会话，刷新即回默认。实机应写进配置；要不要连「上次进的是哪个文件夹」一起记住？MX Player 是会记的。' },
+  { tag: '缩略图', name: '文件夹卡要 4 张抽帧',
+    text: '四宫格拼贴意味着每个目录至少要抽 4 张缩略图，生成成本是网格视图的 4 倍。是否改成「取最新一条的封面 + 计数」，省下四分之三？' },
   { tag: '对比', name: '亮场下的进度条轨道',
     text: '未播放段是 20% 白，压在雪景、天空这类高亮画面上几乎消失（切到「亮场」就能看到）。是否改成「深色槽 + 亮色细边」？' },
 ];
@@ -259,8 +296,17 @@ const state = {
   device: 'deck',
   scene: 'dark',
   layout: 'grid',
-  kind: 'video',
+  kind: 'all',
   filter: 'all',
+  /* 视图：决定「媒体库这一页怎么显示」。
+     MX Player 把这套东西收在一个呼出菜单里（分组 / 排序 / 筛选 / 视图形态），
+     而不是像我们上一版那样在工具行上摊四个胶囊 —— 摊开时那条工具行占了
+     一整行，能选的也只有「视频/音乐/全部」这几个字。 */
+  group: 'folder',   // folder | flat
+  sort: 'name',      // name | added | dur | size
+  desc: false,
+  libFolder: null,   // 已进入的文件夹路径（null = 文件夹总览）
+  sheet: false,      // 视图面板是否展开
   query: '',
   focus: { zone: 'main', i: 0 },
   annotate: false,
@@ -355,12 +401,17 @@ function cell(o) {
   const lead = o.tone
     ? '<span class="thumb-sm"><span class="frame ' + o.tone + '"></span>' + prog + '</span>'
     : '<span class="tile">' + ic(o.icon, 23, 1.9) + '</span>';
+  /* 混排时给音乐加一个类型标：视频行和音乐行长得太像，
+     一眼扫过去「3:21」既可能是短片也可能是歌，必须有个记号。 */
+  const mark = o.mark
+    ? '<span class="typechip" title="音乐">' + ic(o.mark, 11, 2.1) + '</span>' : '';
   return '<div class="cell focusable' + (o.tone ? ' has-thumb' : '') +
     (o.progress >= 0 ? ' has-progress' : '') + '"' +
     ' data-action="' + o.action + '" data-id="' + (o.id != null ? o.id : '') + '"' +
     ' data-name="' + esc(o.name || '列表卡片') + '" data-spec="' + esc(spec) + '"' + risk + '>' +
     lead +
-    '<span class="body"><span class="title">' + esc(o.title) + '</span>' +
+    '<span class="body"><span class="titlerow">' + mark +
+      '<span class="title">' + esc(o.title) + '</span></span>' +
     (o.sub ? '<span class="sub">' + esc(o.sub) + '</span>' : '') + '</span>' +
     badge + val + sw + chev + '</div>';
 }
@@ -374,13 +425,16 @@ function gcard(o) {
   const pl = (o.progress != null && o.progress > 0 && o.progress < 1)
     ? '<span class="pl"><i style="width:' + Math.round(clamp(o.progress, 0, 1) * 100) + '%"></i></span>'
     : '';
-  const spec = o.spec || '234 × 176 · 缩略图 16:9 · 圆角 14 · 标题 14 / 副标题 12.5';
+  // 列宽随侧栏宽度浮动（现约 248），不写死像素 —— 写死了改一处就过期一处
+  const spec = o.spec || '网格卡片 · 4 列自适应 · 缩略图 16:9 · 圆角 14 · 标题 14';
+  const tmark = o.mark
+    ? '<span class="tmark" title="音乐">' + ic(o.mark, 13, 2.1) + '</span>' : '';
   return '<div class="gcard focusable" data-action="' + o.action + '"' +
     ' data-id="' + (o.id != null ? o.id : '') + '"' +
     ' data-name="' + esc(o.name || '网格卡片') + '" data-spec="' + esc(spec) + '"' +
     (o.risk ? ' data-risk="' + esc(o.risk) + '"' : '') + '>' +
     '<span class="thumb"><span class="frame ' + (o.tone || 't0') + '"></span>' +
-    seen + dur + pl + '</span>' +
+    tmark + seen + dur + pl + '</span>' +
     '<span class="cap"><span class="tt">' + esc(o.title) + '</span>' +
     '<span class="ss">' + esc(o.sub) + '</span></span></div>';
 }
@@ -420,49 +474,192 @@ function listHTML() {
 
 /* ── 媒体库 ───────────────────────────────────────────────────
    内容页只放内容。
-   搜索 / 类型 / 筛选是「在内容里找东西」，属于这一页；
-   「添加媒体文件夹」「重新扫描」「插件」是配置，全部撤到设置页。 */
+   搜索留在工具行；「怎么显示」全部收进呼出菜单（分组 / 内容 / 排序 / 筛选）。
+   「添加媒体文件夹」「重新扫描」「插件」是配置，全部在设置页。
+
+   为什么要有「按文件夹」：一台掌机上接了内置存储 + SD 卡，媒体文件夹四五个，
+   全部拉平之后视频和音乐混在一起、十个「01. 开头」的文件排成一列，
+   找东西只剩搜索。MX Player 的解法就是给列表加一层文件夹，并把显示规则
+   收进一个呼出菜单 —— 这里照做。 */
 function mediaHTML() {
+  const pool = mediaPool();
+
+  if (!pool.length) {
+    return emptyState('search', state.query ? '没有匹配的内容' : '这个筛选下没有内容',
+      state.query ? '换个关键词，或清空搜索框' : '去「设置 → 媒体文件夹」添加目录');
+  }
+
+  /* 搜索一旦有内容，就临时摊平成结果列表：
+     在文件夹卡片里搜「沙丘」却看到一张文件夹卡，是搜索最反直觉的结果。 */
+  if (state.query.trim() || state.group === 'flat') {
+    const groups = kindGroups(pool);
+    return groups.map((g) =>
+      section(g.label + ' · ' + g.items.length +
+        (state.libFolder ? ' · ' + FOLDER_BY_PATH[state.libFolder].name : '')) +
+      (state.layout === 'grid' ? grid(g.items.map(itemCard)) : g.items.map(itemRow).join(''))
+    ).join('') + (state.libFolder ? '' : (groups.length > 1 ? flatHint() : ''));
+  }
+
+  // 已进入某个文件夹
+  if (state.libFolder) {
+    const f = FOLDER_BY_PATH[state.libFolder];
+    const groups = kindGroups(pool);
+    return libBackRow(f) +
+      groups.map((g) =>
+        section(g.label + ' · ' + g.items.length) +
+        (state.layout === 'grid' ? grid(g.items.map(itemCard)) : g.items.map(itemRow).join(''))
+      ).join('');
+  }
+
+  // 文件夹总览
+  const groups = folderGroups(pool);
+  const recent = recentItems(8);
+  return section('文件夹 · ' + groups.length) +
+    (state.layout === 'grid'
+      ? grid(groups.map((g) => folderCard(g.folder, g.items)))
+      : groups.map((g) => folderRow(g.folder, g.items)).join('')) +
+    (recent.length
+      ? section('最近添加 · ' + recent.length) +
+        (state.layout === 'grid' ? grid(recent.map(itemCard)) : recent.map(itemRow).join(''))
+      : '');
+}
+
+/* 「最近添加」：只取固定条目，不跟着排序选项变 ——
+   这一段的语义就是「最新的几样」，让它按名字重排就自相矛盾了。
+   它同时解决了文件夹总览的另一个问题：四个目录占不满一屏，下面是空的。 */
+function recentItems(n) {
+  return MEDIA
+    .filter((x) => state.kind === 'all' || x.kind === state.kind)
+    .slice()
+    .sort((a, b) => (a.added || 0) - (b.added || 0))
+    .slice(0, n);
+}
+
+/* 条目池：内容类型 → 文件夹 → 搜索 → 筛选 → 排序。
+   顺序不能反：先按文件夹收窄再排序，否则「最近添加」会把不同目录穿插起来。 */
+function mediaPool() {
   const q = state.query.trim().toLowerCase();
-  const prog = (x) => (x.progress == null ? -1 : x.progress);
+  let items = MEDIA.filter((x) => state.kind === 'all' || x.kind === state.kind);
+  if (state.libFolder) items = items.filter((x) => x.folder === state.libFolder);
+  if (q) items = items.filter((x) => x.search.indexOf(q) >= 0);
+  if (state.filter === 'resume') items = items.filter((x) => x.progress > 0 && x.progress < 1);
+  if (state.filter === 'finished') items = items.filter((x) => x.progress === 1);
+  return sortMedia(items);
+}
 
-  let items = VIDEOS.map((v, i) => Object.assign({}, v, { i: i, kind: 'video' }));
-  if (state.kind === 'audio') {
-    items = MUSIC.map((m, i) => Object.assign({}, m, { i: i, kind: 'audio' }));
-  } else if (state.kind === 'all') {
-    items = items.concat(MUSIC.map((m, i) => Object.assign({}, m, { i: i, kind: 'audio' })));
-  }
+function sortMedia(arr) {
+  const dir = state.desc ? -1 : 1;
+  const by = {
+    name:  (a, b) => String(a.title).localeCompare(String(b.title), 'zh-Hans-CN'),
+    // added 记的是「几天前」，小的更新 → 升序天然就是「最新在前」
+    added: (a, b) => (a.added || 0) - (b.added || 0),
+    dur:   (a, b) => (a.dur || 0) - (b.dur || 0),
+    size:  (a, b) => (a.size || 0) - (b.size || 0),
+  }[state.sort] || ((a, b) => 0);
+  return arr.slice().sort((a, b) => by(a, b) * dir);
+}
 
-  if (q) {
-    items = items.filter((x) =>
-      (x.title + ' ' + (x.file || '')).toLowerCase().indexOf(q) >= 0);
-  }
-  if (state.filter === 'resume') items = items.filter((x) => prog(x) > 0 && prog(x) < 1);
-  if (state.filter === 'finished') items = items.filter((x) => prog(x) === 1);
+function kindGroups(items) {
+  const v = items.filter((x) => x.kind === 'video');
+  const a = items.filter((x) => x.kind === 'audio');
+  const out = [];
+  if (v.length) out.push({ key: 'video', label: '视频', items: v });
+  if (a.length) out.push({ key: 'audio', label: '音乐', items: a });
+  return out;
+}
 
-  if (!items.length) {
-    return emptyState('search', '没有匹配的内容',
-      state.query ? '换个关键词试试，或清空搜索框' : '这个筛选下还没有内容');
-  }
+function folderGroups(items) {
+  const map = {};
+  items.forEach((x) => { (map[x.folder] = map[x.folder] || []).push(x); });
+  return FOLDERS.filter((f) => map[f.path])
+    .map((f) => ({ folder: f, items: map[f.path] }));
+}
 
-  if (state.layout === 'grid') {
-    return grid(items.map((x, k) => gcard({
-      action: x.kind === 'audio' ? 'play-music' : 'play',
-      id: x.i, tone: x.tone || ('t' + (k % 4)),
-      title: x.title, sub: x.sub, dur: x.dur, progress: x.progress,
-      name: x.kind === 'audio' ? '音乐缩略图卡片' : '视频缩略图卡片',
-      risk: k === 0 && x.kind === 'video'
-        ? '缩略图按 min(时长×0.1, 30s) 抽帧。取第一帧会得到片头黑场，网格会花掉一半。'
-        : '',
-    })));
+function fcount(items) {
+  const v = items.filter((x) => x.kind === 'video').length;
+  const a = items.filter((x) => x.kind === 'audio').length;
+  const parts = [];
+  if (v) parts.push(v + ' 个视频');
+  if (a) parts.push(a + ' 首音乐');
+  return parts.join(' · ');
+}
+
+/* 四宫格拼贴：文件夹没有「一张封面」这件事 ——
+   取第一个文件当封面会让文件夹长得像那部片，四格才读得出「这里装着东西」。
+   不足 4 项时按序补齐，不留空格：空格会被读成「这里缺图/损坏」，
+   补位只是重复，重复读起来是「就这几样」。只有 1 项时干脆整张给它。 */
+function collage(items, cls) {
+  if (items.length === 1) {
+    return '<span class="' + cls + ' single"><span class="frame ' + items[0].tone + '"></span></span>';
   }
-  return items.map((x) => cell({
+  const cells = [];
+  for (let i = 0; i < 4; i++) {
+    const it = items[i % items.length];
+    cells.push('<span class="c"><span class="frame ' + it.tone + '"></span></span>');
+  }
+  return '<span class="' + cls + '">' + cells.join('') + '</span>';
+}
+
+function folderCard(f, items) {
+  const multi = items.filter((x) => x.kind === 'audio').length > 0 &&
+                items.filter((x) => x.kind === 'video').length > 0;
+  return '<div class="gcard foldercard focusable" data-action="open-folder" data-id="' + esc(f.path) + '"' +
+    ' data-name="文件夹卡片" data-spec="文件夹卡片 · 四宫格拼贴 · 圆角 14 · 计数角标 12"' +
+    (multi ? ' data-risk="这个目录里视频和音乐混放。平铺模式下它们会被打散在一起，只有文件夹视图能分开。"' : '') + '>' +
+    '<span class="thumb">' + collage(items, 'collage') +
+      '<span class="fc-badge">' + items.length + '</span>' +
+    '</span>' +
+    '<span class="cap"><span class="tt">' + esc(f.name) + '</span>' +
+    '<span class="ss">' + esc(fcount(items)) + '</span></span></div>';
+}
+
+function folderRow(f, items) {
+  return '<div class="cell focusable has-thumb" data-action="open-folder" data-id="' + esc(f.path) + '"' +
+    ' data-name="文件夹行" data-spec="高 72 · 拼贴 50×50 · 标题 17 / 副标题 12.5">' +
+    collage(items, 'thumb-sm collage') +
+    '<span class="body"><span class="title">' + esc(f.name) + '</span>' +
+    '<span class="sub">' + esc(f.drive + ' · ' + f.path) + '</span></span>' +
+    '<span class="val">' + items.length + ' 项</span>' +
+    '<span class="chev">' + ic('chevron', 16, 1.8) + '</span></div>';
+}
+
+function libBackRow(f) {
+  return '<div class="cell focusable" data-action="lib-up" data-name="返回文件夹总览"' +
+    ' data-spec="高 72 · 返回行 · 与列表卡片同一规格">' +
+    '<span class="tile">' + ic('back', 22, 1.9) + '</span>' +
+    '<span class="body"><span class="title">全部文件夹</span>' +
+    '<span class="sub">' + esc(f.name + ' · ' + f.path) + '</span></span></div>';
+}
+
+function itemCard(x) {
+  return gcard({
+    action: x.kind === 'audio' ? 'play-music' : 'play',
+    id: x.idx, tone: x.tone,
+    title: x.title, sub: x.sub, dur: x.dur, progress: x.progress,
+    mark: x.kind === 'audio' ? 'music' : '',
+    name: x.kind === 'audio' ? '音乐缩略图卡片' : '视频缩略图卡片',
+    risk: x.progress === -1 && x.kind === 'video'
+      ? '缩略图按 min(时长×0.1, 30s) 抽帧。取第一帧会得到片头黑场，网格会花掉一半。'
+      : '',
+  });
+}
+
+function itemRow(x) {
+  return cell({
     icon: x.kind === 'audio' ? 'music' : 'video',
-    tone: x.tone || ('t' + (x.i % 4)),
+    tone: x.tone,
     title: x.title, sub: x.sub, badge: x.badge, progress: x.progress,
-    action: x.kind === 'audio' ? 'play-music' : 'play', id: x.i,
+    mark: x.kind === 'audio' ? 'music' : '',
+    action: x.kind === 'audio' ? 'play-music' : 'play', id: x.idx,
     name: x.kind === 'audio' ? '音乐行' : '视频行',
-  })).join('');
+  });
+}
+
+/* 平铺模式的一句提示：说清「为什么这里是分区而不是混排」 */
+function flatHint() {
+  return '<div class="note">' + ic('info', 15, 1.8) +
+    '<span>平铺模式把视频和音乐分成两段。若想让它们按目录归拢，' +
+    '在「视图」里切回「按文件夹」。</span></div>';
 }
 
 /* ── 文件 ─────────────────────────────────────────────────────
@@ -585,25 +782,53 @@ function hintsHTML() {
   const h = (k, label, accent) =>
     '<span class="hint"><span class="k' + (accent ? ' a' : '') + '">' + k + '</span>' + label + '</span>';
   const map = {
-    media:    h('A', '播放', true) + h('B', '返回') + h('X', '获取信息') + h('Y', '切换视图'),
+    media:    h('A', '播放', true) + h('B', '打开文件夹') + h('Y', '视图菜单'),
     files:    h('A', '打开', true) + h('B', '返回上一级'),
     history:  h('A', '继续播放', true) + h('B', '返回') + h('X', '移除记录'),
     settings: h('A', '进入', true) + h('B', '返回'),
   };
+  if (state.tab === 'media' && state.libFolder) {
+    return h('A', '播放', true) + h('B', '全部文件夹') + h('Y', '视图菜单');
+  }
   if (state.tab === 'files' && state.browse) {
     return h('A', '播放', true) + h('B', '返回上一级') + h('X', '查看信息');
   }
   return map[state.tab] || map.media;
 }
 
-/* 媒体库工具行：搜索 + 类型 + 筛选，外加布局切换的当前状态。
-   这些是「在内容里找东西」的控件，跟着内容走，不放进全局顶栏。 */
+/* ── 工具行与视图菜单 ─────────────────────────────────────────
+   上一版把「视频 / 音乐 / 全部」和四个筛选胶囊摊在工具行上，
+   一条 58px 的带子被占满，能表达的却只有五个词。
+   MX Player 把这些收进一个呼出菜单：入口只有一个，里面分「分组 / 排序 / 筛选」。
+   工具行因此只剩两样东西 —— 搜索框和这个入口。 */
+
+const GROUPS = [
+  { key: 'folder', label: '按文件夹' },
+  { key: 'flat',   label: '全部平铺' },
+];
+
+const KINDS = [
+  { key: 'all',   label: '视频与音乐' },
+  { key: 'video', label: '仅视频' },
+  { key: 'audio', label: '仅音乐' },
+];
+
+const SORTS = [
+  { key: 'name',  label: '名称' },
+  { key: 'added', label: '最近添加' },
+  { key: 'dur',   label: '时长' },
+  { key: 'size',  label: '大小' },
+];
+
+const FILTERS = [
+  { key: 'all',      label: '不限' },
+  { key: 'resume',   label: '未看完' },
+  { key: 'finished', label: '已看完' },
+];
+
 function toolbarHTML() {
   if (state.tab !== 'media') return '';
-  const chip = (key, label, on, attr) =>
-    '<button class="chip' + (on ? ' on' : '') + '" data-' + attr + '="' + key + '">' + label + '</button>';
-  const count = mediaCount();
-  return '<div class="toolbar" data-name="媒体库工具行" data-spec="高 56 · 搜索框 300×38 · 胶囊高 30">' +
+  return '<div class="toolbar" data-name="媒体库工具行" data-spec="高 58 · 搜索框 264×36 · 视图入口 高 36">' +
       '<label class="searchbox">' + ic('search', 17, 1.9) +
         '<input id="searchInput" type="text" placeholder="搜索标题或文件名" ' +
           'value="' + esc(state.query) + '" autocomplete="off" spellcheck="false">' +
@@ -612,27 +837,58 @@ function toolbarHTML() {
            这个按钮就会一直不出现。 */
         '<button class="clear" id="searchClear" title="清空">' + ic('close', 14, 2) + '</button>' +
       '</label>' +
-      '<div class="chips" id="kindChips">' +
-        KINDS.map((k) => chip(k.key, k.label, state.kind === k.key, 'kind')).join('') + '</div>' +
-      '<div class="chips" id="filterChips">' +
-        FILTERS.map((f) => chip(f.key, f.label, state.filter === f.key, 'filter')).join('') + '</div>' +
-      '<span class="count">' + count + ' 项</span>' +
-    '</div>';
+      '<button class="view-btn' + (state.sheet ? ' on' : '') + '" id="viewBtn"' +
+        ' data-name="视图入口" data-spec="高 36 · 图标 15 + 摘要 13 + 箭头 · 点击呼出菜单">' +
+        ic('filter', 15, 1.9) +
+        '<span class="vb-txt">' + esc(viewSummary()) + '</span>' +
+        ic('chevron', 13, 2) +
+      '</button>' +
+      '<span class="count">' + mediaCount() + ' 项</span>' +
+    '</div>' + viewSheetHTML();
+}
+
+function viewSummary() {
+  if (state.libFolder) return FOLDER_BY_PATH[state.libFolder].name;
+  const g = GROUPS.filter((x) => x.key === state.group)[0] || GROUPS[0];
+  const s = SORTS.filter((x) => x.key === state.sort)[0] || SORTS[0];
+  return g.label + ' · ' + s.label + (state.desc ? ' ↓' : '');
+}
+
+/* 呼出菜单：点工具行右侧的入口，锚在它下方。
+   故意做成「一次只显示一组、每组只有 2–4 个选项」——
+   手柄导航时上下只需要按几下，触屏也不用瞄准小胶囊。 */
+function viewSheetHTML() {
+  if (!state.sheet) return '';
+  const row = (label, attr, opts, cur) =>
+    '<div class="vs-row"><span class="vs-label">' + label + '</span>' +
+    '<span class="vs-opts">' + opts.map((o) =>
+      '<button class="vs-opt' + (o.key === cur ? ' on' : '') + '" data-' + attr + '="' + o.key + '">' +
+        (o.key === cur ? ic('check', 11, 2.6) : '') +
+        '<span>' + o.label + '</span></button>').join('') +
+    '</span></div>';
+
+  return '<div class="view-sheet on" id="viewSheet" data-name="视图呼出菜单"' +
+    ' data-spec="宽 336 · 圆角 16 · 四组选项 · 行高 40">' +
+    '<div class="vs-head">' + ic('filter', 15, 1.9) + '<span>视图与排序</span>' +
+      '<button class="vs-close" id="vsClose" title="收起">' + ic('close', 13, 2.2) + '</button></div>' +
+    row('分组', 'vgroup', GROUPS, state.group) +
+    row('内容', 'vkind', KINDS, state.kind) +
+    row('排序', 'vsort', SORTS, state.sort) +
+    row('筛选', 'vfilter', FILTERS, state.filter) +
+    '<div class="vs-foot">' +
+      '<button class="vs-dir' + (state.desc ? ' on' : '') + '" data-vdesc="1">' +
+        '<span class="ic-flip">' + ic('arrowUp', 13, 2.2) + '</span>' +
+        (state.desc ? '降序' : '升序') + '</button>' +
+      '<button class="vs-reset" data-vreset="1">恢复默认</button>' +
+    '</div></div>';
 }
 
 function mediaCount() {
-  const q = state.query.trim().toLowerCase();
-  const prog = (x) => (x.progress == null ? -1 : x.progress);
-  let items = VIDEOS.map((v) => ({ title: v.title, file: v.file, progress: v.progress }));
-  if (state.kind !== 'video') {
-    items = state.kind === 'audio'
-      ? MUSIC.map((m) => ({ title: m.title, progress: -1 }))
-      : items.concat(MUSIC.map((m) => ({ title: m.title, progress: -1 })));
-  }
-  if (q) items = items.filter((x) => (x.title + ' ' + (x.file || '')).toLowerCase().indexOf(q) >= 0);
-  if (state.filter === 'resume') items = items.filter((x) => prog(x) > 0 && prog(x) < 1);
-  if (state.filter === 'finished') items = items.filter((x) => prog(x) === 1);
-  return items.length;
+  return mediaPool().length;
+}
+
+function mediaCount() {
+  return mediaPool().length;
 }
 
 function npHTML() {
@@ -704,10 +960,37 @@ function bindAppEvents() {
     if (lay) { setLayout(lay.dataset.layout); return; }
     const nav = e.target.closest('.nav-item');
     if (nav) { switchTab(nav.dataset.tab); return; }
-    const kind = e.target.closest('[data-kind]');
-    if (kind) { state.kind = kind.dataset.kind; refreshToolbar(); refreshList(); return; }
-    const filt = e.target.closest('[data-filter]');
-    if (filt) { state.filter = filt.dataset.filter; refreshToolbar(); refreshList(); return; }
+
+    /* 视图菜单：入口开合、四组选项、升序降序、恢复默认。
+       全部走 refreshView()，它同时重建工具行（摘要变了）和列表。 */
+    if (e.target.closest('#viewBtn')) {
+      state.sheet = !state.sheet;
+      refreshToolbar();
+      return;
+    }
+    if (e.target.closest('#vsClose')) { state.sheet = false; refreshToolbar(); return; }
+    const vg = e.target.closest('[data-vgroup]');
+    if (vg) { state.group = vg.dataset.vgroup; state.libFolder = null; refreshView(); return; }
+    const vk = e.target.closest('[data-vkind]');
+    if (vk) { state.kind = vk.dataset.vkind; refreshView(); return; }
+    const vs = e.target.closest('[data-vsort]');
+    if (vs) { state.sort = vs.dataset.vsort; refreshView(); return; }
+    const vf = e.target.closest('[data-vfilter]');
+    if (vf) { state.filter = vf.dataset.vfilter; refreshView(); return; }
+    if (e.target.closest('[data-vdesc]')) { state.desc = !state.desc; refreshView(); return; }
+    if (e.target.closest('[data-vreset]')) {
+      state.group = 'folder'; state.kind = 'all'; state.sort = 'name';
+      state.desc = false; state.filter = 'all'; state.libFolder = null;
+      refreshView();
+      toast('已恢复默认视图');
+      return;
+    }
+    // 点菜单和列表之外的地方收起菜单
+    if (state.sheet && !e.target.closest('#viewSheet')) {
+      state.sheet = false;
+      refreshToolbar();
+    }
+
     if (e.target.closest('#searchClear')) {
       state.query = ''; refreshToolbar(); refreshList();
       const si = $('#searchInput'); if (si) si.focus();
@@ -759,9 +1042,43 @@ function refreshToolbar() {
   }
 }
 
+/* 视图变化：工具行（摘要文字）和列表都要重建。
+   菜单本身留在 DOM 里，否则每选一项它就自动关掉 —— 连续改两项就得重开两次。 */
+function refreshView() {
+  const tb = $('#toolbar');
+  if (tb) {
+    tb.innerHTML = toolbarHTML();
+    const si = $('#searchInput');
+    if (si) {
+      si.oninput = () => { state.query = si.value; refreshList(); };
+      si.onkeydown = (e) => {
+        if (e.key === 'Escape') { si.value = ''; state.query = ''; refreshList(); refreshToolbar(); }
+        e.stopPropagation();
+      };
+    }
+  }
+  refreshList();
+  const list = $('#list');
+  if (list) list.scrollTop = 0;
+}
+
 function activateCell(el) {
   const a = el.dataset.action;
   const id = parseInt(el.dataset.id || '0', 10);
+  if (a === 'open-folder') {
+    state.libFolder = el.dataset.id;
+    state.sheet = false;
+    state.focus = { zone: 'main', i: 0 };
+    refreshView();
+    toast('已进入 · ' + FOLDER_BY_PATH[state.libFolder].name);
+    return;
+  }
+  if (a === 'lib-up') {
+    state.libFolder = null;
+    state.focus = { zone: 'main', i: 0 };
+    refreshView();
+    return;
+  }
   if (a === 'play') { openPlayer(id); return; }
   if (a === 'play-music') {
     state.np.show = true; state.np.playing = true; state.np.pos = 12;
@@ -1679,6 +1996,7 @@ function renderDock() {
 
   const scenarios = [
     { k: 'media', label: '媒体库', icon: 'video' },
+    { k: 'viewmenu', label: '视图菜单', icon: 'filter' },
     { k: 'files', label: '文件', icon: 'folder' },
     { k: 'history', label: '历史', icon: 'clock' },
     { k: 'settings', label: '设置', icon: 'settings' },
@@ -1728,6 +2046,15 @@ function goScenario(k) {
   closePlugins();
   if (state.player.open) closePlayer();
   if (state.dialog) closeDialog();
+  if (k === 'viewmenu') {
+    switchTab('media');
+    state.group = 'folder';
+    state.libFolder = null;
+    state.sheet = true;
+    refreshToolbar();
+    refreshList();
+    return;
+  }
   switchTab(k);
 }
 
@@ -2110,6 +2437,28 @@ function onKey(e) {
 
   // 弹层打开时，播放快捷键与焦点导航都暂停，避免「看不见的控件被操作」
   if (state.dialog) return;
+
+  // 视图菜单：V 开合，Esc 收起
+  if ((k === 'v' || k === 'V') && state.tab === 'media') {
+    state.sheet = !state.sheet;
+    refreshToolbar();
+    e.preventDefault();
+    return;
+  }
+  if (k === 'Escape' && state.sheet) {
+    state.sheet = false;
+    refreshToolbar();
+    e.preventDefault();
+    return;
+  }
+  // 在某个文件夹里按 Esc：退回文件夹总览
+  if (k === 'Escape' && state.libFolder) {
+    state.libFolder = null;
+    state.focus = { zone: 'main', i: 0 };
+    refreshView();
+    e.preventDefault();
+    return;
+  }
 
   // 目录浏览里按 Esc / B 回上一级
   if (k === 'Escape' && state.browse) { e.preventDefault(); goUp(); return; }

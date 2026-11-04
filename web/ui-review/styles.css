@@ -669,6 +669,14 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
   display: block; height: 100%; background: rgba(255,159,69,.96);
 }
 .cell .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.cell .titlerow { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cell .titlerow .title { min-width: 0; }
+/* 混排里的类型标：视频行和音乐行长得很像，只靠「3:21」分不出是短片还是歌 */
+.cell .typechip {
+  flex: none; width: 16px; height: 16px; border-radius: 4px;
+  display: grid; place-items: center;
+  background: var(--tile); color: var(--text-mute);
+}
 .cell .title {
   font-size: 17px; color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -729,6 +737,48 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
   content: ""; position: absolute; inset: 0; pointer-events: none;
   background: radial-gradient(78% 76% at 50% 44%, transparent 36%, rgba(0,0,0,.55) 100%);
 }
+
+/* ── 文件夹：四宫格拼贴 ──────────────────────────────────────
+   文件夹没有"一张封面"。取第一个文件当封面，会让这个目录长得像那一部片；
+   四格才读得出「这里装着一堆东西」。混合目录（视频 + 音乐）靠四格的色相混搭
+   自然露出破绽 —— 全是暖橙的是影视，出现音符色的就是混的。 */
+.collage {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 1px;
+  background: var(--hairline);
+}
+.gcard .thumb .collage { position: absolute; inset: 0; }
+/* 文件夹卡片不叠暗角：四格本来就小，再压一层暗角会糊成一块深色 */
+.foldercard .thumb::after { content: none; }
+.collage .c { position: relative; overflow: hidden; }
+.collage .c .frame { position: absolute; inset: 0; }
+/* 只有一项的文件夹：整张给它，不切成四格 */
+.collage.single { display: block; }
+.collage.single .frame { position: absolute; inset: 0; }
+.frame.empty { background: var(--surface-sunken); }
+
+/* 文件夹卡片的计数角标 */
+.fc-badge {
+  position: absolute; right: 8px; bottom: 8px;
+  min-width: 26px; height: 22px; padding: 0 7px; border-radius: 6px;
+  display: grid; place-items: center;
+  background: rgba(0,0,0,.72);
+  color: #F3F4F6; font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+/* 列表里的文件夹：正方形拼贴，和 88×50 的视频缩略图区分开 */
+.cell .thumb-sm.collage {
+  width: 50px; height: 50px; border-radius: 8px;
+}
+/* 网格里音乐卡片的类型标 */
+.gcard .thumb .tmark {
+  position: absolute; left: 8px; bottom: 8px;
+  width: 22px; height: 22px; border-radius: 6px;
+  display: grid; place-items: center;
+  background: rgba(0,0,0,.66); color: #E7EDF5;
+}
 .frame.t0 {
   background:
     radial-gradient(circle 20px at 71% 34%, rgba(255,236,198,.95) 0 52%, rgba(255,190,130,0) 100%),
@@ -758,17 +808,25 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
     linear-gradient(102deg, transparent 0 26%, rgba(255,214,168,.13) 26% 54%, transparent 54% 100%),
     linear-gradient(180deg, #2C2024 0 68%, #120C0E 68% 100%);
 }
+/* 音乐封面：纯径向渐变在 60px 的拼贴格里就是一团色斑，缩略图上必须有点
+   结构才认得出「这是张专辑」。唱片纹 + 中心标签，是最省像素的可辨识形。 */
 .frame.m0 {
   background:
-    radial-gradient(58% 62% at 50% 47%, #E8A25C 0%, #8B4F2A 62%, #2A1710 100%);
+    radial-gradient(11% 11% at 50% 47%, rgba(255,240,214,.95) 0 58%, rgba(255,240,214,0) 100%),
+    repeating-radial-gradient(circle at 50% 47%, rgba(0,0,0,.15) 0 1px, rgba(255,255,255,.035) 1px 5px),
+    radial-gradient(70% 74% at 50% 47%, #C0762F 0%, #6E3B1E 62%, #1E100A 100%);
 }
 .frame.m1 {
   background:
-    radial-gradient(58% 62% at 50% 47%, #7FA8C9 0%, #35566B 60%, #0E1A22 100%);
+    radial-gradient(11% 11% at 50% 47%, rgba(230,244,255,.92) 0 58%, rgba(230,244,255,0) 100%),
+    repeating-radial-gradient(circle at 50% 47%, rgba(0,0,0,.15) 0 1px, rgba(255,255,255,.035) 1px 5px),
+    radial-gradient(70% 74% at 50% 47%, #52778E 0%, #2C4658 62%, #0A1218 100%);
 }
 .frame.m2 {
   background:
-    radial-gradient(58% 62% at 50% 47%, #C97F9A 0%, #6E3A50 60%, #22101A 100%);
+    radial-gradient(11% 11% at 50% 47%, rgba(255,228,238,.92) 0 58%, rgba(255,228,238,0) 100%),
+    repeating-radial-gradient(circle at 50% 47%, rgba(0,0,0,.15) 0 1px, rgba(255,255,255,.035) 1px 5px),
+    radial-gradient(70% 74% at 50% 47%, #A9617C 0%, #5E3145 62%, #180B12 100%);
 }
 /* 夜山与山下灯火：星点 + 山脊 + 暖色灯点。
    两个孤立圆点压在一条斜线上，读不出「山」—— 加星点和更低的脊线才成形。 */
@@ -1263,23 +1321,100 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
 .searchbox input:placeholder-shown + .clear { opacity: 0; pointer-events: none; }
 .searchbox .clear:hover { color: var(--text); }
 
-.toolbar .chips {
-  display: flex; gap: 2px; padding: 3px;
+/* 视图入口：工具行上只剩搜索框和它。
+   摘要文字直接写在按钮里（「按文件夹 · 名称」），不用点开就知道当前是怎么显示的。 */
+.view-btn {
+  display: flex; align-items: center; gap: 7px;
+  height: 36px; padding: 0 9px 0 11px;
   border-radius: 10px;
   background: var(--surface);
   border: 1px solid var(--cell-line);
+  color: var(--text-dim);
+  font-size: 13px;
+  transition: border-color .12s, color .12s, background .12s;
 }
-.toolbar .chip {
-  height: 28px; padding: 0 11px; border-radius: 8px;
-  font-size: 13px; color: var(--text-dim);
-  transition: background .1s, color .1s;
+.view-btn:hover { color: var(--text); }
+.view-btn.on {
+  color: var(--text);
+  border-color: rgba(var(--accent-rgb), .62);
+  background: var(--surface-raised);
 }
-.toolbar .chip:hover { color: var(--text); }
-.toolbar .chip.on { background: var(--surface-sunken); color: var(--text); }
+.view-btn .vb-txt { font-variant-numeric: tabular-nums; }
+.view-btn > svg:last-child { opacity: .5; }
+
 .toolbar .count {
   margin-left: auto; font-size: 12.5px; color: var(--text-mute);
   font-variant-numeric: tabular-nums;
 }
+
+/* ── 视图呼出菜单 ────────────────────────────────────────────
+   锚在入口下方，一次只显示「分组 / 内容 / 排序 / 筛选」四组，
+   每组 2–4 个选项。这东西在实机上对应一个 popover，
+   手柄上下几下就能走完，触屏也不用去瞄 28px 高的胶囊。 */
+.view-sheet {
+  position: absolute; top: 100px; right: 28px;
+  width: 336px; z-index: 40;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--outline-strong);
+  box-shadow: 0 28px 70px rgba(0,0,0,.5);
+  transform-origin: top right;
+  animation: vsIn .14s cubic-bezier(.22,.61,.36,1);
+}
+@keyframes vsIn {
+  from { opacity: 0; transform: translateY(-6px) scale(.98); }
+}
+.vs-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 10px 8px 14px;
+  font-size: 14px; color: var(--text);
+}
+.vs-head svg { color: var(--text-mute); }
+.vs-head span { flex: 1; }
+.vs-close {
+  width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center; color: var(--text-mute);
+}
+.vs-close:hover { background: var(--tile); color: var(--text); }
+
+.vs-row { display: flex; align-items: center; gap: 10px; padding: 5px 12px; }
+.vs-label {
+  flex: none; width: 32px;
+  font-size: 12.5px; color: var(--text-mute);
+}
+.vs-opts { flex: 1; display: flex; flex-wrap: wrap; gap: 4px; }
+.vs-opt {
+  display: flex; align-items: center; gap: 5px;
+  height: 30px; padding: 0 10px; border-radius: 8px;
+  font-size: 13px; color: var(--text-dim);
+  background: var(--tile);
+  transition: background .1s, color .1s;
+}
+.vs-opt:hover { color: var(--text); }
+.vs-opt.on {
+  background: rgba(var(--accent-rgb), .15);
+  color: var(--accent);
+}
+.vs-opt svg { flex: none; }
+
+.vs-foot {
+  display: flex; gap: 8px; align-items: center;
+  margin-top: 8px; padding: 10px 12px;
+  border-top: 1px solid var(--hairline);
+}
+.vs-dir {
+  display: flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 12px; border-radius: 9px;
+  background: var(--tile); font-size: 13px; color: var(--text-dim);
+}
+.vs-dir.on { color: var(--accent); }
+.vs-dir .ic-flip { display: flex; }
+.vs-dir.on .ic-flip { transform: rotate(180deg); }
+.vs-reset {
+  margin-left: auto; height: 32px; padding: 0 12px; border-radius: 9px;
+  font-size: 13px; color: var(--text-mute);
+}
+.vs-reset:hover { color: var(--text); }
 
 /* 设置项的当前值 / 开关 */
 .cell .val { flex: none; font-size: 13px; color: var(--text-mute); }
