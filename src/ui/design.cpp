@@ -156,8 +156,8 @@ void scrimTop(NVGcontext* vg, float x, float y, float w, float h, float alpha) {
 
 void scrimBottom(NVGcontext* vg, float x, float y, float w, float h, float alpha) {
     if (alpha <= 0.0f || h <= 0.0f) return;
-    const float stops[] = {0.34f, 0.66f, 1.0f};
-    const float alphas[] = {0.0f, 0.52f, 0.90f};
+    const float stops[] = {0.26f, 0.60f, 1.0f};
+    const float alphas[] = {0.06f, 0.60f, 0.94f};
     float prev_y = y;
     float prev_a = alpha * alphas[0];
     for (int i = 0; i < 3; ++i) {

@@ -78,13 +78,11 @@ constexpr float TOP_H          = 112.0f;  // 顶部压边高度
 constexpr float BOTTOM_H       = 238.0f; // 底部压边高度
 constexpr float BAR_H          = 5.0f;   // 进度条可视高度（细条更接近电视端）
 constexpr float BAR_HIT_H      = 46.0f;  // 触摸判定高度（触屏下限）
-constexpr float KNOB_R         = 5.5f;   // 滑块半径
-constexpr float KNOB_R_DRAG    = 7.5f;   // 拖动时放大，给反馈
+constexpr float KNOB_R_DRAG    = 7.5f;   // 拖动时的滑块半径（静止不画滑块）
 constexpr float TRANSPORT_D    = 64.0f;  // 播放/暂停主按钮直径
 constexpr float SIDE_D         = 46.0f;  // 快退/快进按钮直径
 constexpr float SKIP_D         = 40.0f;  // 上一集/下一集按钮直径
 constexpr float SETTINGS_D     = 40.0f;  // 设置行按钮直径
-constexpr float LOCK_SIZE      = 50.0f;  // 锁定徽标
 
 // 内容左右安全边距：随宽度按比例，但设上下限（掌机窄屏不贴边，
 // 桌面宽屏也不至于离得太远）。
@@ -681,8 +679,6 @@ void MPVPlayerView::drawOverlay() {
 //   这个 bug 曾存在很久而所有自动检查都通过（它们只看视频画面）。
 //   现在由 `verify_ui.py --only osd` 用纯黑视频做底来守卫。
 void MPVPlayerView::drawHud(NVGcontext* vg, float x, float y, float width, float height) {
-    const NVGcolor white = nvgRGBA(255, 255, 255, 255);
-
     // 亮度蒙层模拟
     if (brightness_ < 0.99f) {
         nvgBeginPath(vg);
@@ -975,16 +971,18 @@ void MPVPlayerView::drawTouchControls(NVGcontext* vg, float x, float y,
                               d + pad * 2.0f, d + pad * 2.0f, ac});
     };
 
-    // 玻璃质感圆按钮：半透明白底 + 细描边，叠在视频上不糊成黑块
+    // 玻璃质感圆按钮：深色半透明底 + 细亮描边。
+    // 早期版本用「半透明白底 8%」，在亮画面上等于没画——控件直接糊进视频里，
+    // 只能靠图标的白线勉强辨认。压暗底色后图标才有稳定对比度。
     auto ghost = [&](float cx, float cy, float d, ui::Icon ic, float iconSize,
                      TouchAction ac) {
         const bool p = pressed(ac);
         ui::drawIconButton(
             vg, ic, cx, cy, d, iconSize,
-            nvgRGBA(p ? 255 : 255, p ? 255 : 255, p ? 255 : 255,
-                    (int)((p ? 46 : 22) * a)),
-            nvgRGBA(255, 255, 255, (int)((p ? 255 : 236) * a)),
-            nvgRGBA(p ? 255 : 255, 159, p ? 69 : 120, (int)((p ? 160 : 0) * a)));
+            nvgRGBA(8, 10, 14, (int)((p ? 214 : 156) * a)),
+            nvgRGBA(255, 255, 255, (int)((p ? 255 : 238) * a)),
+            nvgRGBA(255, 159, 69, (int)((p ? 200 : 40) * a)),
+            p ? 1.6f : 1.0f);
         hit(cx, cy, d, ac);
     };
 
@@ -994,8 +992,8 @@ void MPVPlayerView::drawTouchControls(NVGcontext* vg, float x, float y,
         const float cy = y + 44.0f + top_slide;
         const bool p = pressed(TouchAction::Back);
         ui::drawIconButton(vg, ui::Icon::Back, cx, cy, 38.0f, 19.0f,
-                           nvgRGBA(255, 255, 255, (int)((p ? 46 : 22) * a)), white,
-                           nvgRGBA(255, 255, 255, (int)((p ? 120 : 26) * a)));
+                           nvgRGBA(8, 10, 14, (int)((p ? 214 : 156) * a)), white,
+                           nvgRGBA(255, 255, 255, (int)((p ? 120 : 40) * a)));
         hit_rects_.push_back({cx - 23.0f, cy - 23.0f, 46.0f, 46.0f,
                               TouchAction::Back});
     }
@@ -1004,7 +1002,7 @@ void MPVPlayerView::drawTouchControls(NVGcontext* vg, float x, float y,
     const float tcx = x + width * 0.5f;
     const float tcy = osd::transportCenterY(y, height) + dy;
 
-    ghost(tcx - 124.0f, tcy, osd::SKIP_D, ui::Icon::Prev, 18.0f, TouchAction::Prev);
+    ghost(tcx - 124.0f, tcy, osd::SKIP_D, ui::Icon::Prev, 20.0f, TouchAction::Prev);
     ghost(tcx - 68.0f, tcy, osd::SIDE_D, ui::Icon::SeekBack, 21.0f,
           TouchAction::SeekBack);
 
@@ -1021,7 +1019,7 @@ void MPVPlayerView::drawTouchControls(NVGcontext* vg, float x, float y,
 
     ghost(tcx + 68.0f, tcy, osd::SIDE_D, ui::Icon::SeekForward, 21.0f,
           TouchAction::SeekForward);
-    ghost(tcx + 124.0f, tcy, osd::SKIP_D, ui::Icon::Next, 18.0f, TouchAction::Next);
+    ghost(tcx + 124.0f, tcy, osd::SKIP_D, ui::Icon::Next, 20.0f, TouchAction::Next);
 
     // ── 设置行（右对齐，从右往左排）──
     const float scy = osd::settingsCenterY(y, height) + dy;
@@ -1050,13 +1048,13 @@ void MPVPlayerView::drawTouchControls(NVGcontext* vg, float x, float y,
         const float pill_h = 34.0f;
         const float px = right - pill_w;
         const bool p = pressed(TouchAction::Speed);
+        // 与其它玻璃按钮同一套底色：亮画面上只有压暗才能稳住对比度
         ui::fillRoundRect(vg, px, scy - pill_h * 0.5f, pill_w, pill_h,
                           pill_h * 0.5f,
-                          nvgRGBA(255, p ? 170 : 255, p ? 190 : 255,
-                                  (int)((p ? 60 : 22) * a)));
+                          nvgRGBA(8, 10, 14, (int)((p ? 214 : 156) * a)));
         ui::strokeRoundRect(vg, px, scy - pill_h * 0.5f, pill_w, pill_h,
                             pill_h * 0.5f,
-                            nvgRGBA(255, 159, 69, (int)((p ? 170 : 90) * a)));
+                            nvgRGBA(255, 159, 69, (int)((p ? 200 : 90) * a)));
         ui::drawIcon(vg, ui::Icon::Speed, px + 18.0f, scy, 16.0f,
                      nvgRGBA(255, 159, 69, (int)(240 * a)), 1.8f);
         ui::text(vg, px + 32.0f, scy + 0.5f, 14.0f,

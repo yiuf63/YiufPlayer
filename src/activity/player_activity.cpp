@@ -140,9 +140,10 @@ void PlayerActivity::showPlaylistDialog() {
             }
         }
 
-        auto* cell = new MediaCell(ui::Icon::Video,
-                                   std::to_string(i + 1) + ". " + item.name,
-                                   detail);
+        // 不再拼接「序号. 」，因为文件名本身常带 01./02. 前缀，
+        // 拼出来会变成「2. 02. Blade Runner 2049.mp4」。顺序由列表位置表达，
+        // 当前项另有「播放中」badge。
+        auto* cell = new MediaCell(ui::Icon::Video, item.name, detail);
         cell->setHeight(64.0f);
         cell->setBadge(is_current ? "播放中" : "");
 

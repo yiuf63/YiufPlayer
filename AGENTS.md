@@ -341,6 +341,15 @@ borealis 默认焦点框是整块白，在深色卡片上非常突兀；`deck_th
 新增界面时颜色/间距/圆角/字号**一律引用 `ui::palette()` / `ui::space` /
 `ui::radius` / `ui::font`**，写字面量会让「一屏五种字号」的拼装观感回来。
 
+### 18. `addMetric("brls/highlight/padding")` 是无效的
+
+borealis 的高亮内缩来自 `View::highlightPadding` 成员（读 XML 属性
+`highlightPadding`），不是 style 度量。塞进 `addMetric()` 不会有任何反应，
+抓帧才会发现「对话框按钮的高亮依旧顶满整条 720px」。
+`brls/highlight/corner_radius`、`brls/highlight/stroke_width` 则是**有效**的
+（`view.cpp` 里确实从 style 取值）。对话框按钮的内缩只能改
+`external/borealis/library/lib/views/dialog.cpp` 的 XML。
+
 ---
 
 ## 代码风格

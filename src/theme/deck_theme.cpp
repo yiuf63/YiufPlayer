@@ -206,7 +206,10 @@ void applyDeckTheme() {
     // 焦点高亮的圆角与卡片保持同一档（14），否则选中框是方的、卡片是圆的
     style.addMetric("brls/highlight/corner_radius", 14.0f);
     style.addMetric("brls/highlight/stroke_width", 2.0f);
-    style.addMetric("brls/highlight/padding", 0.0f);
+    // 注意：这里**没有** brls/highlight/padding。borealis 的高亮内缩是
+    // View 的成员 highlightPadding（读取 XML 属性），不是 style 度量，
+    // 往 addMetric 里塞同名键不会有任何效果。对话框按钮的内缩在
+    // external/borealis 的 dialogXML 上直接写了 highlightPadding。
 }
 
 } // namespace deck_player

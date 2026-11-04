@@ -66,10 +66,12 @@ void MediaCell::draw(NVGcontext* vg, float x, float y, float width, float height
     const float tile_x = card_x + 22.0f;
     const float tile_y = y + height * 0.5f - tile * 0.5f;
     ui::fillRoundRect(vg, tile_x, tile_y, tile, tile, 13.0f,
-                      focused ? ui::rgba(pal.accent, 0.18f)
+                      focused ? pal.surfaceSunken
                               : ui::rgba(pal.surfaceSunken, 0.55f));
+    // 图标只在选中时用强调色。以前整列都是橙色，一屏十几个橙色图标，
+    // 焦点反而看不出来 —— 强调色必须稀缺才有意义。
     ui::drawIcon(vg, icon_, tile_x + tile * 0.5f, tile_y + tile * 0.5f, tile * 0.5f,
-                 focused ? pal.accent : ui::rgba(pal.accent, 0.88f), 1.9f);
+                 focused ? pal.accent : ui::rgba(pal.textDim, 0.85f), 1.9f);
 
     // 右侧：元信息 + 指示箭头
     const float right = card_x + card_w - 18.0f;

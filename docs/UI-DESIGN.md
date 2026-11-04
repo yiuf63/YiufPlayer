@@ -173,7 +173,7 @@ Steam Deck OLED、TrimUI Smart Pro 等 AMOLED 设备上，`#000000` 的像素完
 | 部位 | 规格 |
 | :--- | :--- |
 | 行高 | **76**（含 12 间距时视觉节奏 ≈ 88） |
-| 图标块 | 圆角 `radius::md`，边长 `clamp(h - 24, 32, 46)`，底色 `surfaceSunken`，图标 20~24 |
+| 图标块 | 圆角 `radius::md`，边长 `clamp(h - 24, 32, 46)`，底色 `surfaceSunken` |
 | 主文字 | `font::body`（17）+ `pal.text`，单行 `ellipsize` |
 | 副文字 | `font::caption`（12.5）+ `pal.textDim`，与主文字间距 `space::xs` |
 | badge | 右侧胶囊，`font::caption`，底色 `surfaceSunken`，文字 `textDim` |
@@ -183,6 +183,11 @@ Steam Deck OLED、TrimUI Smart Pro 等 AMOLED 设备上，`#000000` 的像素完
 
 `MediaCell` 内部 `setHideHighlight(true)`，焦点框由自己画 —— borealis 默认的
 白色高亮块在深色卡片上是「一整块白」，与设计语言冲突。
+
+**图标只在选中行用强调色。** 早期版本整列图标都是橙的，一屏十几个橙色图标，
+焦点反而淹没在里面；改成「未选中 = `textDim` 灰、选中 = `accent` 橙」之后，
+视线自然被带到焦点上。同理，图标块的底色不随选中变成暖色 —— 橙色叠在
+深蓝灰上会混成脏棕色，看起来像「禁用」。
 
 ### 5.1 分组标题 `SectionHeader`
 
@@ -272,7 +277,12 @@ settingsCenterY  = transportCenterY - 66
 | 主控行 | 上一集 / 快退 10s / 播放暂停 / 快进 10s / 下一集 | `Prev` `SeekBack` `Play`\|`Pause` `SeekForward` `Next` | 46/40/64/40/46 |
 
 播放按钮是**唯一的实心强调色控件**，也是唯一的主操作焦点。
-其余按钮统一「深色玻璃底 + 1px 描边 + 亮色图标」。
+其余按钮统一「深色玻璃底（`rgba(8,10,14,0.61)`）+ 1px 亮描边 + 亮色图标」。
+
+> 玻璃必须**压暗**，不能提亮。第一版用 `rgba(255,255,255,0.09)` 的白色玻璃，
+> 在彩条这种高饱和画面上等于没画：圆形底完全消失，只剩一根白线图标浮在
+> 视频里，可见但不可读。压暗到 60% 黑之后，无论底下是纯黑还是纯白，
+> 图标的对比度都稳定。
 
 ### 6.3 显隐动效
 
@@ -365,9 +375,15 @@ settingsCenterY  = transportCenterY - 66
 | `applet_frame/header_height` | 92 | — | |
 | `header_title_font_size` | 29 | — | |
 | `footer_height` | 64 | — | |
-| `highlight/corner_radius` | 14 | — | 与 `radius::md` 统一 |
-| `highlight/stroke_width` | 2 | — | |
-| `highlight/padding` | 0 | — | 去掉默认内缩，避免高亮框比卡片小一圈 |
+| `highlight/corner_radius` | 14 | 6 | 与 `radius::md` 统一 |
+| `highlight/stroke_width` | 2 | 5 | 2px 更接近硬边框而不是发光圈 |
+
+> **没有 `brls/highlight/padding` 这个度量。**
+> borealis 的高亮内缩是 `View` 的成员 `highlightPadding`（从 XML 属性
+> `highlightPadding` 读），`addMetric()` 塞同名键不会有任何效果 —— 这个坑
+> 实际踩过：加了三行度量，抓帧发现对话框按钮的高亮依旧顶满整条 720px。
+> 对话框按钮的内缩直接写在 `external/borealis` 的 `dialogXML` 上
+> （`highlightPadding="6"`），因为它是 vendored 且只此一处。
 
 所有列表 `setPaddingBottom(28)`，否则最后一行被底部提示栏硬切。
 滚动条统一走 `styleScrollingFrame()` 调成 `rgba(255,255,255,24)` ——
