@@ -121,7 +121,7 @@ src/
 ├── main.cpp                    入口：资源定位 → Borealis 初始化 → 主循环（含音频 tick）
 ├── activity/                   一个 Activity ≈ 一个全屏页面
 │   ├── file_browser_activity  主界面（4 个 Tab：存储位置/视频库/音乐库/播放历史）
-│   ├── folder_picker_activity 目录选择器（borealis 无文件选择器，自建）
+│   ├── file_picker_activity   目录 / 文件选择器（borealis 无文件选择器，自建）
 │   ├── player_activity        视频播放页（播放列表、自动下一集）
 │   ├── plugin_browser_activity 插件视频源的目录浏览（逐层进入）
 │   └── plugin_manager_activity 插件管理页（安装/卸载/配置）

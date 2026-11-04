@@ -228,7 +228,13 @@ include(${BOREALIS_LIBRARY}/cmake/toolchain.cmake)
 add_subdirectory(${BOREALIS_LIBRARY} borealis EXCLUDE_FROM_ALL)
 
 # 收集源码
-file(GLOB_RECURSE SRC_FILES
+#
+# CONFIGURE_DEPENDS 是必须的：GLOB 的结果在配置期就被固化成文件列表，
+# 之后新增 / 删除 .cpp 都不会被感知。实际踩过：删掉 folder_picker_activity.cpp
+# 之后增量构建仍在编译这个已不存在的文件，报
+#   clang++: error: no such file or directory: '.../folder_picker_activity.cpp'
+# 加上之后每次构建会先检查目录，变了自动重新配置。
+file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 

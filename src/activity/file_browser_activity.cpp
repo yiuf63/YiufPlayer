@@ -12,7 +12,7 @@
 #include "model/storage_provider.hpp"
 #include "model/media_library.hpp"
 #include "utils/app_paths.hpp"
-#include "activity/folder_picker_activity.hpp"
+#include "activity/file_picker_activity.hpp"
 #include "playback/audio_player.hpp"
 #include "plugin/plugin_manager.hpp"
 #include "plugin/plugin_config_store.hpp"
@@ -674,7 +674,7 @@ brls::View* FileBrowserActivity::createAudioView() {
 }
 
 void FileBrowserActivity::promptAddFolder() {
-    auto picker = new FolderPickerActivity([this](const std::string& path) {
+    auto picker = FilePickerActivity::folders([this](const std::string& path) {
         auto& lib = MediaLibrary::getInstance();
         if (lib.hasFolder(path)) {
             brls::Application::notify("该文件夹已在媒体库中");

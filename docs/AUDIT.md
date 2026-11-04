@@ -142,7 +142,7 @@
 #### 7. `openForText` 回调捕获 `this` 无存活检查
 
 - **位置**：`src/activity/plugin_manager_activity.cpp:93,188,210,232`、
-  `src/activity/folder_picker_activity.cpp:102`
+  `src/activity/file_picker_activity.cpp` 的手动输入路径（原 `folder_picker_activity.cpp`）
 - **证据**：静态推导
 - **触发条件**：打开输入框后按 B 返回，再提交
 - **严重程度**：可能崩

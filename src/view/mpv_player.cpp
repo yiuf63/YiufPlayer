@@ -10,6 +10,7 @@
 #include <vector>
 #include "view/mpv_player.hpp"
 #include "view/track_menu.hpp"
+#include "activity/file_picker_activity.hpp"
 #include "ui/design.hpp"
 #include "ui/icons.hpp"
 #include "utils/playback_history.hpp"
@@ -1901,20 +1902,22 @@ void MPVPlayerView::loadExternalSubtitle(const std::string& path) {
 }
 
 void MPVPlayerView::promptLoadExternalSubtitle() {
-    // 弹出输入框让用户输入字幕文件路径。掌机无系统文件管理器，
-    // 这里与「添加媒体文件夹」保持一致的交互方式。
-    brls::Application::getImeManager()->openForText(
-        [this](std::string text) {
-            if (text.empty()) return;
-            std::error_code ec;
-            if (!std::filesystem::exists(text, ec) ||
-                !std::filesystem::is_regular_file(text, ec)) {
-                showHUD("error", "字幕文件不存在");
-                return;
-            }
-            loadExternalSubtitle(text);
-        },
-        "输入字幕文件路径", "例如 /path/to/movie.ass", 512);
+    // 用文件选择器，默认停在当前视频所在目录 —— 同名字幕 90% 的情况
+    // 已经在那里了。原来的实现是弹 IME 让用户手打绝对路径：
+    // 在掌机上敲 /run/media/mmcblk0p1/Videos/Movie.2024.2160p/movie.chs.ass
+    // 不可能完成，等于没有这个功能。
+    std::string dir;
+    std::string prefix;
+    if (!current_file_path_.empty()) {
+        std::filesystem::path p(current_file_path_);
+        dir = p.parent_path().string();
+        prefix = p.stem().string();
+    }
+
+    auto* picker = FilePickerActivity::files(
+        {".srt", ".ass", ".ssa", ".vtt", ".sup"}, dir, prefix, "选择字幕文件",
+        [this](const std::string& path) { loadExternalSubtitle(path); });
+    brls::Application::pushActivity(picker);
 }
 
 
