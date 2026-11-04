@@ -24,6 +24,7 @@
   - **左半屏上下滑动**：无级调节画面亮度。
   - **右半屏上下滑动**：无级调节系统音量。
   - **全屏水平滑动**：毫秒级精准快进 / 快退并伴随实时时间预览卡片。
+  - **按住屏幕不动**：临时 2 倍速快进，松手立刻恢复原速（跳过片头/广告时最常用）。
 - **📦 全格式通吃（音视频与字幕格式大满贯）**：
   - **视频格式**：MP4, MKV, WebM, MOV, M4V, TS, M2TS, MTS, TP, AVI, FLV, F4V, WMV, VOB, MPG, MPEG, RMVB, RM, 3GP, ISO, OGV, DIVX 等。
   - **音频格式**：FLAC, WAV, APE, ALAC, AIFF, DSD, DFF, DSF, MP3, M4A, AAC, OGG, OPUS, WMA 等无损与高品质音频。
@@ -106,7 +107,7 @@
 Borealis 已内置于 `external/borealis`，无需额外拉取子模块。
 
 ```bash
-# 本地开发自测（链接系统 mpv，通常为 GPL 构建，产物不可分发）
+# 本地开发（链接系统 / Homebrew 的 mpv；本项目同为 GPL-3.0，链接它合法且产物可分发）
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(sysctl -n hw.ncpu 2>/dev/null || nproc)
 
@@ -145,10 +146,11 @@ flatpak-builder --user --install --force-clean build-flatpak flatpak/org.deckpla
 单元测试验证不了「界面真的渲染了吗」「视频真的播出来了吗」。这三套工具补上：
 
 ```bash
-# 界面与播放（49 项：渲染/播放/字幕/手势/插件/屏幕适配/性能/ASan/稳定性）
+# 界面与播放（渲染/播放/字幕/手势/插件/屏幕适配/性能/ASan/稳定性）
+#   --list 看分组，--only <组> 只跑一组（如 --only video）
 python3 tests/tools/verify_ui.py
 
-# 文档与实现一致性（41 项：按键/数值/数据文件/环境变量）
+# 文档与实现一致性（按键/数值/数据文件/环境变量/README）
 python3 tests/tools/check_docs.py
 
 # 发布前清单（30 项：安装路径/desktop/图标/许可证）
@@ -165,7 +167,7 @@ python3 tests/tools/license_audit.py
 ### 内存安全
 
 ```bash
-cmake -B build-asan -DCMAKE_BUILD_TYPE=Debug -DCMAKE_BUILD_TYPE=Debug \
+cmake -B build-asan -DCMAKE_BUILD_TYPE=Debug \
       -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -g -O1" \
       -DCMAKE_C_FLAGS="-fsanitize=address,undefined -g -O1" \
       -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
@@ -210,8 +212,13 @@ DeckPlayer 以 **GNU GPL-3.0** 分发，全文见 [`LICENSE`](LICENSE)。
 
 已实现：
 - 手柄全键位操作（A/B/十字键/LT/RT/LB/RB/X/Y/R3/L3/START），START 键切换触控锁
-- 触控手势：双击播放暂停、单击 OSD、左右半屏分别调亮度与音量、水平滑动快进快退
+- 触控手势：双击播放暂停、单击 OSD、左右半屏分别调亮度与音量、水平滑动快进快退、
+  长按临时 2x 快进
 - 倍速（R3）与画面比例（L3）循环切换
+- **OLED 真黑主题（A 屏黑）**：`DECKPLAYER_THEME=oled` 或配置 `theme` 文件切换，
+  纯黑背景在省电与无光晕上适配 Steam Deck OLED 等 AMOLED 掌机
+- **OSD 渐显动效**：控制栏 260ms 淡入淡出 + 上下滑移，HUD 提示尾部淡出；
+  OSD 显示时字幕自动上移到控制栏上方
 - **字幕完整支持**：
   - 内嵌字幕（容器内的 SRT / ASS / SSA / PGS 图形字幕）自动识别
   - 外挂字幕按同名字符串匹配自动加载（`sub-auto=fuzzy`，可匹配 `.zh.srt` 等变体）
@@ -251,5 +258,8 @@ DeckPlayer 以 **GNU GPL-3.0** 分发，全文见 [`LICENSE`](LICENSE)。
 
 开发中：Steam Workshop 集成（需 Steam 应用 ID）。
 
-> 注：macOS 上使用 Homebrew 的 mpv 仅用于本地开发自测（不分发），
-> 其为 GPL 构建，不可用于发布产物。
+> 注：macOS 上 Homebrew 的 mpv 是 **GPL 构建**，本项目同为 GPL-3.0，
+> 因此链接它完全合法、产物可以分发——按 GPL-3.0 §6，分发时须提供对应源码
+> （用 `python3 tests/tools/license_audit.py` 核对产物实际依赖）。
+> 若希望产物不带 `--enable-gpl` 组件，可先用 `scripts/build-lgpl-libmpv.sh`
+> 自建，再以 `-DMPV_ROOT=<前缀>` 指定。

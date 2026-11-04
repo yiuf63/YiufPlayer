@@ -10,6 +10,8 @@
 #include <vector>
 #include "view/mpv_player.hpp"
 #include "view/track_menu.hpp"
+#include "ui/design.hpp"
+#include "ui/icons.hpp"
 #include "utils/playback_history.hpp"
 #include "utils/scanner.hpp"
 #include <cmath>
@@ -54,38 +56,79 @@ namespace deck_player {
 // ─────────────────────────────────────────────────────────────
 // OSD 视觉规格
 //
-// 为什么要集中定义：重构前 OSD 里散落着 22/21/20/17/15 五种字号
-// 和 35/30 两种边距，彼此不成体系，观感就是「样式不对、随手拼的」。
-// 这里的数值与 docs/UI-DESIGN.md 第 5 节一一对应，改样式只改这一处。
+// 重构说明（第二轮 UI 重做）：
+//   第一版 OSD 是「两行文字按钮 + 一行手柄提示文字」，所有控件都是
+//   带中文标签的方块，堆在画面底部，观感是「把菜单贴到视频上」。
+//   现在改为电视端影音软件的通用语言：
+//     · 顶部：返回按钮 + 片名 + 一行技术信息（分辨率 / 硬解）
+//     · 底部：主控行（纯图标）+ 设置行（纯图标 + 倍速胶囊）+ 细进度条 + 时间
+//     · 所有图标都是矢量路径（ui/icons），不依赖字形，任何平台一致
+//   几何全部从「视口高度」推导，因此 16:10 / 16:9 / 4:3 都同一套比例。
 // ─────────────────────────────────────────────────────────────
 namespace osd {
-// 字号
-constexpr float FONT_TITLE   = 20.0f;  // 片名
-constexpr float FONT_INFO    = 17.0f;  // 右上角状态、时间
-constexpr float FONT_HINT    = 15.0f;  // 辅助提示
-constexpr float FONT_HUD     = 21.0f;  // 居中 HUD 文字
-constexpr float FONT_ICON    = 22.0f;  // HUD 图标
-
-// 间距（统一为 35，锁定图标也对齐这条线）
-constexpr float MARGIN       = 35.0f;
+// 字号（与 ui::font 分级对齐）
+constexpr float FONT_TITLE    = 20.0f;  // 片名
+constexpr float FONT_META     = 12.5f;  // 技术信息行
+constexpr float FONT_TIME     = 14.0f;  // 时间
+constexpr float FONT_HUD      = 17.0f;  // 居中 HUD 文字
+constexpr float FONT_HUD_ICON = 24.0f;  // HUD 图标
 
 // 布局
-constexpr float TOP_H        = 65.0f;   // 顶部渐变栏高
-// 底部渐变栏高度。实测需要容纳：
-//   进度条(8) + 时间文字(20) + 间隔 + 主控行(58) + 间隔 + 功能行(58) + 底部留白
-// = 约 215px。原来写 110 只够一行，导致功能行整个画到视频画面上。
-constexpr float BOTTOM_H     = 215.0f;
-constexpr float BAR_H        = 8.0f;    // 进度条可视高度
-constexpr float BAR_HIT_H    = 44.0f;   // 进度条触摸判定高度（触屏下限）
-constexpr float BAR_BOTTOM_PAD = 14.0f; // 进度条距底部的留白
-constexpr float BAR_RADIUS   = 4.0f;    // 进度条圆角
-constexpr float KNOB_R      = 10.0f;   // 滑块半径
-constexpr float KNOB_R_DRAG = 12.0f;   // 拖动时放大，给反馈
-constexpr float BTN_MIN      = 44.0f;   // 按钮最小边长（触屏下限）
-constexpr float BTN_MAX      = 62.0f;
-constexpr float BTN_DIVISOR  = 22.0f;   // 按宽度自适应：1280/22 ≈ 58
-constexpr float LOCK_SIZE    = 50.0f;   // 锁定图标
+constexpr float TOP_H          = 112.0f;  // 顶部压边高度
+constexpr float BOTTOM_H       = 238.0f; // 底部压边高度
+constexpr float BAR_H          = 5.0f;   // 进度条可视高度（细条更接近电视端）
+constexpr float BAR_HIT_H      = 46.0f;  // 触摸判定高度（触屏下限）
+constexpr float KNOB_R         = 5.5f;   // 滑块半径
+constexpr float KNOB_R_DRAG    = 7.5f;   // 拖动时放大，给反馈
+constexpr float TRANSPORT_D    = 64.0f;  // 播放/暂停主按钮直径
+constexpr float SIDE_D         = 46.0f;  // 快退/快进按钮直径
+constexpr float SKIP_D         = 40.0f;  // 上一集/下一集按钮直径
+constexpr float SETTINGS_D     = 40.0f;  // 设置行按钮直径
+constexpr float LOCK_SIZE      = 50.0f;  // 锁定徽标
+
+// 内容左右安全边距：随宽度按比例，但设上下限（掌机窄屏不贴边，
+// 桌面宽屏也不至于离得太远）。
+inline float marginFor(float width) {
+    return std::clamp(width * 0.042f, 24.0f, 56.0f);
+}
+// 底部三条水平基线的中心 Y（都由视口高推导，保证各分辨率比例一致）
+inline float barCenterY(float y, float h)          { return y + h - 66.0f; }
+inline float timeCenterY(float y, float h)         { return y + h - 34.0f; }
+inline float transportCenterY(float y, float h)    { return barCenterY(y, h) - 32.0f - 32.0f; }
+inline float settingsCenterY(float y, float h)     { return transportCenterY(y, h) - 32.0f - 14.0f - 20.0f; }
 } // namespace osd
+
+// 把 showHUD() 的历史字符串键映射到矢量图标。
+// 以前这个参数根本没被使用（HUD 只画文字），现在图标是信息主体之一。
+static ui::Icon hudIconFor(const std::string& key) {
+    if (key == "play") return ui::Icon::Play;
+    if (key == "pause") return ui::Icon::Pause;
+    if (key == "replay") return ui::Icon::SeekBack;
+    if (key == "fast_forward") return ui::Icon::SeekForward;
+    if (key == "speed") return ui::Icon::Speed;
+    if (key == "aspect_ratio") return ui::Icon::Aspect;
+    if (key == "lock") return ui::Icon::Lock;
+    if (key == "lock_open") return ui::Icon::Unlock;
+    if (key == "volume_up" || key == "volume_down") return ui::Icon::Volume;
+    if (key == "brightness_high" || key == "brightness_low") return ui::Icon::Brightness;
+    if (key == "subtitles") return ui::Icon::Subtitles;
+    if (key == "subtitles_off") return ui::Icon::SubtitlesOff;
+    if (key == "timer") return ui::Icon::Clock;
+    if (key == "error") return ui::Icon::Error;
+    if (key == "playlist") return ui::Icon::Playlist;
+    return ui::Icon::Info;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 长按加速（按住不动 → 临时提速，松手恢复）
+// ─────────────────────────────────────────────────────────────
+// 450ms 是常见的长按阈值：短于它会被误判成「手指还没抬起」，
+// 长于它则用户会觉得按了没反应。
+constexpr int   kHoldBoostDelayMs = 450;
+// 手指移动超过这个距离就不算长按（已经在调音量/亮度或快进了）
+constexpr float kHoldMoveSlopPx   = 12.0f;
+// 长按时的目标倍速
+constexpr double kHoldBoostSpeed  = 2.0;
 
 
 
@@ -367,6 +410,61 @@ void MPVPlayerView::setupGestureSelfTest() {
                            mpv_pos > 1.0 ? "PASS 已跳转" : "FAIL 未跳转");
     }, "快进(校验)"});
 
+    // 6. 长按加速：按住不动 → 倍速临时提升，松手恢复
+    //
+    // 分三步（按下 / 校验并松手 / 校验恢复），原因同第 5 项：
+    // 提速发生在真实时间流逝之后，不能在同一段主线程代码里等待。
+    steps.push_back({400, [self]() {
+        // 用画面正中央，避开底部按钮行与进度条判定区
+        injectTouch(self, brls::TouchPhase::START,
+                    self->getWidth() * 0.5f, self->getHeight() * 0.5f);
+        brls::Logger::info("【长按加速】已按下，等待阈值…");
+    }, "长按(按下)"});
+
+    steps.push_back({900, [self]() {
+        double sp = 1.0;
+        char* p = mpv_get_property_string(self->mpv_, "speed");
+        if (p) { sp = atof(p); mpv_free(p); }
+        brls::Logger::info("【长按加速】按住后 speed={} -> {}",
+                           sp, sp > 1.5 ? "PASS 已提速" : "FAIL 未提速");
+        injectTouch(self, brls::TouchPhase::END,
+                    self->getWidth() * 0.5f, self->getHeight() * 0.5f);
+    }, "长按(校验并松手)"});
+
+    steps.push_back({600, [self]() {
+        double sp = 1.0;
+        char* p = mpv_get_property_string(self->mpv_, "speed");
+        if (p) { sp = atof(p); mpv_free(p); }
+        brls::Logger::info("【长按恢复】松手后 speed={} -> {}",
+                           sp, sp < 1.5 ? "PASS 已恢复" : "FAIL 未恢复");
+    }, "长按(恢复校验)"});
+
+    // 7. 按钮按下态：手指落在按钮上应立刻高亮，松手清除。
+    //
+    // 这一项是为了防住一类「静默失效」：代码看着有按下态处理，
+    // 但 borealis 把按下报成 UNSURE 而不是 START（见 setupGestures 的说明），
+    // 于是整段逻辑一次都没执行过 —— 界面上表现为「按钮点了没反应」。
+    steps.push_back({400, [self]() {
+        self->osd_visible_ = true;
+        self->last_user_action_time_ = std::chrono::steady_clock::now();
+    }, "按下态(显示OSD)"});
+
+    steps.push_back({500, [self]() {
+        if (self->hit_rects_.empty()) {
+            brls::Logger::info("【按钮按下态】hit_rects_ 为空 -> FAIL 未布局");
+            return;
+        }
+        const auto& r = self->hit_rects_.front();
+        injectTouch(self, brls::TouchPhase::START, r.x + r.w / 2, r.y + r.h / 2);
+        const bool during = self->has_locked_action_;
+        // 抬手位置放在画面左上角（不在任何按钮上），避免真的触发按钮动作
+        injectTouch(self, brls::TouchPhase::END, 4, 4);
+        const bool after = self->has_locked_action_;
+        brls::Logger::info("【按钮按下态】按下中={} 松手后={} -> {}",
+                           during ? "高亮" : "无", after ? "高亮" : "无",
+                           (during && !after) ? "PASS 有按下反馈" : "FAIL 无按下反馈");
+    }, "按下态(校验)"});
+
     // 后台线程负责计时（sleep 不在主线程），动作本身投递到主线程执行
     std::thread([steps]() mutable {
         for (auto& st : steps) {
@@ -575,15 +673,16 @@ void MPVPlayerView::drawOverlay() {
 
 // OSD / HUD 层绘制。参数为视频区域的左上角与尺寸。
 //
-// 【重要】本函数内所有文字都必须用 nvgFontFaceId(getDefaultFont())，
+// 【重要】本函数内所有文字都必须走 ui::text()（内部用 getDefaultFont()），
 // 不能写 nvgFontFace(vg, "sans")。
 //   "sans" 是 nanoVG 官方示例里的字体名，本项目从未注册过它；
 //   fontstash 查不到会返回 -1，nvgText 随即直接 return，
 //   结果是**整块 OSD 一个字都画不出来**，只看到一排空色块。
 //   这个 bug 曾存在很久而所有自动检查都通过（它们只看视频画面）。
 //   现在由 `verify_ui.py --only osd` 用纯黑视频做底来守卫。
-// 主字体 resources/font/font.ttf 已含 2 万汉字，中英文都能渲染。
 void MPVPlayerView::drawHud(NVGcontext* vg, float x, float y, float width, float height) {
+    const NVGcolor white = nvgRGBA(255, 255, 255, 255);
+
     // 亮度蒙层模拟
     if (brightness_ < 0.99f) {
         nvgBeginPath(vg);
@@ -592,188 +691,236 @@ void MPVPlayerView::drawHud(NVGcontext* vg, float x, float y, float width, float
         nvgFill(vg);
     }
 
-    // 3. 锁屏指示器 (防误触图标)
-    if (touch_locked_) {
-        float lock_x = x + osd::MARGIN;
-        float lock_y = y + (height - osd::LOCK_SIZE) / 2.0f;
-
-        nvgBeginPath(vg);
-        nvgRoundedRect(vg, lock_x, lock_y, osd::LOCK_SIZE, osd::LOCK_SIZE, osd::LOCK_SIZE * 0.5f);
-        nvgFillColor(vg, nvgRGBA(30, 30, 30, 200));
-        nvgFill(vg);
-
-        nvgFontSize(vg, osd::FONT_ICON);
-        nvgFontFaceId(vg, brls::Application::getDefaultFont());
-        nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-        nvgFillColor(vg, nvgRGBA(241, 196, 15, 255));
-        nvgText(vg, lock_x + osd::LOCK_SIZE * 0.5f, lock_y + osd::LOCK_SIZE * 0.5f, "[锁]", nullptr);
-    }
-
-    // 4. 居中 HUD 悬浮提示框
-    auto now = std::chrono::steady_clock::now();
-    if (now < hud_expire_time_) {
-        float hud_w = 300.0f;
-        float hud_h = 76.0f;
-        float hud_x = x + (width - hud_w) / 2.0f;
-        float hud_y = y + (height - hud_h) / 2.0f;
-
-        nvgBeginPath(vg);
-        nvgRoundedRect(vg, hud_x, hud_y, hud_w, hud_h, 16.0f);
-        nvgFillColor(vg, nvgRGBA(18, 18, 18, 230));
-        nvgFill(vg);
-
-        nvgFontSize(vg, osd::FONT_HUD);
-        nvgFontFaceId(vg, brls::Application::getDefaultFont());
-        nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-        nvgFillColor(vg, nvgRGBA(255, 255, 255, 255));
-        nvgText(vg, hud_x + hud_w / 2.0f, hud_y + (hud_progress_ >= 0 ? 26.0f : 38.0f), hud_text_.c_str(), nullptr);
-
-        if (hud_progress_ >= 0.0f) {
-            float bar_w = hud_w - 48.0f;
-            float bar_h = 6.0f;
-            float bar_x = hud_x + 24.0f;
-            float bar_y = hud_y + 52.0f;
-
-            nvgBeginPath(vg);
-            nvgRoundedRect(vg, bar_x, bar_y, bar_w, bar_h, 3.0f);
-            nvgFillColor(vg, nvgRGBA(70, 70, 70, 220));
-            nvgFill(vg);
-
-            nvgBeginPath(vg);
-            nvgRoundedRect(vg, bar_x, bar_y, bar_w * std::clamp(hud_progress_, 0.0f, 1.0f), bar_h, 3.0f);
-            nvgFillColor(vg, nvgRGBA(0, 168, 255, 255));
-            nvgFill(vg);
+    // 字幕避让 OSD 控制栏：
+    // sub-pos=80 是为「控制栏隐藏」设计的（距底 20%）；
+    // 控制栏一旦显示（底部占约 24% 屏高），字幕就会压在按钮行上。
+    // 显示期间抬到 60，隐藏时回落。按 alpha 过半切换，
+    // 只在跨越阈值时下发，避免每帧 set_property。
+    if (mpv_) {
+        const int sub_pos_target = osd_alpha_ > 0.5f ? 60 : 80;
+        if (sub_pos_target != sub_pos_applied_) {
+            sub_pos_applied_ = sub_pos_target;
+            char buf[8];
+            std::snprintf(buf, sizeof(buf), "%d", sub_pos_target);
+            mpv_set_property_string(mpv_, "sub-pos", buf);
         }
     }
 
-    // 5. 易用 OSD 控制层（顶部标题栏 + 底部控制栏）
-    auto idle_seconds = std::chrono::duration_cast<std::chrono::seconds>(now - last_user_action_time_).count();
+    auto now = std::chrono::steady_clock::now();
+
+    // ── 锁定徽标（始终显示，否则用户不知道「为什么点了没反应」）──
+    if (touch_locked_) {
+        const float bx = x + osd::marginFor(width) + 18.0f;
+        const float by = y + 34.0f;
+        ui::fillCircle(vg, bx, by, 18.0f, nvgRGBA(18, 20, 24, 150));
+        ui::drawIcon(vg, ui::Icon::Lock, bx, by, 17.0f, nvgRGBA(255, 190, 120, 220));
+    }
+
+    // ── 居中 HUD 提示（音量 / 亮度 / 倍速 / 跳转结果）──
+    if (now < hud_expire_time_) {
+        // 尾部 260ms 淡出：到期时「啪」地消失也是「直挺挺」的一种
+        const float fade = std::clamp(
+            std::chrono::duration<float, std::milli>(hud_expire_time_ - now).count()
+                / 260.0f, 0.0f, 1.0f);
+        const bool has_bar = hud_progress_ >= 0.0f;
+        const float text_w = ui::textWidth(vg, osd::FONT_HUD, hud_text_);
+        const float box_w  = std::clamp(text_w + 34.0f + 26.0f + 34.0f, 190.0f, width - 80.0f);
+        const float box_h  = has_bar ? 88.0f : 64.0f;
+        const float box_x  = x + (width - box_w) * 0.5f;
+        const float box_y  = y + (height - box_h) * 0.5f - 12.0f;
+        const float mid_y  = has_bar ? box_y + 32.0f : box_y + box_h * 0.5f;
+
+        ui::fillRoundRect(vg, box_x, box_y, box_w, box_h, 18.0f,
+                          nvgRGBA(18, 20, 24, (int)(236 * fade)));
+        ui::strokeRoundRect(vg, box_x, box_y, box_w, box_h, 18.0f,
+                            nvgRGBA(255, 255, 255, (int)(26 * fade)));
+        ui::drawIcon(vg, hudIconFor(hud_icon_), box_x + 34.0f, mid_y, osd::FONT_HUD_ICON,
+                     nvgRGBA(255, 159, 69, (int)(255 * fade)));
+        ui::text(vg, box_x + 58.0f, mid_y, osd::FONT_HUD,
+                 nvgRGBA(255, 255, 255, (int)(255 * fade)),
+                 NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE,
+                 ui::ellipsize(vg, osd::FONT_HUD, hud_text_, box_w - 92.0f));
+
+        if (has_bar) {
+            const float bar_w = box_w - 68.0f;
+            const float bar_x = box_x + 34.0f;
+            const float bar_y = box_y + box_h - 26.0f;
+            ui::fillRoundRect(vg, bar_x, bar_y, bar_w, 4.0f, 2.0f,
+                              nvgRGBA(255, 255, 255, (int)(42 * fade)));
+            ui::fillRoundRect(vg, bar_x, bar_y,
+                              bar_w * std::clamp(hud_progress_, 0.0f, 1.0f), 4.0f, 2.0f,
+                              nvgRGBA(255, 159, 69, (int)(255 * fade)));
+        }
+    }
+
+    // ── 锁定态提示：轻点屏幕后短暂出现「双击解锁」──
+    if (touch_locked_ && now < lock_hint_until_) {
+        const float fade = std::clamp(
+            std::chrono::duration<float, std::milli>(lock_hint_until_ - now).count()
+                / 260.0f, 0.0f, 1.0f);
+        const std::string label = "触控已锁定 · 双击解锁";
+        const float tw = ui::textWidth(vg, 14.0f, label);
+        const float pw = tw + 74.0f;
+        const float px = x + (width - pw) * 0.5f;
+        const float py = y + 18.0f;
+        ui::fillRoundRect(vg, px, py, pw, 44.0f, 22.0f,
+                          nvgRGBA(18, 20, 24, (int)(226 * fade)));
+        ui::strokeRoundRect(vg, px, py, pw, 44.0f, 22.0f,
+                            nvgRGBA(255, 255, 255, (int)(26 * fade)));
+        ui::drawIcon(vg, ui::Icon::Unlock, px + 30.0f, py + 22.0f, 18.0f,
+                     nvgRGBA(255, 159, 69, (int)(255 * fade)));
+        ui::text(vg, px + 50.0f, py + 22.5f, 14.0f,
+                 nvgRGBA(255, 255, 255, (int)(240 * fade)),
+                 NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, label);
+    }
+
+    // ── OSD 显隐状态机 ──
+    const auto idle_seconds =
+        std::chrono::duration_cast<std::chrono::seconds>(now - last_user_action_time_).count();
     // 测试用：DECKPLAYER_OSD_OFF 强制隐藏 OSD，
     // 便于脚本单独验证「字幕是否被控制栏遮挡」。
     static const bool osd_force_off = std::getenv("DECKPLAYER_OSD_OFF") != nullptr;
-    // 5 秒对触摸操作太短：用户点一下想看看控制栏，
-    // 还没看清就消失了，观感是「根本没有播放控件」。
-    // 延长到 8 秒，并在任何触摸/按键后重新计时（见 last_user_action_time_）。
     const bool osd_shown = !osd_force_off && !touch_locked_
                         && osd_visible_ && idle_seconds < 8;
+
+    // ── OSD 渐显动画 ──
+    // 目标翻转时记下起点 alpha 与时刻；每帧按耗时插值（帧率无关）。
+    // 顶部栏随淡出向上滑、底部栏向下滑——电视端播放器的标准动效。
+    if (osd_shown != osd_anim_target_) {
+        osd_anim_target_ = osd_shown;
+        osd_alpha_from_  = osd_alpha_;
+        osd_anim_t0_     = now;
+    }
+    constexpr float kOsdAnimMs = 240.0f;
+    const float anim_t = std::clamp(
+        std::chrono::duration<float, std::milli>(now - osd_anim_t0_).count()
+            / kOsdAnimMs, 0.0f, 1.0f);
+    // 缓出曲线：线性插值在收尾处会有「突然停住」的机械感
+    const float eased = 1.0f - (1.0f - anim_t) * (1.0f - anim_t);
+    const float osd_target_alpha = osd_shown ? 1.0f : 0.0f;
+    osd_alpha_ = osd_alpha_from_ + (osd_target_alpha - osd_alpha_from_) * eased;
 
     // OSD 不可见时**必须清空命中区**。
     // 否则 hit_rects_ 保留上一次可见时的坐标：用户点屏幕空白处
     // 会命中「看不见的按钮」并触发动作，表现为行为诡异、点了没反应。
     if (!osd_shown) {
         hit_rects_.clear();
-        // 进度条同理：OSD 隐藏后不能还能拖动看不见的进度条。
-        // 拖动中不打断（否则手一松就跳不动了）。
         if (!seek_dragging_) {
             seek_bar_ = SeekBarRect{};
         }
     }
 
-    if (osd_shown) {
-        // --- 顶部状态栏 ---
-        float top_h = osd::TOP_H;
-        nvgBeginPath(vg);
-        nvgRect(vg, x, y, width, top_h);
-        NVGpaint top_paint = nvgLinearGradient(vg, x, y, x, y + top_h, nvgRGBA(0, 0, 0, 200), nvgRGBA(0, 0, 0, 0));
-        nvgFillPaint(vg, top_paint);
-        nvgFill(vg);
+    if (osd_alpha_ <= 0.01f) return;
 
-        // 视频标题
-        nvgFontSize(vg, osd::FONT_TITLE);
-        nvgFontFaceId(vg, brls::Application::getDefaultFont());
-        nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-        nvgFillColor(vg, nvgRGBA(255, 255, 255, 255));
-        nvgText(vg, x + osd::MARGIN, y + 32.0f, video_title_.c_str(), nullptr);
+    const float a = osd_alpha_;
+    const float top_slide = (1.0f - a) * -18.0f;
+    const float bot_slide = (1.0f - a) *  18.0f;
+    const float m = osd::marginFor(width);
 
-        // 系统当前时间与便携状态
-        std::string top_info = "⚡ 硬件解码  |  " + getCurrentTimeStr();
-        nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-        nvgFillColor(vg, nvgRGBA(200, 200, 200, 240));
-        nvgText(vg, x + width - osd::MARGIN, y + 32.0f, top_info.c_str(), nullptr);
+    // ═══════════════ 顶部：返回 + 片名 + 技术信息 ═══════════════
+    ui::scrimTop(vg, x, y + top_slide, width, osd::TOP_H, a);
 
-        // --- 底部控制条 ---
-        float bottom_h = osd::BOTTOM_H;
-        nvgBeginPath(vg);
-        nvgRect(vg, x, y + height - bottom_h, width, bottom_h);
-        NVGpaint bottom_paint = nvgLinearGradient(vg, x, y + height - bottom_h, x, y + height, nvgRGBA(0, 0, 0, 0), nvgRGBA(0, 0, 0, 230));
-        nvgFillPaint(vg, bottom_paint);
-        nvgFill(vg);
+    const float clock_w = 74.0f;
+    const float title_x = x + m + 52.0f;
+    ui::textClipped(vg, title_x, y + 38.0f + top_slide, osd::FONT_TITLE,
+                    nvgRGBA(255, 255, 255, (int)(252 * a)),
+                    NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, video_title_,
+                    width - (title_x - x) - m - clock_w);
 
-        // 触控大进度条
-        float bar_margin = osd::MARGIN;
-        // 进度条贴近底部：底部留白 14，其上依次是时间文字与两行按钮。
-        // 这样它与按钮行完全不重叠（原来两者竖直重叠 38px，
-        // 主控按钮直接把进度条盖住，进度条既看不见也拖不动）。
-        float bar_y = y + height - osd::BAR_BOTTOM_PAD - osd::BAR_H;
-        float bar_w = width - bar_margin * 2;
-        float bar_h = osd::BAR_H;
-
-        // 记录命中区供拖动使用。
-        // 可视高度只有 8px，手指按不准，因此判定区以可视条为中心
-        // 向上延伸到 44px —— 这是触屏可用性的下限。
-        seek_bar_.x     = x + bar_margin;
-        seek_bar_.y     = bar_y;
-        seek_bar_.w     = bar_w;
-        seek_bar_.h     = bar_h;
-        seek_bar_.hit_h = std::max(osd::BAR_HIT_H, bar_h);
-        seek_bar_.hit_y = bar_y - (seek_bar_.hit_h - bar_h) * 0.5f;
-
-        nvgBeginPath(vg);
-        nvgRoundedRect(vg, x + bar_margin, bar_y, bar_w, bar_h, osd::BAR_RADIUS);
-        nvgFillColor(vg, nvgRGBA(80, 80, 80, 200));
-        nvgFill(vg);
-
-        // 拖动中显示手指位置，而不是当前播放位置，
-        // 否则用户拖动时滑块不动，完全失去反馈。
-        const double shown_pos = seek_dragging_ ? seek_preview_ : current_position_;
-        const double shown_total = seek_dragging_ && seek_preview_total_ > 0
-                                       ? seek_preview_total_ : total_duration_;
-        if (shown_total > 0) {
-            float progress = (float)shown_pos / shown_total;
-            float active_w = bar_w * std::clamp(progress, 0.0f, 1.0f);
-
-            nvgBeginPath(vg);
-            nvgRoundedRect(vg, x + bar_margin, bar_y, active_w, bar_h, osd::BAR_RADIUS);
-            nvgFillColor(vg, nvgRGBA(0, 168, 255, 255));
-            nvgFill(vg);
-
-            // 抓取滑块球
-            nvgBeginPath(vg);
-            // 滑块直径 20（原 18）：触屏上更容易看见与抓住
-            nvgCircle(vg, x + bar_margin + active_w, bar_y + bar_h / 2.0f,
-                      seek_dragging_ ? osd::KNOB_R_DRAG : osd::KNOB_R);
-            nvgFillColor(vg, nvgRGBA(255, 255, 255, 255));
-            nvgFill(vg);
-        }
-
-        // 时间标签 (当前 / 总共)
-        std::string time_text = MediaScanner::formatDuration((int64_t)shown_pos)
-                              + " / " + MediaScanner::formatDuration((int64_t)shown_total);
-        nvgFontSize(vg, osd::FONT_INFO);
-        nvgFontFaceId(vg, brls::Application::getDefaultFont());
-        nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
-        nvgFillColor(vg, nvgRGBA(220, 220, 220, 255));
-        nvgText(vg, x + bar_margin, bar_y + 16.0f, time_text.c_str(), nullptr);
-
-        // 底部直观功能键提示
-        std::ostringstream btn_oss;
-        btn_oss << "A 播放  |  X 音轨  |  Y 字幕  |  LT/RT 快退快进  |  R3 倍速 (" << playback_speed_ << "x)  |  L3 比例";
-        std::string ctrl_hint = btn_oss.str();
-
-        nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
-        nvgFillColor(vg, nvgRGBA(150, 150, 150, 200));
-        nvgFontSize(vg, osd::FONT_HINT);
-        nvgText(vg, x + width - bar_margin, y + height - 132.0f, ctrl_hint.c_str(), nullptr);
-
-        // ---- 触摸控件（触屏用户唯一的操作入口）----
-        //
-        // 背景：OSD 原本只画进度条 + 一行「A 播放 | X 音轨 | …」的手柄提示。
-        // 对触屏用户来说，那行字只说明「能做什么」，**点不了任何东西**，
-        // 观感就是「几乎没有播放功能」。
-        // 这里补一排真正可点的按钮，位置记录到 hit_rects_ 供触摸命中测试。
-        drawTouchControls(vg, x, y, width, height);
+    // 技术信息：分辨率 · 硬解。空则整行不画，避免留一条空白。
+    std::string meta_line;
+    if (video_w_ > 0 && video_h_ > 0) {
+        meta_line = std::to_string(video_w_) + "×" + std::to_string(video_h_);
+    }
+    if (video_w_ > 0 || video_h_ > 0) {
+        meta_line += meta_line.empty() ? "" : "  ·  ";
+        meta_line += hwdec_active_ ? "硬件解码" : "软件解码";
+    }
+    if (!meta_line.empty()) {
+        ui::text(vg, title_x, y + 65.0f + top_slide, osd::FONT_META,
+                 nvgRGBA(255, 255, 255, (int)(150 * a)),
+                 NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, meta_line);
     }
 
+    // 右上角时钟：信息密度低，只在顶部出现，不与底部时间重复。
+    ui::text(vg, x + width - m, y + 38.0f + top_slide, osd::FONT_TIME,
+             nvgRGBA(255, 255, 255, (int)(150 * a)),
+             NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE, getCurrentTimeStr());
+
+    // ═══════════════ 底部：压边 + 进度条 + 时间 ═══════════════
+    ui::scrimBottom(vg, x, y + height - osd::BOTTOM_H + bot_slide, width,
+                    osd::BOTTOM_H, a);
+
+    const float bar_cy = osd::barCenterY(y, height) + bot_slide;
+    const float bar_x  = x + m;
+    const float bar_w  = width - m * 2.0f;
+    const float bar_top = bar_cy - osd::BAR_H * 0.5f;
+
+    // 拖动中的预览值优先，否则用真实播放位置
+    const double shown_pos   = seek_dragging_ ? seek_preview_ : current_position_;
+    const double shown_total = seek_dragging_ && seek_preview_total_ > 0
+                                   ? seek_preview_total_ : total_duration_;
+
+    seek_bar_.x     = bar_x;
+    seek_bar_.y     = bar_top;
+    seek_bar_.w     = bar_w;
+    seek_bar_.h     = osd::BAR_H;
+    seek_bar_.hit_h = osd::BAR_HIT_H;
+    seek_bar_.hit_y = bar_cy - osd::BAR_HIT_H * 0.5f;
+
+    ui::fillRoundRect(vg, bar_x, bar_top, bar_w, osd::BAR_H, osd::BAR_H * 0.5f,
+                      nvgRGBA(255, 255, 255, (int)(52 * a)));
+
+    float knob_x = bar_x;
+    if (shown_total > 0) {
+        const float progress = (float)std::clamp(shown_pos / shown_total, 0.0, 1.0);
+        const float active_w = bar_w * progress;
+        knob_x = bar_x + active_w;
+
+        ui::fillRoundRect(vg, bar_x, bar_top, std::max(active_w, osd::BAR_H),
+                          osd::BAR_H, osd::BAR_H * 0.5f,
+                          nvgRGBA(255, 159, 69, (int)(255 * a)));
+
+        // 滑块：静止时是小圆点，拖动时放大并加一圈柔光。
+        // 只在拖动时画滑块，静止画面更干净（电视端的做法）。
+        if (seek_dragging_) {
+            ui::fillCircle(vg, knob_x, bar_cy, osd::KNOB_R_DRAG + 6.0f,
+                           nvgRGBA(255, 159, 69, (int)(60 * a)));
+            ui::fillCircle(vg, knob_x, bar_cy, osd::KNOB_R_DRAG,
+                           nvgRGBA(255, 255, 255, (int)(255 * a)));
+        }
+    }
+
+    // 拖动时在滑块上方显示目标时间气泡——手指会挡住滑块，
+    // 气泡放在上方才看得见，这是触屏拖动的必要条件。
+    if (seek_dragging_) {
+        const std::string label = MediaScanner::formatDuration((int64_t)shown_pos);
+        const float tw = ui::textWidth(vg, 15.0f, label);
+        const float pw = tw + 28.0f;
+        float px = std::clamp(knob_x - pw * 0.5f, x + m, x + width - m - pw);
+        const float py = bar_cy - 56.0f;
+        ui::fillRoundRect(vg, px, py, pw, 34.0f, 17.0f,
+                          nvgRGBA(20, 22, 26, (int)(240 * a)));
+        ui::strokeRoundRect(vg, px, py, pw, 34.0f, 17.0f,
+                            nvgRGBA(255, 159, 69, (int)(120 * a)));
+        ui::text(vg, px + pw * 0.5f, py + 17.5f, 15.0f,
+                 nvgRGBA(255, 255, 255, (int)(255 * a)),
+                 NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, label);
+    }
+
+    // 时间：左侧已播、右侧总时长。都用等宽感更强的数字，避免跳动。
+    const float time_cy = osd::timeCenterY(y, height) + bot_slide;
+    ui::text(vg, bar_x, time_cy, osd::FONT_TIME,
+             nvgRGBA(255, 255, 255, (int)(232 * a)),
+             NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE,
+             MediaScanner::formatDuration((int64_t)shown_pos));
+    ui::text(vg, bar_x + bar_w, time_cy, osd::FONT_TIME,
+             nvgRGBA(255, 255, 255, (int)(130 * a)),
+             NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE,
+             MediaScanner::formatDuration((int64_t)shown_total));
+
+    // 图标按钮行（主控 + 设置），同时登记触摸命中区
+    drawTouchControls(vg, x, y, width, height, bot_slide);
 }
 
 void MPVPlayerView::blitVideoTexture(int dst_x, int dst_y, int dst_w, int dst_h) {
@@ -798,87 +945,132 @@ void MPVPlayerView::blitVideoTexture(int dst_x, int dst_y, int dst_w, int dst_h)
 
 // 触摸控件绘制。位置同时记录到 hit_rects_，供 hitTouchControls 命中测试。
 //
-// 分两行：
-//   主控行（下）—— 上一集 / 快退 / 播放暂停 / 快进 / 下一集
-//   功能行（上）—— 音轨 / 字幕 / 倍速 / 比例 / 锁定
-// 这样常用操作在拇指最容易够到的位置，功能项在上方不抢眼。
+// 布局（全部是矢量图标，没有一个中文标签方框）：
+//   顶部左上   返回（圆形玻璃按钮）
+//   主控行     上一集 / 快退10 / 播放暂停（实心强调色大圆）/ 快进10 / 下一集
+//   设置行     字幕 / 音轨 / 倍速(胶囊) / 画面 / 列表 / 锁定 —— 右对齐
+//
+// 为什么分成两行：主控是「看片时随时会用」的高频操作，放低、放大、
+// 居中，拇指最容易够到；设置是低频操作，放上一行、缩小、靠右，
+// 不抢视觉重心。这也是 Plex / Apple TV / Emby 的一致做法。
 void MPVPlayerView::drawTouchControls(NVGcontext* vg, float x, float y,
-                                      float width, float height) {
+                                      float width, float height, float dy) {
     hit_rects_.clear();
+    const float a = osd_alpha_;
+    if (a <= 0.01f) return;
 
-    // 尺寸按逻辑宽度自适应：1280 宽下约 58px，小屏不小于 44px。
-    const float btn = std::clamp(width / osd::BTN_DIVISOR, osd::BTN_MIN, osd::BTN_MAX);
-    const float gap = btn * 0.30f;
+    const NVGcolor white = nvgRGBA(255, 255, 255, 255);
+    const float m = osd::marginFor(width);
+    const float top_slide = (1.0f - a) * -18.0f;
 
-    struct Item { const char* label; TouchAction action; bool wide; };
-
-    // 主控行：居中，间距更大
-    const Item primary[] = {
-        {"上一集", TouchAction::Prev,        true},
-        {"-10s",   TouchAction::SeekBack,    true},
-        {"播放",   TouchAction::PlayPause,   true},
-        {"+10s",   TouchAction::SeekForward, true},
-        {"下一集", TouchAction::Next,        true},
-    };
-    // 功能行：右对齐，尺寸一致
-    const Item secondary[] = {
-        {"列表", TouchAction::Playlist,      true},
-        {"音轨", TouchAction::AudioTrack,    true},
-        {"字幕", TouchAction::SubtitleTrack, true},
-        {"倍速", TouchAction::Speed,         true},
-        {"画面", TouchAction::Aspect,        true},
-        {"锁定", TouchAction::Lock,          true},
+    auto pressed = [this](TouchAction ac) {
+        return has_locked_action_ && locked_action_ == ac;
     };
 
-    auto widthOf = [&](const Item& it) { return it.wide ? btn * 1.75f : btn; };
-
-    auto drawRow = [&](const Item* items, int n, float row_y, bool centered) {
-        float total_w = 0.0f;
-        for (int i = 0; i < n; ++i) total_w += widthOf(items[i]);
-        total_w += gap * (n - 1);
-
-        float cx = centered ? (x + (width - total_w) * 0.5f)
-                            : (x + width - osd::MARGIN - total_w);
-        if (cx < x + osd::MARGIN) cx = x + osd::MARGIN;
-
-        for (int i = 0; i < n; ++i) {
-            const float bw = widthOf(items[i]);
-            const bool focused = has_locked_action_ && (locked_action_ == items[i].action);
-
-            nvgBeginPath(vg);
-            nvgRoundedRect(vg, cx, row_y, bw, btn, btn * 0.22f);
-            // 锁定态用强调色描边更醒目；播放/暂停用实心强调色突出主操作
-            const bool is_primary_action = (items[i].action == TouchAction::PlayPause);
-            nvgFillColor(vg, is_primary_action
-                                 ? nvgRGBA(255, 159, 69, 235)
-                                 : nvgRGBA(28, 30, 36, 215));
-            nvgFill(vg);
-            nvgStrokeColor(vg, focused ? nvgRGBA(255, 192, 122, 255)
-                                       : nvgRGBA(255, 159, 69, 140));
-            nvgStrokeWidth(vg, focused ? 2.5f : 1.2f);
-            nvgStroke(vg);
-
-            nvgFontSize(vg, btn * 0.32f);
-            nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-            nvgFillColor(vg, is_primary_action ? nvgRGBA(20, 22, 26, 255)
-                                               : nvgRGBA(242, 242, 245, 245));
-            nvgText(vg, cx + bw / 2.0f, row_y + btn / 2.0f, items[i].label, nullptr);
-
-            hit_rects_.push_back({cx, row_y, bw, btn, items[i].action});
-            cx += bw + gap;
-        }
+    // 统一登记命中区：按钮的**可点范围**比视觉略大 4px，
+    // 触屏上「差一点没点中」比「点到了但没反馈」更让人恼火。
+    auto hit = [&](float cx, float cy, float d, TouchAction ac) {
+        const float pad = 4.0f;
+        hit_rects_.push_back({cx - d * 0.5f - pad, cy - d * 0.5f - pad,
+                              d + pad * 2.0f, d + pad * 2.0f, ac});
     };
 
-    // 按钮行自下而上排列，全部位于进度条**上方**。
-    // 顺序（从下往上）：主控行 -> 功能行。
-    // 主控行贴着手最容易够到的位置，功能行在其上方。
-    const float primary_y   = y + height - osd::BAR_BOTTOM_PAD - osd::BAR_H
-                              - 8.0f - 20.0f - btn;      // 进度条 + 时间文字 + 间隔
-    const float secondary_y = primary_y - btn - gap;
+    // 玻璃质感圆按钮：半透明白底 + 细描边，叠在视频上不糊成黑块
+    auto ghost = [&](float cx, float cy, float d, ui::Icon ic, float iconSize,
+                     TouchAction ac) {
+        const bool p = pressed(ac);
+        ui::drawIconButton(
+            vg, ic, cx, cy, d, iconSize,
+            nvgRGBA(p ? 255 : 255, p ? 255 : 255, p ? 255 : 255,
+                    (int)((p ? 46 : 22) * a)),
+            nvgRGBA(255, 255, 255, (int)((p ? 255 : 236) * a)),
+            nvgRGBA(p ? 255 : 255, 159, p ? 69 : 120, (int)((p ? 160 : 0) * a)));
+        hit(cx, cy, d, ac);
+    };
 
-    nvgFontFaceId(vg, brls::Application::getDefaultFont());
-    drawRow(secondary, (int)(sizeof(secondary)/sizeof(secondary[0])), secondary_y, false);
-    drawRow(primary,   (int)(sizeof(primary)/sizeof(primary[0])),   primary_y,   true);
+    // ── 返回按钮（顶部左侧）──
+    {
+        const float cx = x + m + 19.0f;
+        const float cy = y + 44.0f + top_slide;
+        const bool p = pressed(TouchAction::Back);
+        ui::drawIconButton(vg, ui::Icon::Back, cx, cy, 38.0f, 19.0f,
+                           nvgRGBA(255, 255, 255, (int)((p ? 46 : 22) * a)), white,
+                           nvgRGBA(255, 255, 255, (int)((p ? 120 : 26) * a)));
+        hit_rects_.push_back({cx - 23.0f, cy - 23.0f, 46.0f, 46.0f,
+                              TouchAction::Back});
+    }
+
+    // ── 主控行 ──
+    const float tcx = x + width * 0.5f;
+    const float tcy = osd::transportCenterY(y, height) + dy;
+
+    ghost(tcx - 124.0f, tcy, osd::SKIP_D, ui::Icon::Prev, 18.0f, TouchAction::Prev);
+    ghost(tcx - 68.0f, tcy, osd::SIDE_D, ui::Icon::SeekBack, 21.0f,
+          TouchAction::SeekBack);
+
+    // 播放/暂停：整屏唯一的实心强调色，视线自然落在它上面
+    {
+        const bool p = pressed(TouchAction::PlayPause);
+        const NVGcolor fill = p ? nvgRGBA(255, 184, 110, (int)(255 * a))
+                                : nvgRGBA(255, 159, 69, (int)(255 * a));
+        ui::fillCircle(vg, tcx, tcy, osd::TRANSPORT_D * 0.5f, fill);
+        ui::drawIcon(vg, is_playing_ ? ui::Icon::Pause : ui::Icon::Play, tcx, tcy,
+                     28.0f, nvgRGBA(20, 14, 8, (int)(255 * a)), 2.2f);
+        hit(tcx, tcy, osd::TRANSPORT_D, TouchAction::PlayPause);
+    }
+
+    ghost(tcx + 68.0f, tcy, osd::SIDE_D, ui::Icon::SeekForward, 21.0f,
+          TouchAction::SeekForward);
+    ghost(tcx + 124.0f, tcy, osd::SKIP_D, ui::Icon::Next, 18.0f, TouchAction::Next);
+
+    // ── 设置行（右对齐，从右往左排）──
+    const float scy = osd::settingsCenterY(y, height) + dy;
+    float right = x + width - m;
+
+    auto place = [&](ui::Icon ic, TouchAction ac, float iconSize) {
+        const float cx = right - osd::SETTINGS_D * 0.5f;
+        ghost(cx, scy, osd::SETTINGS_D, ic, iconSize, ac);
+        right = cx - osd::SETTINGS_D * 0.5f - 12.0f;
+    };
+
+    place(ui::Icon::Lock, TouchAction::Lock, 18.0f);
+    place(ui::Icon::Playlist, TouchAction::Playlist, 19.0f);
+    place(ui::Icon::Aspect, TouchAction::Aspect, 19.0f);
+
+    // 倍速胶囊：数值本身就是信息，做成胶囊比做成图标更直观
+    {
+        char spd[16];
+        const double rounded = std::round(playback_speed_ * 10.0) / 10.0;
+        if (std::abs(rounded - std::round(rounded)) < 0.05)
+            std::snprintf(spd, sizeof(spd), "%d×", (int)std::round(rounded));
+        else
+            std::snprintf(spd, sizeof(spd), "%.1f×", rounded);
+
+        const float pill_w = 78.0f;
+        const float pill_h = 34.0f;
+        const float px = right - pill_w;
+        const bool p = pressed(TouchAction::Speed);
+        ui::fillRoundRect(vg, px, scy - pill_h * 0.5f, pill_w, pill_h,
+                          pill_h * 0.5f,
+                          nvgRGBA(255, p ? 170 : 255, p ? 190 : 255,
+                                  (int)((p ? 60 : 22) * a)));
+        ui::strokeRoundRect(vg, px, scy - pill_h * 0.5f, pill_w, pill_h,
+                            pill_h * 0.5f,
+                            nvgRGBA(255, 159, 69, (int)((p ? 170 : 90) * a)));
+        ui::drawIcon(vg, ui::Icon::Speed, px + 18.0f, scy, 16.0f,
+                     nvgRGBA(255, 159, 69, (int)(240 * a)), 1.8f);
+        ui::text(vg, px + 32.0f, scy + 0.5f, 14.0f,
+                 nvgRGBA(255, 255, 255, (int)(240 * a)),
+                 NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, spd);
+        hit_rects_.push_back({px - 4.0f, scy - pill_h * 0.5f - 4.0f,
+                              pill_w + 8.0f, pill_h + 8.0f, TouchAction::Speed});
+        right = px - 12.0f;
+    }
+
+    place(ui::Icon::Audio, TouchAction::AudioTrack, 19.0f);
+    const bool subs_on = selected_sid_ > 0;
+    place(subs_on ? ui::Icon::Subtitles : ui::Icon::SubtitlesOff,
+          TouchAction::SubtitleTrack, 19.0f);
 }
 
 // 屏幕 x 坐标 → 目标播放时间（秒）。
@@ -896,6 +1088,8 @@ double MPVPlayerView::seekBarTimeAt(float px) const {
 }
 
 bool MPVPlayerView::hitTouchControls(float px, float py) {
+    // 渐隐过半的按钮视为不可点（看得见轮廓，但避免误触正在消失的控件）
+    if (osd_alpha_ < 0.5f) return false;
     for (const auto& r : hit_rects_) {
         if (px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) {
             performTouchAction(r.action);
@@ -979,7 +1173,17 @@ void MPVPlayerView::setupGestures() {
             // 原实现里 has_locked_action_ 声明后从未被赋值，
             // 按钮永远画成静态的，点下去没有任何反馈 ——
             // 触屏用户会以为「点了没反应」。
-            if (status.state == brls::GestureState::START) {
+            // 手指按下：borealis 的 TapGestureRecognizer 在未开启
+            // forceRecognision 时把「按下」报成 **UNSURE**，
+            // GestureState::START 在该识别器里根本不会被派发
+            // （见 tap_gesture.hpp 的注释：START: unsupported）。
+            // 因此必须把 UNSURE 一并当作按下，否则下面这段按下态逻辑
+            // —— 以及长按加速的计时 —— 永远都不会执行。
+            const bool finger_down =
+                status.state == brls::GestureState::START ||
+                status.state == brls::GestureState::UNSURE;
+
+            if (finger_down) {
                 has_locked_action_ = false;
                 for (const auto& r : hit_rects_) {
                     if (status.position.x >= r.x && status.position.x <= r.x + r.w &&
@@ -989,10 +1193,17 @@ void MPVPlayerView::setupGestures() {
                         break;
                     }
                 }
+                // 长按加速的起点：只有没落在按钮上时才计时，
+                // 否则按住「倍速」按钮会同时触发长按加速，两个行为打架。
+                touch_down_ = !has_locked_action_;
+                press_moved_ = false;
+                press_down_time_ = std::chrono::steady_clock::now();
                 if (has_locked_action_) return;
             }
             if (status.state == brls::GestureState::END) {
                 has_locked_action_ = false;
+                touch_down_ = false;
+                endHoldBoost();
             }
 
             if (status.state != brls::GestureState::END) return;
@@ -1028,25 +1239,41 @@ void MPVPlayerView::setupGestures() {
             const bool near_prev = (dx * dx + dy * dy) <
                                    (kDoubleTapSlopPx * kDoubleTapSlopPx);
 
+            // 锁定态：OSD 不显示，但**必须**给用户一条出路。
+            // 原实现里锁屏后单击/双击全部被吞掉，触屏用户只能靠手柄
+            // 或重启才能解锁——等于把自己锁在门外。
+            // 现在：单击 → 顶部弹出「双击解锁」提示；双击 → 解锁。
+            if (touch_locked_) {
+                if (gesture_double_tap_pending_ && dt_ms < 300 && near_prev) {
+                    gesture_double_tap_pending_ = false;
+                    toggleTouchLock();
+                    osd_visible_ = true;
+                    last_user_action_time_ = now;
+                    showHUD("lock_open", "触控已解锁");
+                } else {
+                    gesture_double_tap_pending_ = true;
+                    last_touch_down_time_ = now;
+                    last_touch_pos_ = status.position;
+                    lock_hint_until_ = now + std::chrono::milliseconds(2600);
+                }
+                return;
+            }
+
             if (gesture_double_tap_pending_ && dt_ms < 300 && near_prev) {
                 // 双击：切换播放/暂停。
                 // 注意第一次单击已经切换过 OSD 了，这里把它切回来，
                 // 否则双击会在控制栏上闪现一下（观感很毛）。
                 gesture_double_tap_pending_ = false;
-                if (!touch_locked_) {
-                    osd_visible_ = !osd_visible_;   // 抵消第一次单击的效果
-                    togglePlayPause();
-                    last_user_action_time_ = now;
-                }
+                osd_visible_ = !osd_visible_;   // 抵消第一次单击的效果
+                togglePlayPause();
+                last_user_action_time_ = now;
             } else {
                 // 单击
                 gesture_double_tap_pending_ = true;
                 last_touch_down_time_ = now;
                 last_touch_pos_ = status.position;
-                if (!touch_locked_) {
-                    osd_visible_ = !osd_visible_;
-                    last_user_action_time_ = now;
-                }
+                osd_visible_ = !osd_visible_;
+                last_user_action_time_ = now;
             }
         }));
 
@@ -1083,6 +1310,10 @@ void MPVPlayerView::setupGestures() {
                 }
                 case brls::GestureState::STAY: {
                     gesture_accumulatedY_ += status.delta.y;
+                    // 手指已经明显移动 → 不再是「长按」，而是调亮度/音量
+                    if (std::abs(gesture_accumulatedY_) > kHoldMoveSlopPx) {
+                        press_moved_ = true;
+                    }
                     // PanGesture 的 delta 定义为「上一帧位置 - 当前帧位置」。
                     // 因此向上滑（y 递减）时 delta.y 为【正】，
                     // 直接用累加值除以灵敏度即为正向增量，无需取反。
@@ -1178,6 +1409,9 @@ void MPVPlayerView::setupGestures() {
                 }
                 case brls::GestureState::STAY: {
                     gesture_accumulatedX_ += status.delta.x;
+                    if (std::abs(gesture_accumulatedX_) > kHoldMoveSlopPx) {
+                        press_moved_ = true;
+                    }
                     // PanGesture 的 delta = 「上一帧 - 当前帧」，与直觉相反：
                     // 向右滑时 delta.x 为负。取负号才是「向右 = 前进」。
                     const float moved = -gesture_accumulatedX_;
@@ -1433,6 +1667,49 @@ void MPVPlayerView::setPlaybackSpeed(double speed) {
     showHUD("speed", oss.str());
 }
 
+// ── 长按加速 ────────────────────────────────────────────────
+//
+// 交互约定：手指按住画面不动 → 临时提速到 2x，松手立刻恢复原速。
+// 与「R3 循环倍速」的区别是它是**临时**的，不覆盖用户设定的倍速。
+//
+// 三条必须同时满足才提速，缺一个都会变成误触：
+//   1. 手指确实还按着（touch_down_）
+//   2. 按下后没有明显移动（否则是在调音量/亮度或横滑快进）
+//   3. 没落在 OSD 按钮/进度条上（否则与按钮点击打架）
+void MPVPlayerView::updateHoldBoost() {
+    if (!touch_down_ || hold_boosting_) return;
+    if (touch_locked_ || press_moved_ || has_locked_action_) return;
+    if (seek_dragging_ || !mpv_ || total_duration_ <= 0) return;
+
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - press_down_time_).count();
+    if (elapsed < kHoldBoostDelayMs) return;
+
+    beginHoldBoost();
+}
+
+void MPVPlayerView::beginHoldBoost() {
+    // 已经是 2x 以上时再翻倍到 4x，否则「长按更快」在高速档下没有体感
+    const double target = playback_speed_ < kHoldBoostSpeed
+                              ? kHoldBoostSpeed
+                              : std::min(playback_speed_ * 2.0, 8.0);
+    speed_before_boost_ = playback_speed_;
+    hold_boosting_ = true;
+    setPlaybackSpeed(target);
+
+    // setPlaybackSpeed 已经弹了 HUD，这里覆盖成更能说明状态的文案
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(2) << target << "x 长按快进";
+    showHUD("speed", oss.str());
+    last_user_action_time_ = std::chrono::steady_clock::now();
+}
+
+void MPVPlayerView::endHoldBoost() {
+    if (!hold_boosting_) return;
+    hold_boosting_ = false;
+    setPlaybackSpeed(speed_before_boost_);
+}
+
 double MPVPlayerView::getPlaybackSpeed() const {
     return playback_speed_;
 }
@@ -1669,6 +1946,17 @@ void MPVPlayerView::checkMPVEvents() {
         } else if (event->event_id == MPV_EVENT_FILE_LOADED) {
             brls::Logger::info("MPVPlayerView: 文件已加载");
             file_loaded_ = true;
+
+            // OSD 顶部那行「1920×1080 · 硬件解码」的数据来源。
+            // 只在这里读一次：mpv 属性每一帧读一次的开销远大于绘制本身。
+            int64_t vw = 0, vh = 0;
+            video_w_ = mpv_get_property(mpv_, "width", MPV_FORMAT_INT64, &vw) >= 0
+                           ? (int)vw : 0;
+            video_h_ = mpv_get_property(mpv_, "height", MPV_FORMAT_INT64, &vh) >= 0
+                           ? (int)vh : 0;
+            char* hwdec = mpv_get_property_string(mpv_, "hwdec-current");
+            hwdec_active_ = hwdec && *hwdec && std::string(hwdec) != "no";
+            if (hwdec) mpv_free(hwdec);
             eof_fired_ = false;  // 新文件确认加载，允许后续再次触发连播
 
             // keep-open=yes 在播放结束后会把 pause 置为 yes（停在最后一帧）。
@@ -1762,6 +2050,11 @@ std::string MPVPlayerView::getCurrentTimeStr() const {
 
 void MPVPlayerView::draw(NVGcontext* vg, float x, float y, float width, float height, brls::Style style, brls::FrameContext* ctx) {
     checkMPVEvents();
+
+    // 长按加速依赖「真实时间流逝」，不能靠手势回调计时：
+    // 手指按住不动时 borealis 不会持续派发 STAY 事件，
+    // 只有每帧都检查一次才能可靠触发。
+    updateHoldBoost();
 
     // 1. mpv 视频画面渲染
     //

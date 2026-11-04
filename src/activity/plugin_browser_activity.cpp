@@ -7,9 +7,8 @@
 #include "activity/player_activity.hpp"
 #include "plugin/plugin_manager.hpp"
 #include <borealis/views/scrolling_frame.hpp>
-#include <borealis/views/header.hpp>
-#include <borealis/views/cells/cell_detail.hpp>
-#include <borealis/views/label.hpp>
+#include "view/media_cell.hpp"
+#include "ui/icons.hpp"
 #include <borealis/views/dialog.hpp>
 #include <atomic>
 #include <memory>
@@ -35,6 +34,8 @@ brls::View* PluginBrowserActivity::createContentView() {
 
     scroller_ = new brls::ScrollingFrame();
     scroller_->setGrow(1.0f);
+    scroller_->setMarginRight(28.0f);
+    styleScrollingFrame(scroller_);
     scroller_->setContentView(list_);
 
     frame_ = new brls::AppletFrame(scroller_);
@@ -119,11 +120,8 @@ void PluginBrowserActivity::render() {
     loading_ = true;
 
     // 加载提示
-    brls::Label* loading_label = new brls::Label();
-    loading_label->setText("正在加载…");
-    loading_label->setMarginTop(20);
-    loading_label->setMarginLeft(20);
-    list_->addView(loading_label);
+    list_->addView(new EmptyState(ui::Icon::Plugin, "正在从插件读取目录…",
+                                  "网络较慢时可能需要几秒"));
 
     // 网络请求放到后台，避免阻塞 UI
     auto alive = std::make_shared<std::atomic<bool>>(true);
@@ -144,20 +142,16 @@ void PluginBrowserActivity::render() {
             list_->clearViews();
 
             if (!ok) {
-                brls::Label* err = new brls::Label();
-                err->setText("无法读取该目录。\n\n"
-                             "如果这是首次使用，请先在【插件管理】里配置服务器地址。\n"
-                             "也可以按 Y 重试。");
-                err->setMarginTop(20);
-                err->setMarginLeft(20);
-                list_->addView(err);
+                list_->addView(new EmptyState(
+                    ui::Icon::Error, "无法读取该目录",
+                    "首次使用请先在「插件管理」里配置服务器地址\n也可以按 Y 重试"));
                 return;
             }
 
             // 返回上一级
             if (!path.empty() && path != "/") {
-                brls::DetailCell* up = new brls::DetailCell();
-                up->setText("⬆️ .. [返回上一级]");
+                auto* up = new MediaCell(ui::Icon::Back, "返回上一级", path);
+                up->setChevron(true);
                 up->registerClickAction([this](brls::View*) {
                     navigateUp();
                     return true;
@@ -174,21 +168,17 @@ void PluginBrowserActivity::render() {
             }
 
             if (dirs.empty() && playable.empty()) {
-                brls::Label* empty = new brls::Label();
-                empty->setText("该目录下没有可播放的媒体。");
-                empty->setMarginTop(20);
-                empty->setMarginLeft(20);
-                list_->addView(empty);
+                list_->addView(new EmptyState(ui::Icon::Folder, "这个目录是空的",
+                                              "没有找到可播放的媒体"));
                 return;
             }
 
             if (!dirs.empty()) {
-                brls::Header* h = new brls::Header();
-                h->setTitle("文件夹 (" + std::to_string(dirs.size()) + ")");
-                list_->addView(h);
+                list_->addView(new SectionHeader(
+                    "文件夹 · " + std::to_string(dirs.size())));
                 for (const auto& d : dirs) {
-                    brls::DetailCell* cell = new brls::DetailCell();
-                    cell->setText("[文件夹] " + d.name);
+                    auto* cell = new MediaCell(ui::Icon::Folder, d.name, "文件夹");
+                    cell->setChevron(true);
                     std::string target = d.path;
                     cell->registerClickAction([this, target](brls::View*) {
                         navigateTo(target);
@@ -199,13 +189,14 @@ void PluginBrowserActivity::render() {
             }
 
             if (!playable.empty()) {
-                brls::Header* h = new brls::Header();
-                h->setTitle("媒体 (" + std::to_string(playable.size()) + ")");
-                list_->addView(h);
+                list_->addView(new SectionHeader(
+                    "媒体 · " + std::to_string(playable.size())));
                 for (size_t i = 0; i < playable.size(); ++i) {
-                    brls::DetailCell* cell = new brls::DetailCell();
-                    cell->setText((playable[i].is_video() ? "[视频] " : "[音乐] ") +
-                                  playable[i].name);
+                    const bool is_video = playable[i].is_video();
+                    auto* cell = new MediaCell(
+                        is_video ? ui::Icon::Video : ui::Icon::Music,
+                        playable[i].name,
+                        is_video ? "视频" : "音频");
                     size_t idx = i;
                     std::vector<MediaItem> playlist = playable;
                     cell->registerClickAction([playlist, idx](brls::View*) {
@@ -216,6 +207,7 @@ void PluginBrowserActivity::render() {
                     list_->addView(cell);
                 }
             }
+            list_->setPaddingBottom(28.0f);
         });
     }).detach();
 }

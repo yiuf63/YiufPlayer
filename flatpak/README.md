@@ -42,7 +42,7 @@ flatpak run org.deckplayer.DeckPlayer
 
 ## 许可证合规（重要）
 
-本 manifest 的目的是产出**许可干净**的构建：
+本 manifest 产出**不含 GPL-only 组件**的构建：
 
 | 组件 | 关键选项 | 作用 |
 | :--- | :--- | :--- |
@@ -51,11 +51,15 @@ flatpak run org.deckplayer.DeckPlayer
 | FFmpeg | `--disable-nonfree` | 禁用不可再分发组件 |
 | mpv | `-Dgpl=false` | 不编译 GPL-only 源文件 |
 
-**任何一项被移除，产物都会受 GPL 约束，与闭源分发冲突。**
+本项目已改为 **GPL-3.0 分发**，所以即使上面某项被移除、产物受 GPL 约束，
+**也不再与许可证冲突**（此前闭源时才是致命问题）。
 
-DeckPlayer 自身的 CMake 里还有一道运行期检查：构建时会调用
-`avutil_license()`，若检测到 GPL 则中止构建（manifest 中已设
-`-DALLOW_GPL_LINKAGE=OFF`，即不允许放行）。
+保留这些选项的理由是让产物依赖更轻、分发义务更简单：
+LGPL 配置的 FFmpeg 只需提供 FFmpeg 自身的源码，不需要按 GPL §6 处理整个依赖链。
+
+DeckPlayer 构建时会调用 `avutil_license()` 打印实际许可证（见
+`cmake/license_probe.cpp`）。它现在**只记录、不中止构建**；
+manifest 里不再需要 `-DALLOW_GPL_LINKAGE=OFF`（该开关已随闭源约束一并移除）。
 
 ### 构建后复核
 

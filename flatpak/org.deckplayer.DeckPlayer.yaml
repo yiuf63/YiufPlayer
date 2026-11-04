@@ -104,8 +104,8 @@ modules:
       - -DCMAKE_BUILD_TYPE=Release
       # 指向本次构建的 LGPL 版 libmpv，避免误用系统 GPL 版
       - -DMPV_ROOT=/app
-      # 许可证检查应通过；若失败说明上面的 GPL 选项被破坏
-      - -DALLOW_GPL_LINKAGE=OFF
+      # 注：旧的 -DALLOW_GPL_LINKAGE 开关已随闭源约束一并移除；
+      # 构建期许可证探针现在只打印信息，不中止构建。
     sources:
       - type: dir
         path: ..

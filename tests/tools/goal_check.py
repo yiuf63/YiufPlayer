@@ -58,7 +58,13 @@ r = run("grep -c 'create_video_source' include/plugin/deck_plugin_abi.h")
 checks.append(("插件：视频源", int(r.stdout.strip() or 0) >= 1, "ABI 已定义"))
 r = run("grep -c 'create_scraper' include/plugin/deck_plugin_abi.h")
 checks.append(("插件：刮削源", int(r.stdout.strip() or 0) >= 1, "ABI 已定义"))
-r = run("grep -c 'Zip Slip\\|zip slip\\|../' src/plugin/plugin_installer.cpp")
+# 防护实现是「拒绝绝对路径 + 拒绝含 .. 的条目」，代码里没有字面量 "../"，
+# 因此这里必须按实际写法匹配，否则会得到假阴性（实测：判据曾写成 '../'，
+# 结果防护明明存在却显示 ✗）。
+# 注意：macOS 的 BSD grep 在 BRE 下不认 `\|` 交替（实测返回 0，造成假阴性），
+# 所以这里用 -E。
+r = run("grep -cE 'Zip Slip|路径穿越|entry\\.find\\(\"\\.\\.\"\\)' "
+        "src/plugin/plugin_installer.cpp")
 checks.append(("ZIP 安装防护", int(r.stdout.strip() or 0) >= 1, "已实现"))
 
 # 7. 不假定屏幕尺寸
@@ -73,11 +79,16 @@ r = run("test -f cmake/license_probe.cpp && echo ok")
 checks.append(("构建期许可证检查", "ok" in r.stdout, "license_probe.cpp"))
 r = run("test -f tests/tools/license_audit.py && echo ok")
 checks.append(("产物级许可证审计", "ok" in r.stdout, "license_audit.py"))
+# 10. 分发合规
+#     本项目已改为 GPL-3.0：不再有「不得引入 GPL 传染」的约束
+#     （旧的 GPL_LINKAGE_GUARD 已随闭源约束移除），
+#     取而代之的是按 §6 提供对应源码，因此这里核对源码可获取性。
+checks.append(("许可证全文随附", os.path.exists("LICENSE"), "LICENSE (GPL-3.0)"))
+r = run("grep -c 'GPL-3.0' THIRD-PARTY-NOTICES.md")
+checks.append(("第三方声明已标注 GPL-3.0", int(r.stdout.strip() or 0) >= 1,
+               f"{r.stdout.strip()} 处"))
 r = run("grep -c 'disable-gpl' scripts/build-lgpl-libmpv.sh")
-checks.append(("LGPL 构建脚本", int(r.stdout.strip() or 0) >= 1, "参数正确"))
-
-# 10. 闭源商业（不引入 GPL 传染）
-r = run("grep -c 'define GPL_LINKAGE_GUARD' src/main.cpp 2>/dev/null || echo 0")
+checks.append(("LGPL 构建脚本（可选）", int(r.stdout.strip() or 0) >= 1, "参数正确"))
 print("逐条核对目标：\n")
 for name, ok, detail in checks:
     print(f"  {'✓' if ok else '✗'} {name:22s} {detail}")

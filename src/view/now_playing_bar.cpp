@@ -2,13 +2,12 @@
 #include <string>
 #include "view/now_playing_bar.hpp"
 #include "utils/scanner.hpp"
-#include <borealis/views/label.hpp>
-#include <borealis/views/rectangle.hpp>
+#include "ui/design.hpp"
 
 namespace deck_player {
 
 // 音乐条高度（逻辑像素）。列表底部需要预留同样高度，避免最后一项被遮住。
-static constexpr float BAR_HEIGHT = 58.0f;
+static constexpr float BAR_HEIGHT = 64.0f;
 
 NowPlayingBar* NowPlayingBar::install(brls::AppletFrame* frame) {
     if (instance_) return instance_;
@@ -18,13 +17,12 @@ NowPlayingBar* NowPlayingBar::install(brls::AppletFrame* frame) {
 }
 
 NowPlayingBar::NowPlayingBar(brls::AppletFrame* frame) {
-    this->setAxis(brls::Axis::COLUMN);
+    this->setAxis(brls::Axis::ROW);
     this->setVisibility(brls::Visibility::GONE);
     this->setHeight(BAR_HEIGHT);
     this->setWidthPercentage(100.0f);
-    this->setBackgroundColor(nvgRGBA(16, 16, 16, 240));
-    this->setPadding(8.0f, 16.0f, 8.0f, 16.0f);
-    buildUi();
+    this->setPadding(0, 0, 0, 0);
+    this->setFocusable(false);
 
     // 必须用**绝对定位**贴在底部。
     //
@@ -34,8 +32,13 @@ NowPlayingBar::NowPlayingBar(brls::AppletFrame* frame) {
     //
     // ABSOLUTE 让它脱离 Yoga 的常规流，固定在父容器底部，
     // 且不占用 contentView 的空间（列表可以滚到它下面被它遮住）。
+    //
+    // 底边偏移 = 底部提示栏高度：直接贴 0 会把「A/B/X/Y 提示」整条盖住，
+    // 用户就看不到按键说明了。
+    const float footer =
+        brls::Application::getStyle()["brls/applet_frame/footer_height"];
     this->setPositionType(brls::PositionType::ABSOLUTE);
-    this->setPositionBottom(0.0f);
+    this->setPositionBottom(footer > 0.0f ? footer : 0.0f);
     this->setPositionLeft(0.0f);
     this->setWidthPercentage(100.0f);
 
@@ -44,58 +47,64 @@ NowPlayingBar::NowPlayingBar(brls::AppletFrame* frame) {
     }
 }
 
-void NowPlayingBar::buildUi() {
-    brls::Box* row = new brls::Box();
-    row->setAxis(brls::Axis::ROW);
-    row->setWidthPercentage(100.0f);
-
-    title_label_ = new brls::Label();
-    title_label_->setText("");
-    title_label_->setFontSize(17.0f);
-    title_label_->setGrow(1.0f);
-    row->addView(title_label_);
-
-    time_label_ = new brls::Label();
-    time_label_->setText("");
-    time_label_->setFontSize(14.0f);
-    time_label_->setTextColor(nvgRGBA(175, 175, 175, 255));
-    row->addView(time_label_);
-
-    this->addView(row);
-
-    brls::Box* bg = new brls::Box();
-    bg->setWidthPercentage(100.0f);
-    bg->setHeight(3.0f);
-    bg->setBackgroundColor(nvgRGBA(55, 55, 55, 255));
-    bg->setMarginTop(5.0f);
-
-    progress_fill_ = new brls::Rectangle();
-    progress_fill_->setWidthPercentage(0.0f);
-    progress_fill_->setHeight(3.0f);
-    progress_fill_->setColor(nvgRGBA(0, 168, 255, 255));
-    bg->addView(progress_fill_);
-
-    this->addView(bg);
-}
-
 void NowPlayingBar::refresh(const AudioPlayer::State& state) {
-    bool active = !state.path.empty();
+    const bool active = !state.path.empty();
     this->setVisibility(active ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     if (!active) return;
 
-    std::string text = (state.playing ? "[音乐] " : "[暂停] ") + state.title;
-    if (text != last_title_) {
-        title_label_->setText(text);
-        last_title_ = text;
-    }
+    title_ = state.title;
+    playing_ = state.playing;
+    status_ = state.playing ? "正在播放" : "已暂停";
+    icon_ = state.playing ? ui::Icon::Play : ui::Icon::Pause;
+    time_text_ = MediaScanner::formatDuration(state.position) + " / " +
+                 MediaScanner::formatDuration(state.duration);
 
-    time_label_->setText(MediaScanner::formatDuration(state.position) + " / " +
-                         MediaScanner::formatDuration(state.duration));
+    progress_ = state.duration > 0
+        ? (float)state.position / (float)state.duration : 0.0f;
+    progress_ = std::clamp(progress_, 0.0f, 1.0f);
+}
 
-    float pct = state.duration > 0
-        ? (float)state.position / (float)state.duration * 100.0f : 0.0f;
-    pct = std::clamp(pct, 0.0f, 100.0f);
-    progress_fill_->setWidthPercentage(pct);
+void NowPlayingBar::draw(NVGcontext* vg, float x, float y, float width, float height,
+                         brls::Style style, brls::FrameContext* ctx) {
+    (void)style;
+    (void)ctx;
+    const auto& pal = ui::palette();
+
+    // 不透明底 + 顶部细描边：与列表拉开一层，像「贴在窗口底部的播放器」
+    ui::fillRoundRect(vg, x, y, width, height, 0.0f,
+                      ui::rgba(pal.surface, 0.98f));
+    nvgBeginPath(vg);
+    nvgRect(vg, x, y, width, 1.0f);
+    nvgFillColor(vg, ui::rgba(pal.outline, 0.9f));
+    nvgFill(vg);
+
+    const float cy = y + height * 0.5f;
+    const float tile = 40.0f;
+    const float tile_x = x + 22.0f;
+
+    ui::fillRoundRect(vg, tile_x, cy - tile * 0.5f, tile, tile, 12.0f,
+                      ui::rgba(pal.accent, 0.16f));
+    ui::drawIcon(vg, icon_, tile_x + tile * 0.5f, cy, 18.0f,
+                 ui::rgba(pal.accent, 0.95f), 2.0f);
+
+    // 右侧时间先量出来，标题的可用宽度才能算准，避免长文件名压住时间
+    const float time_w = ui::textWidth(vg, ui::font::detail, time_text_);
+    ui::text(vg, x + width - 24.0f, cy, ui::font::detail, pal.textDim,
+             NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE, time_text_);
+
+    const float text_x = tile_x + tile + 14.0f;
+    const float text_max =
+        std::max(60.0f, (x + width - 24.0f - time_w - 24.0f) - text_x);
+    ui::textClipped(vg, text_x, cy - 10.0f, ui::font::body, pal.text,
+                    NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, title_, text_max);
+    ui::text(vg, text_x, cy + 11.0f, ui::font::caption, pal.textMute,
+             NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, status_);
+
+    // 进度线贴底：不抢内容，但一眼能看到播到哪
+    ui::fillRoundRect(vg, x, y + height - 2.0f, width, 2.0f, 0.0f,
+                      ui::rgba(pal.text, 0.10f));
+    ui::fillRoundRect(vg, x, y + height - 2.0f, width * progress_, 2.0f, 0.0f,
+                      ui::rgba(pal.accent, 0.95f));
 }
 
 } // namespace deck_player

@@ -4,9 +4,8 @@
 #include "activity/folder_picker_activity.hpp"
 #include "utils/scanner.hpp"
 #include <borealis/views/scrolling_frame.hpp>
-#include <borealis/views/header.hpp>
-#include <borealis/views/cells/cell_detail.hpp>
-#include <borealis/views/label.hpp>
+#include "view/media_cell.hpp"
+#include "ui/icons.hpp"
 #include <borealis/views/dialog.hpp>
 #include <filesystem>
 #include <algorithm>
@@ -26,6 +25,8 @@ brls::View* FolderPickerActivity::createContentView() {
 
     scroller_ = new brls::ScrollingFrame();
     scroller_->setGrow(1.0f);
+    scroller_->setMarginRight(28.0f);
+    styleScrollingFrame(scroller_);
     scroller_->setContentView(list_);
 
     frame_ = new brls::AppletFrame(scroller_);
@@ -81,15 +82,12 @@ void FolderPickerActivity::render() {
 
     if (current_path_.empty()) {
         // 顶层：列出可用的存储位置
-        brls::Header* header = new brls::Header();
-        header->setTitle("选择要浏览的存储位置");
-        list_->addView(header);
+        list_->addView(new SectionHeader("选择要浏览的存储位置"));
 
         auto sources = MediaScanner::getInstance().getAvailableSources();
         for (const auto& src : sources) {
-            brls::DetailCell* cell = new brls::DetailCell();
-            cell->setText(src.name);
-            cell->setDetailText(src.path);
+            auto* cell = new MediaCell(ui::Icon::Drive, src.name, src.path);
+            cell->setChevron(true);
             std::string target = src.path;
             cell->registerClickAction([this, target](brls::View*) {
                 navigateTo(target);
@@ -99,9 +97,9 @@ void FolderPickerActivity::render() {
         }
 
         // 手动输入路径
-        brls::DetailCell* manual = new brls::DetailCell();
-        manual->setText("✏️ 手动输入路径…");
-        manual->setDetailText("适用于网络挂载点或未自动探测的目录");
+        auto* manual = new MediaCell(ui::Icon::Plus, "手动输入路径",
+                                     "适用于网络挂载点或未自动探测的目录");
+        manual->setChevron(true);
         manual->registerClickAction([this](brls::View*) {
             brls::Application::getImeManager()->openForText(
                 [this](std::string text) {
@@ -121,8 +119,8 @@ void FolderPickerActivity::render() {
     }
 
     // 进入某目录
-    brls::DetailCell* up = new brls::DetailCell();
-    up->setText("⬆️ .. [返回上一级]");
+    auto* up = new MediaCell(ui::Icon::Back, "返回上一级", current_path_);
+    up->setChevron(true);
     up->registerClickAction([this](brls::View*) {
         navigateUp();
         return true;
@@ -130,9 +128,8 @@ void FolderPickerActivity::render() {
     list_->addView(up);
 
     // 「选择当前文件夹」
-    brls::DetailCell* pick_here = new brls::DetailCell();
-    pick_here->setText("✅ 添加当前文件夹");
-    pick_here->setDetailText("将整个 " + currentTitle() + " 文件夹加入媒体库");
+    auto* pick_here = new MediaCell(ui::Icon::Check, "添加当前文件夹",
+                                    "将整个 " + currentTitle() + " 加入媒体库");
     std::string here = current_path_;
     pick_here->registerClickAction([this, here](brls::View*) {
         if (on_pick_) on_pick_(here);
@@ -141,9 +138,7 @@ void FolderPickerActivity::render() {
     });
     list_->addView(pick_here);
 
-    brls::Header* sub = new brls::Header();
-    sub->setTitle("子文件夹");
-    list_->addView(sub);
+    list_->addView(new SectionHeader("子文件夹"));
 
     std::error_code ec;
     std::vector<std::string> dirs;
@@ -161,16 +156,13 @@ void FolderPickerActivity::render() {
     std::sort(dirs.begin(), dirs.end());
 
     if (dirs.empty()) {
-        brls::Label* empty = new brls::Label();
-        empty->setText("该文件夹下没有子文件夹，可直接点击【添加当前文件夹】");
-        empty->setMarginTop(20);
-        empty->setMarginLeft(20);
-        list_->addView(empty);
+        list_->addView(new EmptyState(ui::Icon::Folder, "这里没有子文件夹",
+                                      "可以直接用上面的「添加当前文件夹」"));
     } else {
         for (const auto& d : dirs) {
-            brls::DetailCell* cell = new brls::DetailCell();
-            std::string name = fs::path(d).filename().string();
-            cell->setText("[文件夹] " + name);
+            auto* cell = new MediaCell(ui::Icon::Folder,
+                                       fs::path(d).filename().string(), "文件夹");
+            cell->setChevron(true);
             cell->registerClickAction([this, d](brls::View*) {
                 navigateTo(d);
                 return true;
@@ -178,6 +170,7 @@ void FolderPickerActivity::render() {
             list_->addView(cell);
         }
     }
+    list_->setPaddingBottom(28.0f);
 }
 
 } // namespace deck_player

@@ -90,7 +90,15 @@ def grab(tmpdir, name, env_extra, timeout=60, args=None, start=150):
 
 # ── 素材准备 ──────────────────────────────────────────────────────────
 def make_media(tmpdir):
-    """用 ffmpeg 生成测试素材；失败时返回 None。"""
+    """用 ffmpeg 生成测试素材；失败时返回 None。
+
+    注意：所有 ffmpeg 调用都必须带 `stdin=subprocess.DEVNULL`。
+    ffmpeg 会读标准输入（用于接收 q/方向键等交互命令），
+    若父进程把 stdin 原样继承给它、而那个 stdin 又一直不关闭，
+    ffmpeg 会**永久阻塞**在读取上 —— 表现为「整个验证脚本卡住不输出」，
+    而且 CPU 占用是 0%，看上去像死锁而不是慢。
+    实测：从终端直接跑没问题（stdin 是 tty），从脚本/管道里跑就会卡。
+    """
     if not shutil.which("ffmpeg"):
         return None
 
@@ -104,6 +112,7 @@ def make_media(tmpdir):
             ["ffmpeg", "-y", "-f", "lavfi",
              "-i", "testsrc2=duration=20:size=640x480:rate=15",
              "-c:v", "libx264", "-pix_fmt", "yuv420p", str(color)],
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
 
@@ -121,6 +130,7 @@ def make_media(tmpdir):
              "-i", "color=c=black:s=640x360:d=20:r=10", "-i", str(srt),
              "-map", "0:v", "-map", "1:s", "-c:v", "libx264",
              "-c:s", "srt", str(subvid)],
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
 
@@ -131,6 +141,7 @@ def make_media(tmpdir):
             ["ffmpeg", "-y", "-f", "lavfi",
              "-i", "testsrc2=duration=8:size=640x480:rate=10",
              "-c:v", "libx264", "-pix_fmt", "yuv420p", str(v43)],
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
 
@@ -141,6 +152,7 @@ def make_media(tmpdir):
             ["ffmpeg", "-y", "-f", "lavfi",
              "-i", "sine=frequency=440:duration=30",
              "-c:a", "libmp3lame", "-b:a", "128k", str(audio)],
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
 
@@ -159,6 +171,7 @@ def make_media(tmpdir):
             subprocess.run(
                 ["ffmpeg", "-y", "-f", "lavfi", "-i", spec,
                  "-c:v", "libx264", "-pix_fmt", "yuv420p", str(p)],
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
 
@@ -170,14 +183,20 @@ def make_media(tmpdir):
     if not extsub.exists():
         subprocess.run(
             ["ffmpeg", "-y", "-f", "lavfi",
-             "-i", "color=c=black:s=640x480:d=15:r=10",
+             "-i", "color=c=black:s=640x480:d=30:r=10",
              "-c:v", "libx264", "-pix_fmt", "yuv420p", str(extsub)],
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
     srt = d / "extsub.srt"
     if not srt.exists():
+        # 字幕显示窗口要足够宽：抓帧按 **UI 帧数**计，而 UI 帧率随机器浮动
+        # （本机约 1200fps，60fps 的普通机器慢 20 倍）。
+        # 旧素材窗口是 1~14 秒 + 15 秒视频，60fps 机器上抓到的是 EOF 黑帧、
+        # 本机又抓在字幕出现之前 —— 两端都会拿 0 像素，导致该项**随机失败**。
+        # 改成 30 秒视频 + 0.5~28 秒窗口，任何帧率下三次抓帧至少一次落在窗口内。
         srt.write_text(
-            "1\n00:00:01,000 --> 00:00:14,000\n"
+            "1\n00:00:00,500 --> 00:00:28,000\n"
             "EXTERNAL SUBTITLE TEST LINE\n", encoding="utf-8")
 
     # 多音轨：两条不同频率的音轨，验证切换
@@ -191,6 +210,7 @@ def make_media(tmpdir):
              "-map", "0:v", "-map", "1:a", "-map", "2:a",
              "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
              str(multi)],
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
 
@@ -276,6 +296,7 @@ def check_osd(tmpdir, media):
         subprocess.run(
             ["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=black:s=1280x720:d=10",
              "-c:v", "libx264", "-pix_fmt", "yuv420p", str(black)],
+            stdin=subprocess.DEVNULL,
             capture_output=True, timeout=120,
         )
     except Exception:                                 # noqa: BLE001
@@ -284,7 +305,11 @@ def check_osd(tmpdir, media):
         record("OSD", "生成黑底视频", False, "ffmpeg 不可用")
         return
 
-    rc, log, files = grab(tmpdir, "osd", {"DECKPLAYER_FRAMEGRAB_START": 200},
+    # 用墙钟锚点而不是帧号：帧号与真实时间没有稳定映射（mpv 初始化前
+    # 主循环空转能跑到数百 fps），同一个 START=200 在不同机器/不同时长
+    # 的视频上可能落在 1 秒，也可能落在 12 秒 —— 后者 OSD 已自动隐藏，
+    # 整组检查就会全 0 假红。2 秒落在 OSD 必然可见的窗口里。
+    rc, log, files = grab(tmpdir, "osd", {"DECKPLAYER_FRAMEGRAB_AT_MS": "2000"},
                           args=[str(black)])
     if not files:
         record("OSD", "抓帧成功", False, f"rc={rc}")
@@ -293,7 +318,6 @@ def check_osd(tmpdir, media):
     h, w = a.shape[:2]
 
     white = (a.min(axis=2) > 150)
-    blue = (a[:, :, 2] > 150) & (a[:, :, 0] < 120)
     orange = ((a[:, :, 0] > 200) & (a[:, :, 1] > 120)
               & (a[:, :, 1] < 200) & (a[:, :, 2] < 120))
 
@@ -306,21 +330,41 @@ def check_osd(tmpdir, media):
     body_white = int(white[int(h * 0.70): int(h * 0.90)].sum())
     record("OSD", "按钮文字可见", body_white > 200, f"{body_white} 个白像素")
 
-    # 进度条（蓝色）必须独立可见，不能被按钮盖住
-    bar_blue = int(blue[int(h * 0.92):].sum())
-    record("OSD", "进度条可见", bar_blue > 200, f"{bar_blue} 个蓝色像素")
+    # 进度条：当前设计是「accent 橙色填充 + 25% 白轨道」，不再是蓝色。
+    # 橙色段长度取决于已播比例（开播时机不同就会变），所以判据不看颜色，
+    # 而看「有没有一条横向铺满大半屏宽的亮线」——整个 OSD 里只有进度条
+    # 能做到这一点（按钮是圆的，文字是断的）。轨道亮度 52/255，
+    # 阈值取 25 即可把轨道一起算进来。
+    lit_rows = (a.max(axis=2) > 25)
+    band_top = int(h * 0.85)
+    counts = lit_rows[band_top:].sum(axis=1)
+    bar_y, longest, run_lo, run_hi = -1, 0, 0, 0
+    if counts.size and counts.max() > 0:
+        bar_y = band_top + int(counts.argmax())
+        run, start = 0, 0
+        for x, on in enumerate(lit_rows[bar_y]):
+            if on:
+                if run == 0:
+                    start = x
+                run += 1
+                if run > longest:
+                    longest, run_lo, run_hi = run, start, x + 1
+            else:
+                run = 0
+    record("OSD", "进度条可见", longest > w * 0.60,
+           f"最长横向连续亮段 {longest}px（屏宽 {w}）")
 
-    # 主控按钮（橙色描边）
-    btn_orange = int(orange[int(h * 0.80): int(h * 0.95)].sum())
+    # 主控按钮（橙色实心，圆形），在进度条上方
+    btn_orange = int(orange[int(h * 0.70): int(h * 0.90)].sum())
     record("OSD", "主控按钮可见", btn_orange > 200, f"{btn_orange} 个橙色像素")
 
-    # 三层不重叠：进度条所在行不应同时出现大量按钮橙色
-    bar_rows = blue[int(h * 0.92):].sum(axis=1)
-    if bar_rows.max() > 0:
-        bar_y = int(h * 0.92) + int(bar_rows.argmax())
-        overlap = int(orange[bar_y].sum())
-        record("OSD", "进度条不被按钮覆盖", overlap < 50,
-               f"进度条所在行 y={bar_y} 有 {overlap} 个橙色像素")
+    # 三层不重叠：进度条所在行除了这条长段，不应再有橙色
+    # （按钮压上来会在长段之外多出若干短段）
+    if bar_y >= 0:
+        row_orange = int(orange[bar_y].sum())
+        in_run = int(orange[bar_y][run_lo:run_hi].sum())
+        record("OSD", "进度条不被按钮覆盖", row_orange - in_run < 50,
+               f"进度条所在行 y={bar_y}，长段之外另有 {row_orange - in_run} 个橙色像素")
 
 
 def check_tabs(tmpdir, media):
@@ -411,7 +455,10 @@ def check_subtitle(tmpdir, media):
     # 因此按【图像坐标】读底部即可（对应文件的下半部分）。
     rc, log, files = grab(
         tmpdir, "sub",
-        {"DECKPLAYER_FRAMEGRAB_START": 300},
+        {"DECKPLAYER_FRAMEGRAB_START": 300,
+         # 必须关掉 OSD：判定带 0.60–0.92 同时覆盖了两行按钮，
+         # OSD 的白字会盖过字幕白字，导致「关字幕」对照组数值不变。
+         "DECKPLAYER_OSD_OFF": "1"},
         args=[str(media["subtitled"])], start=300)
 
     has_auto = "自动选中字幕轨" in log
@@ -439,6 +486,7 @@ def check_subtitle(tmpdir, media):
     rc2, log2, files2 = grab(
         tmpdir, "suboff",
         {"DECKPLAYER_FRAMEGRAB_START": 300,
+         "DECKPLAYER_OSD_OFF": "1",
          "DECKPLAYER_SUBTITLE_OFF": "1"},
         args=[str(media["subtitled"])], start=300)
     if files2:
@@ -481,6 +529,12 @@ def check_gestures(tmpdir, media):
         ("右半屏上滑调音量", "【右半屏上滑】"),
         ("左半屏下滑调亮度", "【左半屏下滑】"),
         ("水平滑动快进", "【水平滑动】"),
+        # 长按加速是 2026-11-03 新增的：成熟播放器都有，
+        # 而本项目此前完全没有（跳过片头时只能反复点快进）。
+        ("长按加速（按住提速，松手恢复）", "【长按加速】按住后"),
+        ("长按后恢复原速", "【长按恢复】"),
+        # 按下态：防住「代码看着有、实际一次都没执行」的静默失效
+        ("按钮有按下反馈", "【按钮按下态】"),
     ]
     for label, marker in checks:
         line = next((l for l in log.splitlines() if marker in l), "")
@@ -617,6 +671,16 @@ def check_perf(tmpdir, media):
     section("性能")
     import subprocess as sp
     import time
+
+    # 沙箱 / 受限容器里 ps 可能被直接拒绝（PermissionError），
+    # 那不是程序的缺陷。先探测一次，不可用就跳过并说明原因，
+    # 免得把「环境不允许」记成「检查失败」。
+    try:
+        sp.run(["ps", "-o", "pid=", "-p", str(os.getpid())],
+               capture_output=True, timeout=5)
+    except Exception as exc:                          # noqa: BLE001
+        print(f"\033[33m跳过性能检查：当前环境无法执行 ps（{exc}）\033[0m")
+        return
 
     def sample(args, seconds=5, settle=4):
         p = sp.Popen(["stdbuf", "-o0", str(BIN)] + args,
@@ -793,6 +857,7 @@ def check_dialog(tmpdir, media):
                 ["ffmpeg", "-y", "-f", "lavfi",
                  "-i", f"color=c=blue:s=320x240:d=20:r=10",
                  "-c:v", "libx264", "-pix_fmt", "yuv420p", str(f)],
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     first = series / "Episode 01.mp4"
 
@@ -876,6 +941,22 @@ def check_dialog(tmpdir, media):
         center = g[int(h*0.42):int(h*0.58), int(w*0.40):int(w*0.60)].mean()
         return edge, center
 
+    # ── 非播放器页面的对话框（文件浏览器）──
+    # 判据：① 边缘被压暗（半透明遮罩）；② 中心区域的内容**真的换了**。
+    #
+    # 为什么不用「中心变亮」：borealis 的对话框面板是**深色**的，
+    # 覆盖后中心亮度可能几乎不变甚至略降（实测 29.3 → 27.9），
+    # 但面板替换了原来的列表行，所以逐像素差异的均值必然显著。
+    # 旧的「c_on > c_off」判据因此把正常渲染的对话框判成失败 ——
+    # 而插件管理页恰好变亮（29.6 → 41.2），同一套代码一处过一处挂，
+    # 看起来就像偶发 bug，其实是判据方向错误（抓帧人工复核过画面）。
+    def center_diff(a, b):
+        h, w = a.shape[:2]
+        reg = (int(h*0.42), int(h*0.58), int(w*0.40), int(w*0.60))
+        ar = a[reg[0]:reg[1], reg[2]:reg[3]].astype(float)
+        br = b[reg[0]:reg[1], reg[2]:reg[3]].astype(float)
+        return float(np.abs(br - ar).mean())
+
     rc, _, f_off = grab(tmpdir, "dlg_browser_off",
                         {"DECKPLAYER_START_TAB": "0",
                          "DECKPLAYER_FRAMEGRAB_START": "400"}, start=400)
@@ -884,11 +965,13 @@ def check_dialog(tmpdir, media):
                         "DECKPLAYER_OPEN_DIALOG": "folder_options",
                         "DECKPLAYER_FRAMEGRAB_START": "400"}, start=400)
     if f_off and f_on:
-        a_off, c_off = edge_center(load_ppm(f_off[0]))
-        a_on, c_on = edge_center(load_ppm(f_on[0]))
+        img_off, img_on = load_ppm(f_off[0]), load_ppm(f_on[0])
+        a_off, _ = edge_center(img_off)
+        a_on, _ = edge_center(img_on)
+        cd = center_diff(img_off, img_on)
         record("对话框", "文件浏览器对话框显示（背景被压暗）",
-               a_on < a_off * 0.6 and c_on > c_off,
-               f"边缘 {a_off:.1f}→{a_on:.1f}，中心 {c_off:.1f}→{c_on:.1f}")
+               a_on < a_off * 0.6 and cd > 6.0,
+               f"边缘 {a_off:.1f}→{a_on:.1f}，中心差异 {cd:.1f}")
     else:
         record("对话框", "文件浏览器对话框显示（背景被压暗）", False, "抓帧失败")
 
@@ -901,11 +984,13 @@ def check_dialog(tmpdir, media):
                         "DECKPLAYER_OPEN_DIALOG": "1",
                         "DECKPLAYER_FRAMEGRAB_START": "400"}, start=400)
     if p_off and p_on:
-        a_off, c_off = edge_center(load_ppm(p_off[0]))
-        a_on, c_on = edge_center(load_ppm(p_on[0]))
+        img_off, img_on = load_ppm(p_off[0]), load_ppm(p_on[0])
+        a_off, _ = edge_center(img_off)
+        a_on, _ = edge_center(img_on)
+        cd = center_diff(img_off, img_on)
         record("对话框", "插件管理页对话框显示（背景被压暗）",
-               a_on < a_off * 0.6 and c_on > c_off,
-               f"边缘 {a_off:.1f}→{a_on:.1f}，中心 {c_off:.1f}→{c_on:.1f}")
+               a_on < a_off * 0.6 and cd > 6.0,
+               f"边缘 {a_off:.1f}→{a_on:.1f}，中心差异 {cd:.1f}")
     else:
         record("对话框", "插件管理页对话框显示（背景被压暗）", False, "抓帧失败")
 
@@ -936,6 +1021,7 @@ def check_track_memory(tmpdir, media):
              "-c:v", "libx264", "-c:s", "srt",
              "-metadata:s:s:0", "language=eng",
              "-metadata:s:s:1", "language=chi", str(clip)],
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # 清掉该文件的历史，保证从干净状态开始
@@ -1036,10 +1122,16 @@ def check_input_and_font(tmpdir, media):
     # 用户明确问过「支持字幕文件和音轨选取吗」。这两项此前没有自动检查。
     ext = media.get("external_subs") if media else None
     if ext:
+        # 判「字幕是否渲染」必须排除 OSD 的干扰：
+        # OSD 自动隐藏要 8 秒，而抓帧时间随 UI 帧率浮动 ——
+        # 若恰好在 OSD 显示期间抓帧，半透明渐变会压在字幕上，
+        # 把纯白文字压成 200 上下，>245 的判据必挂（实测抓帧确认）。
+        # 因此两组都关掉 OSD（DECKPLAYER_OSD_OFF），只比「字幕开/关」。
         rc, log, _ = grab(tmpdir, "extsub",
                           {"DECKPLAYER_FRAMEGRAB_START": "200",
                            "DECKPLAYER_FRAMEGRAB_COUNT": "3",
-                           "DECKPLAYER_FRAMEGRAB_INTERVAL": "400"},
+                           "DECKPLAYER_FRAMEGRAB_INTERVAL": "400",
+                           "DECKPLAYER_OSD_OFF": "1"},
                           args=[str(ext)], start=200)
         # 同目录 .srt 应被 sub-auto 自动加载并选中
         loaded = "自动选中字幕轨" in log
@@ -1052,6 +1144,7 @@ def check_input_and_font(tmpdir, media):
                          {"DECKPLAYER_FRAMEGRAB_START": "200",
                           "DECKPLAYER_FRAMEGRAB_COUNT": "3",
                           "DECKPLAYER_FRAMEGRAB_INTERVAL": "400",
+                          "DECKPLAYER_OSD_OFF": "1",
                           "DECKPLAYER_SUBTITLE_OFF": "1"},
                          args=[str(ext)], start=200)
         off_frames = sorted(Path(tmpdir).glob("extsuboff*.ppm"))
@@ -1182,6 +1275,17 @@ def main():
     if not BIN.exists():
         print(f"\033[31m找不到 {BIN}\033[0m")
         print("请先构建：cmake -B build && cmake --build build")
+        return 2
+
+    # 依赖预检：基于抓帧的检查都用 numpy 读 PPM 像素。
+    # 不预检的话，失败信息是「异常: No module named 'numpy'」——
+    # 藏在某一组检查的结果里，看上去像代码坏了，实际只是缺依赖。
+    try:
+        import numpy  # noqa: F401
+    except ImportError:
+        print("\033[31m缺少依赖 numpy\033[0m")
+        print("安装后重跑：python3 -m pip install numpy")
+        print("（只想跑不依赖像素的检查组时可用 --list 查看分组）")
         return 2
 
     tmpdir = tempfile.mkdtemp(prefix="deckplayer_verify_")

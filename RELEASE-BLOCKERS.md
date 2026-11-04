@@ -21,12 +21,14 @@
 
 ## 当前状态速览
 
+本项目以 **GPL-3.0** 分发（2026-10-29 决定，此前是闭源商业）。
+因此「必须自建 LGPL 版 libmpv」**已不再是阻断项**——链接常见的 GPL 版 FFmpeg 完全合法。
+
 | 类别 | 状态 | 阻断发布 |
 | :--- | :--- | :---: |
 | 功能实现 | 全部完成并有实测证据 | — |
-| 自动化测试 | 136 项单测 + 57 项端到端 + 48 项文档 + 30 项发布检查 + 16 项目标覆盖 | — |
-| **LGPL 构建** | **未执行**（需要网络） | **是** |
-| **产物许可证** | **依赖 GPL，不可分发** | **是** |
+| 自动化测试 | 8 套单测 + 端到端 + 47 项文档一致性 + 30 项发布检查 + 16 项目标覆盖（各项数以脚本输出为准） | — |
+| **源码可获取（GPL-3.0 §6）** | **未公开**（当前是私有仓库） | **是** |
 | **Flatpak 构建** | **未执行**（需 flatpak-builder + 网络） | **是** |
 | **Steam Deck 实机** | **未验证** | **是** |
 | 人工验收 | 未进行 | 是 |
@@ -39,20 +41,39 @@ python3 tests/tools/release_check.py        # 发布模式，退出码 0 才能�
 
 ---
 
-## 阻断项 1：构建 LGPL 版 libmpv 【必须】
+## 阻断项 1：源码必须可获取（GPL-3.0 §6）【必须】
 
 ### 为什么阻断
 
-本项目**闭源分发**。libmpv 是 LGPL-2.1+，其依赖的 FFmpeg 若以
-`--enable-gpl` 构建，整个产物就受 GPL 约束 —— 闭源发布即违规。
+GPL-3.0 允许**收费分发**，但要求同时提供完整对应源码。
+当前仓库 `https://github.com/yiuf63/deck-player` 是**私有**的，
+外部使用者拿不到源码 —— 只要对外分发二进制就违规。
 
-当前 macOS 开发机链接的是 Homebrew 的 GPL 版 FFmpeg：
+> 注意：本项目此前是闭源商业授权，这条要求当时不存在；
+> 改成 GPL-3.0 之后它才成为发布的前提条件。
 
+### 怎么做
+
+```bash
+gh repo edit yiuf63/deck-player --visibility public   # 或 --accept-visibility-change-consequences
 ```
-$ python3 tests/tools/license_audit.py
-libavutil.61.dylib -> GPL version 3 or later
-结论：存在 GPL 依赖，不可分发
+
+如果暂时不想公开仓库，就**不要对外分发二进制**，只在内部自测。
+
+### 验收标准
+
+```bash
+gh repo view yiuf63/deck-player --json visibility    # 必须是 public
+# 且产物依赖能在公开的构建里复现：
+python3 tests/tools/license_audit.py                 # 列出产物实际链接的库
 ```
+
+---
+
+## 可选：构建 LGPL 版 libmpv（不是阻断项）
+
+GPL-3.0 之下链接 GPL 版 FFmpeg 合法，所以这一步**只在想让产物更小
+（不带 `--enable-gpl` 组件）时才需要**，不做也能发布。
 
 ### 怎么做
 
@@ -68,11 +89,10 @@ cmake -B build-release \
 cmake --build build-release -j
 ```
 
-### 验收标准
+### 验收标准（只在做这一步时才需要）
 
 ```bash
-# 这三条必须全部满足
-python3 tests/tools/license_audit.py --strict     # 退出码 0
+python3 tests/tools/license_audit.py --strict     # 退出码 0（产物不含 GPL 组件）
 python3 tests/tools/release_check.py              # 退出码 0
 ./build-release/deck-player                       # 能正常播放
 ```
@@ -116,9 +136,11 @@ flatpak-builder --user --install --force-clean build-flatpak \
 # 1. 无占位符残留
 grep -c "REPLACE_WITH_REAL" flatpak/*.yaml     # 必须为 0
 
-# 2. Flatpak 里的 FFmpeg 必须是 LGPL
+# 2. 记录 Flatpak 内 FFmpeg 的实际许可证
 #    不要用 strings 抓 "GPL version" —— FFmpeg 源码里也有这个字面量，
 #    会误判。正确做法是调用官方 API avutil_license()。
+#    GPL-3.0 之下 GPL 或 LGPL 都可接受，但必须**如实写进 THIRD-PARTY-NOTICES.md**，
+#    因为分发时要按 §6 提供对应源码。
 flatpak run --command=sh org.deckplayer.DeckPlayer -c \
   'python3 -c "
 import ctypes, glob
@@ -127,7 +149,7 @@ lib = ctypes.CDLL(so)
 lib.avutil_license.restype = ctypes.c_char_p
 print(lib.avutil_license().decode())
 "'
-# 输出必须不含 GPL
+# 把输出结果登记到 THIRD-PARTY-NOTICES.md
 
 # 3. 能启动并播放
 flatpak run org.deckplayer.DeckPlayer /path/to/video.mp4
@@ -189,7 +211,7 @@ python3 tests/tools/verify_ui.py
 | 画面流畅度 | 播放 30fps / 60fps 视频，肉眼有无卡顿、撕裂 |
 | 音画同步 | 说话场景是否对得上 |
 | 字幕可读性 | 字号、位置、与画面亮度对比是否合适 |
-| 手势手感 | 滑动灵敏度（当前 300px 满量程）是否合适 |
+| 手势手感 | 滑动灵敏度（当前按屏幕高度比例）是否顺手 |
 | OSD 停留时长 | 操作后控制栏显示多久消失，是否合适 |
 | 扫描大目录 | 添加 `~/Videos` 之类大目录，观察扫描耗时与进度提示 |
 | 刮削真实效果 | 用真实影视文件测文件名解析是否准确 |
@@ -226,15 +248,15 @@ python3 tests/tools/verify_ui.py
 ## 发布前最后一遍检查
 
 ```bash
-# 全部五套
-./tests/run_tests.sh                    # 8 套件 / 136 断言
-python3 tests/tools/verify_ui.py        # 57 项
-python3 tests/tools/check_docs.py       # 48 项
-python3 tests/tools/release_check.py    # 30 项（发布模式）
-python3 tests/tools/goal_check.py       # 16 项（需求覆盖）
+# 全部五套（各项数以脚本自身输出为准；下面只写组名）
+./tests/run_tests.sh                    # 8 套单元测试
+python3 tests/tools/verify_ui.py        # 端到端（渲染/播放/字幕/手势/插件…）
+python3 tests/tools/check_docs.py       # 文档与实现一致性
+python3 tests/tools/release_check.py    # 发布前清单（发布模式）
+python3 tests/tools/goal_check.py       # 需求覆盖
 
 # 许可证
-python3 tests/tools/license_audit.py --strict
+python3 tests/tools/license_audit.py     # 列出产物实际依赖（GPL 下不再阻断）
 ```
 
 **全部退出码为 0 才能发布。** 任何一项失败都不要跳过——

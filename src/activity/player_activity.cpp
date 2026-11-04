@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
@@ -7,6 +8,8 @@
 #include <vector>
 #include "activity/player_activity.hpp"
 #include "utils/playback_history.hpp"
+#include "view/media_cell.hpp"
+#include "ui/icons.hpp"
 #include <borealis/views/dialog.hpp>
 #include <borealis/views/header.hpp>
 #include <borealis/views/cells/cell_detail.hpp>
@@ -101,26 +104,23 @@ void PlayerActivity::showPlaylistDialog() {
 
     brls::Box* container = new brls::Box();
     container->setAxis(brls::Axis::COLUMN);
-    container->setWidth(560);
-
-    brls::Header* header = new brls::Header();
-    header->setTitle("播放列表 (" + std::to_string(playlist_.size()) + " 个文件)");
-    container->addView(header);
+    container->setWidth(680);
 
     brls::ScrollingFrame* scroller = new brls::ScrollingFrame();
-    scroller->setHeight(380);
+    scroller->setHeight(420);
+    styleScrollingFrame(scroller);
 
     brls::Box* list = new brls::Box();
     list->setAxis(brls::Axis::COLUMN);
+    list->setPaddingBottom(20.0f);
 
     brls::Dialog* dialog = new brls::Dialog(container);
+    list->addView(new SectionHeader("播放列表 · " +
+                                    std::to_string(playlist_.size()) + " 项"));
 
     for (size_t i = 0; i < playlist_.size(); ++i) {
         const auto& item = playlist_[i];
-        brls::DetailCell* cell = new brls::DetailCell();
-
         const bool is_current = (i == current_index_);
-        cell->setText((is_current ? "> " : "   ") + std::to_string(i + 1) + ". " + item.name);
 
         // 详情：当前正在播放 / 是否有断点
         std::string detail;
@@ -139,18 +139,21 @@ void PlayerActivity::showPlaylistDialog() {
                 detail += detail.empty() ? buf : std::string(" · ") + buf;
             }
         }
-        cell->setDetailText(detail);
+
+        auto* cell = new MediaCell(ui::Icon::Video,
+                                   std::to_string(i + 1) + ". " + item.name,
+                                   detail);
+        cell->setHeight(64.0f);
+        cell->setBadge(is_current ? "播放中" : "");
 
         // 当前项：选中即关闭，不做重新加载（避免打断正在播放的内容）
         if (is_current) {
-            cell->registerClickAction([dialog](brls::View* view) {
-                (void)view;
+            cell->registerClickAction([dialog](brls::View*) {
                 dialog->close();
                 return true;
             });
         } else {
-            cell->registerClickAction([this, dialog, i](brls::View* view) {
-                (void)view;
+            cell->registerClickAction([this, dialog, i](brls::View*) {
                 dialog->close();
                 current_index_ = i;
                 playCurrentIndex();
@@ -161,6 +164,12 @@ void PlayerActivity::showPlaylistDialog() {
     }
 
     scroller->setContentView(list);
+
+    // 高度贴合内容：固定 420 时 3 集的列表会拖出一个大黑框
+    float content_h = 0.0f;
+    for (auto* child : list->getChildren()) content_h += child->getHeight();
+    scroller->setHeight(std::min(420.0f, content_h + 24.0f));
+
     container->addView(scroller);
 
     dialog->addButton("关闭", []() {});

@@ -1,19 +1,17 @@
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <functional>
 #include <memory>
 #include <string>
 #include <thread>
 #include "activity/plugin_manager_activity.hpp"
-#include <thread>
-#include <atomic>
-#include <memory>
+#include "view/media_cell.hpp"
+#include "ui/icons.hpp"
 #include "utils/app_paths.hpp"
 #include "plugin/plugin_installer.hpp"
 #include "plugin/plugin_config_store.hpp"
 #include <borealis/views/scrolling_frame.hpp>
-#include <borealis/views/header.hpp>
-#include <borealis/views/cells/cell_detail.hpp>
 #include <borealis/views/label.hpp>
 #include <borealis/views/dialog.hpp>
 #include <filesystem>
@@ -22,12 +20,34 @@ namespace fs = std::filesystem;
 
 namespace deck_player {
 
+namespace {
+
+// 统一的行构造：图标 + 标题 + 副标题 + 可选动作。
+// 页面里所有条目都走这里，避免每处再写一遍 setText / setDetailText 的旧模式。
+MediaCell* makeRow(ui::Icon icon, std::string title, std::string subtitle,
+                   std::function<void()> on_click = nullptr, bool chevron = false) {
+    auto* cell = new MediaCell(icon, std::move(title), std::move(subtitle));
+    if (chevron) cell->setChevron(true);
+    if (on_click) {
+        cell->registerClickAction([cb = std::move(on_click)](brls::View*) {
+            cb();
+            return true;
+        });
+    }
+    return cell;
+}
+
+} // namespace
+
 brls::View* PluginManagerActivity::createContentView() {
     list_ = new brls::Box();
     list_->setAxis(brls::Axis::COLUMN);
+    list_->setPaddingBottom(28.0f);
 
     scroller_ = new brls::ScrollingFrame();
     scroller_->setGrow(1.0f);
+    scroller_->setMarginRight(28.0f);
+    styleScrollingFrame(scroller_);
     scroller_->setContentView(list_);
 
     frame_ = new brls::AppletFrame(scroller_);
@@ -77,24 +97,15 @@ void PluginManagerActivity::render() {
     if (!list_) return;
     list_->clearViews();
 
-    // ---- 说明 ----
-    brls::Header* h1 = new brls::Header();
-    h1->setTitle("插件目录");
-    list_->addView(h1);
+    // ---- 插件目录 ----
+    list_->addView(new SectionHeader("插件目录"));
 
-    brls::DetailCell* dir_cell = new brls::DetailCell();
-    dir_cell->setText("[目录] " + AppPaths::pluginsDir());
-    dir_cell->setDetailText("将 .so / .dylib 插件放入此目录后重新扫描");
-    dir_cell->registerClickAction([this](brls::View*) {
-        revealPluginFolder();
-        return true;
-    });
-    list_->addView(dir_cell);
+    list_->addView(makeRow(ui::Icon::Folder, AppPaths::pluginsDir(),
+                           "放入 .so / .dylib 插件后重新扫描",
+                           [this]() { revealPluginFolder(); }, true));
 
-    brls::DetailCell* install_cell = new brls::DetailCell();
-    install_cell->setText("📦 从 ZIP 包安装插件");
-    install_cell->setDetailText("输入 .zip 路径，自动解压并校验");
-    install_cell->registerClickAction([this](brls::View*) {
+    list_->addView(makeRow(ui::Icon::Plus, "从 ZIP 包安装插件",
+                           "输入 .zip 路径，自动解压并校验", [this]() {
         brls::Application::getImeManager()->openForText(
             [this](std::string path) {
                 if (path.empty()) return;
@@ -113,44 +124,29 @@ void PluginManagerActivity::render() {
                 }
             },
             "输入插件包 (.zip) 路径", "例如 ~/Downloads/myplugin.zip", 512);
-        return true;
-    });
-    list_->addView(install_cell);
+    }));
 
-    brls::DetailCell* rescan_cell = new brls::DetailCell();
-    rescan_cell->setText("重新扫描插件");
-    rescan_cell->setDetailText("热重载：卸载全部插件后重新加载");
-    rescan_cell->registerClickAction([this](brls::View*) {
+    list_->addView(makeRow(ui::Icon::Search, "重新扫描插件",
+                           "热重载：卸载全部插件后重新加载", [this]() {
         PluginManager::getInstance().unloadAll();
         size_t n = PluginManager::getInstance().loadAll();
         brls::Application::notify("已加载 " + std::to_string(n) + " 个插件");
         render();
-        return true;
-    });
-    list_->addView(rescan_cell);
+    }));
 
     // ---- 已加载插件 ----
     auto plugins = PluginManager::getInstance().getPlugins();
-    brls::Header* h2 = new brls::Header();
-    h2->setTitle("已加载插件 (" + std::to_string(plugins.size()) + ")");
-    list_->addView(h2);
+    list_->addView(new SectionHeader("已加载插件 · " +
+                                     std::to_string(plugins.size())));
 
     if (plugins.empty()) {
-        brls::Label* empty = new brls::Label();
-        empty->setText("尚未加载任何插件。\n\n插件可提供两类能力：\n"
-                       "  · 视频源：接入 Emby / Jellyfin / 自建站等\n"
-                       "  · 刮削源：为本地媒体补齐封面与简介\n\n"
-                       "接口为纯 C ABI，插件可独立于主程序编译。");
-        empty->setMarginTop(20);
-        empty->setMarginLeft(20);
-        list_->addView(empty);
-        return;
+        list_->addView(new EmptyState(
+            ui::Icon::Plugin, "尚未加载任何插件",
+            "插件提供两类能力：视频源（Emby / Jellyfin / 自建站）\n"
+            "与刮削源（为本地媒体补齐封面与简介）"));
     }
 
     for (const auto& p : plugins) {
-        brls::DetailCell* cell = new brls::DetailCell();
-        cell->setText("🧩 " + p.name + "  v" + p.version);
-
         std::string caps;
         if (p.has_video_source) caps += "视频源";
         if (p.has_scraper) {
@@ -158,41 +154,35 @@ void PluginManagerActivity::render() {
             caps += "刮削器";
         }
         if (caps.empty()) caps = "无可用扩展点";
-        cell->setDetailText(caps + (p.author.empty() ? "" : "  ·  " + p.author));
+        caps += "  ·  v" + p.version;
+        if (!p.author.empty()) caps += "  ·  " + p.author;
 
         std::string name = p.name;
         std::string path = p.path;
-        bool is_source = p.has_video_source;
+        const bool is_source = p.has_video_source;
         std::string stem = fs::path(p.path).stem().string();
-        cell->registerClickAction([this, name, path, is_source, stem](brls::View*) {
+
+        list_->addView(makeRow(ui::Icon::Plugin, name, caps,
+                               [this, name, path, is_source, stem]() {
             brls::Box* box = new brls::Box();
             box->setAxis(brls::Axis::COLUMN);
-            box->setWidth(520);
+            box->setWidth(560);
+            box->setPaddingBottom(12.0f);
 
-            brls::Header* h = new brls::Header();
-            h->setTitle(name);
-            box->addView(h);
-
-            brls::Label* info = new brls::Label();
-            info->setText(fs::path(path).filename().string());
-            info->setMarginLeft(20);
-            info->setMarginBottom(12);
-            box->addView(info);
-
+            // 先建对话框再建行：行的回调需要拿到 d 才能正确关闭本面板
             brls::Dialog* d = new brls::Dialog(box);
+            box->addView(new SectionHeader(name));
 
             if (is_source) {
                 // 服务器地址
-                brls::DetailCell* url_cell = new brls::DetailCell();
                 std::string cur_url = PluginConfigStore::getInstance().get(stem, "url");
-                url_cell->setText("🌐 服务器地址");
-                url_cell->setDetailText(cur_url.empty() ? "未设置（点击填写）" : cur_url);
-                std::string s_stem = stem;
-                url_cell->registerClickAction([this, d, s_stem](brls::View*) {
+                box->addView(makeRow(ui::Icon::Drive, "服务器地址",
+                                     cur_url.empty() ? "未设置（点击填写）" : cur_url,
+                                     [this, stem, d]() {
                     d->close();
                     brls::Application::getImeManager()->openForText(
-                        [this, s_stem](std::string v) {
-                            PluginConfigStore::getInstance().set(s_stem, "url", v);
+                        [this, stem](std::string v) {
+                            PluginConfigStore::getInstance().set(stem, "url", v);
                             PluginConfigStore::getInstance().save();
                             PluginManager::getInstance().unloadAll();
                             PluginManager::getInstance().loadAll();
@@ -201,20 +191,17 @@ void PluginManagerActivity::render() {
                             render();
                         },
                         "服务器地址", "例如 http://192.168.1.10:5244/dav", 512);
-                    return true;
-                });
-                box->addView(url_cell);
+                }, true));
 
                 // 用户名
-                brls::DetailCell* user_cell = new brls::DetailCell();
                 std::string cur_user = PluginConfigStore::getInstance().get(stem, "user");
-                user_cell->setText("👤 用户名");
-                user_cell->setDetailText(cur_user.empty() ? "未设置（可选）" : cur_user);
-                user_cell->registerClickAction([this, d, s_stem](brls::View*) {
+                box->addView(makeRow(ui::Icon::Info, "用户名",
+                                     cur_user.empty() ? "未设置（可选）" : cur_user,
+                                     [this, stem, d]() {
                     d->close();
                     brls::Application::getImeManager()->openForText(
-                        [this, s_stem](std::string v) {
-                            PluginConfigStore::getInstance().set(s_stem, "user", v);
+                        [this, stem](std::string v) {
+                            PluginConfigStore::getInstance().set(stem, "user", v);
                             PluginConfigStore::getInstance().save();
                             PluginManager::getInstance().unloadAll();
                             PluginManager::getInstance().loadAll();
@@ -222,21 +209,17 @@ void PluginManagerActivity::render() {
                             render();
                         },
                         "用户名", "留空表示无鉴权", 128);
-                    return true;
-                });
-                box->addView(user_cell);
+                }, true));
 
                 // 密码
-                brls::DetailCell* pass_cell = new brls::DetailCell();
                 std::string cur_pass = PluginConfigStore::getInstance().get(stem, "pass");
-                pass_cell->setText("🔑 密码");
-                pass_cell->setDetailText(cur_pass.empty() ? "未设置（可选）"
-                                                          : std::string("已设置"));
-                pass_cell->registerClickAction([this, d, s_stem](brls::View*) {
+                box->addView(makeRow(ui::Icon::Lock, "密码",
+                                     cur_pass.empty() ? "未设置（可选）" : "已设置",
+                                     [this, stem, d]() {
                     d->close();
                     brls::Application::getImeManager()->openForText(
-                        [this, s_stem](std::string v) {
-                            PluginConfigStore::getInstance().set(s_stem, "pass", v);
+                        [this, stem](std::string v) {
+                            PluginConfigStore::getInstance().set(stem, "pass", v);
                             PluginConfigStore::getInstance().save();
                             PluginManager::getInstance().unloadAll();
                             PluginManager::getInstance().loadAll();
@@ -244,76 +227,72 @@ void PluginManagerActivity::render() {
                             render();
                         },
                         "密码", "留空表示无鉴权", 128);
-                    return true;
-                });
-                box->addView(pass_cell);
+                }, true));
 
                 // 清除全部配置
-                brls::DetailCell* clear_cell = new brls::DetailCell();
-                clear_cell->setText("清除该插件的配置");
-                clear_cell->registerClickAction([this, d, s_stem](brls::View*) {
+                box->addView(makeRow(ui::Icon::Close, "清除该插件的配置",
+                                     "服务器地址 / 用户名 / 密码全部删除", [this, stem, d]() {
                     d->close();
-                    PluginConfigStore::getInstance().clear(s_stem);
+                    PluginConfigStore::getInstance().clear(stem);
                     PluginConfigStore::getInstance().save();
                     PluginManager::getInstance().unloadAll();
                     PluginManager::getInstance().loadAll();
                     brls::Application::notify("配置已清除");
                     render();
-                    return true;
-                });
-                box->addView(clear_cell);
+                }));
+            } else {
+                brls::Label* info = new brls::Label();
+                info->setText("该插件没有可配置项。");
+                info->setFontSize(14.0f);
+                info->setMarginLeft(24.0f);
+                info->setMarginTop(8.0f);
+                info->setMarginBottom(8.0f);
+                box->addView(info);
             }
 
             d->addButton("关闭", []() {});
             d->open();
-            return true;
-        });
-        list_->addView(cell);
+        }, true));
     }
 
     // ---- 已安装目录（含解压后未被加载的） ----
     auto dirs = PluginInstaller::listInstalledDirs();
     if (!dirs.empty()) {
-        brls::Header* hd = new brls::Header();
-        hd->setTitle("已安装插件包");
-        list_->addView(hd);
+        list_->addView(new SectionHeader("已安装插件包"));
         for (const auto& dir : dirs) {
-            brls::DetailCell* cell = new brls::DetailCell();
-            cell->setText("📦 " + fs::path(dir).filename().string());
-            cell->setDetailText("点击可卸载");
             std::string d = dir;
-            cell->registerClickAction([this, d](brls::View*) {
-                brls::Dialog* dlg = new brls::Dialog(
-                    "卸载插件包：" + fs::path(d).filename().string() + " ?");
-                dlg->addButton("取消", []() {});
-                dlg->addButton("卸载", [this, d]() {
-                    if (PluginInstaller::uninstall(d)) {
-                        PluginManager::getInstance().unloadAll();
-                        PluginManager::getInstance().loadAll();
-                        brls::Application::notify("已卸载");
-                        render();
-                    } else {
-                        brls::Application::notify("卸载失败");
-                    }
-                });
-                dlg->open();
-                return true;
-            });
-            list_->addView(cell);
+            list_->addView(makeRow(
+                ui::Icon::Plugin, fs::path(dir).filename().string(), "点击可卸载",
+                [this, d]() {
+                    brls::Dialog* dlg = new brls::Dialog(
+                        "卸载插件包：" + fs::path(d).filename().string() + " ?");
+                    dlg->addButton("取消", []() {});
+                    dlg->addButton("卸载", [this, d]() {
+                        if (PluginInstaller::uninstall(d)) {
+                            PluginManager::getInstance().unloadAll();
+                            PluginManager::getInstance().loadAll();
+                            brls::Application::notify("已卸载");
+                            render();
+                        } else {
+                            brls::Application::notify("卸载失败");
+                        }
+                    });
+                    dlg->open();
+                }, true));
         }
     }
 
-    // ---- 被拒绝的插件提示 ----
-    brls::Header* h3 = new brls::Header();
-    h3->setTitle("兼容性说明");
-    list_->addView(h3);
+    // ---- 兼容性说明 ----
+    list_->addView(new SectionHeader("兼容性说明"));
 
     brls::Label* note = new brls::Label();
     note->setText("插件必须导出统一入口符号 deck_player_plugin_entry_v1，\n"
                   "且声明的 ABI 版本需与主程序一致，否则会被安全跳过。\n"
                   "这是为了防止跨编译器/标准库版本导致的内存布局错位崩溃。");
-    note->setMarginLeft(20);
-    note->setMarginTop(10);
+    note->setFontSize(14.0f);
+    note->setTextColor(nvgRGBA(140, 146, 156, 255));
+    note->setMarginLeft(24.0f);
+    note->setMarginTop(4.0f);
     list_->addView(note);
 }
 

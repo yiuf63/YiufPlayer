@@ -388,13 +388,15 @@ class Application
         if (p == nullptr) return false;
         auto& v = deadViews;
         const bool hit = std::find(v.begin(), v.end(), p) != v.end();
-        // 诊断：统计命中的指针，判断是否存在地址复用误判
+        // 诊断：统计命中的指针，判断是否存在地址复用误判。
+        // 用 debug 而非 warning —— 这条结论已固化在上面的注释里，
+        // 保留能力即可，不应在发布构建里刷屏让用户误以为出错。
         static int hit_count = 0;
         if (hit && hit_count < 30)
         {
             ++hit_count;
-            brls::Logger::warning("isViewDead 命中: {} (表内 {} 项)",
-                                  p, v.size());
+            brls::Logger::debug("isViewDead 命中: {} (表内 {} 项)",
+                                p, v.size());
         }
         return hit;
     }

@@ -31,6 +31,33 @@ cmake --build build -j$(sysctl -n hw.ncpu 2>/dev/null || nproc)
 可选：若希望产物更小（不带 `--enable-gpl` 组件），可先跑
 `scripts/build-lgpl-libmpv.sh`，再用 `-DMPV_ROOT=<前缀>` 指定。
 
+### 其它平台
+
+```bash
+# Linux / SteamOS：容器构建（推荐，产物落 build-linux/）
+docker build --platform linux/amd64 -f Dockerfile.linux -t deckplayer-linux .
+docker run --rm -v "$PWD:/src" -w /src deckplayer-linux
+# 或 Linux 主机上直接：./scripts/build-linux.sh（见 docs/LINUX-BUILD.md）
+# Linux 必须 -DUSE_SYSTEM_GLFW=OFF：borealis 用的是定制 GLFW 分支，
+# 系统 libglfw3 没有 GLFW_SOFT_FULLSCREEN / GLFW_TOUCH / GLFW_IME 符号。
+
+# Android（仅 arm64-v8a）
+cd android && ./gradlew assembleDebug
+```
+
+**Android / Linux 构建的隐藏前提**（CI 上踩过，本地因为有文件看不出来）：
+
+1. `libromfs-generator` 是把资源编译进二进制的**宿主机工具**，不入库。
+   必须先现编，再准备资源，顺序不能反：
+   ```bash
+   bash scripts/build-libromfs-generator.sh && bash scripts/prepare-romfs.sh
+   ```
+   macOS 编出来的是 Mach-O，Linux runner 上跑不了，所以每个平台都要现编。
+2. `external/borealis/library/lib/extern/SDL` 是未随附的 submodule，
+   Android 构建必须有它（见 `android/README.md`）。
+3. 仓库 `.gitignore` 曾把 `*.so` 排除，导致 Android 的 11 个预编译库没入库；
+   改动 `.gitignore` 后要确认 `git ls-files android/app/src/main/jniLibs` 非空。
+
 ### 测试
 
 ```bash
@@ -110,8 +137,12 @@ src/
 │   └── scanner                格式白名单、目录遍历、外挂字幕匹配
 ├── view/
 │   ├── mpv_player             核心：libmpv GL 渲染 + 全键位 + 手势 + OSD
+│   ├── media_cell             列表卡片行 / 分组标题 / 空态（所有列表共用）
 │   ├── now_playing_bar        后台音乐状态条
 │   └── track_menu             音轨/字幕选择对话框
+├── ui/                         视觉设计系统（**所有界面唯一 token 来源**）
+│   ├── design                 色板 / 间距 / 圆角 / 字号 / 绘制基元
+│   └── icons                  32 个矢量图标（nanoVG 路径，不依赖字体）
 ├── playback/
 │   ├── audio_player           全局音乐引擎（生命周期独立于界面）
 │   └── background_playback    macOS App Nap 抑制（.mm，Objective-C++）
@@ -243,6 +274,73 @@ for (auto& f : alive_flags_) if (f) f->store(false);
 
 需要一致性视图时，在单次调用返回的容器内完成全部判断。
 
+### 9. 切标签页后焦点停在侧边栏（「按 A 没反应」）
+
+`TabFrame::selectTab()` 只把焦点给 `SidebarItem`，而 `SidebarItem` 的 A 键动作是
+「向右导航」（`sidebar.cpp:72`），所以用户按 A 只是把焦点移进列表，**要再按一次**才
+真的选中条目。表现就是「点了没用」。
+
+已在 borealis 里改成 `selectTab` 末尾继续 `giveFocus(activeTab->getDefaultFocus())`。
+改动焦点相关代码时不要退回旧行为。
+
+### 10. 验证「功能正常」不能只看退出码和像素
+
+崩溃（退出码 / ASan）和渲染（抓帧）都过了，仍然可能出现「按 A 打不开视频」——
+65 项自动检查全绿而功能全废，本项目真的发生过。
+
+功能层必须有**注入操作 + 断言状态变化**的检查：`DECKPLAYER_SMOKE=1` 走
+`Application::injectButton()` 全链路，断言 activity 栈深度变化，失败以退出码 1 结束。
+新增这类检查后，要故意改坏源码确认它会红。
+
+### 11. 测试钩子环境变量很多，别硬背
+
+界面与播放的可验证性全靠 `DECKPLAYER_*` 钩子（抓帧、注入按键、指定起始标签、
+打开对话框/播放列表/插件页、强制音轨字幕轨、模拟手势……）。完整清单以代码为准：
+
+```bash
+grep -rho 'getenv("DECKPLAYER_[A-Z_]*")' src | sort -u
+```
+
+### 12. TapGestureRecognizer 不派发 START（按下是 UNSURE）
+
+`external/borealis/library/include/borealis/core/touch/tap_gesture.hpp` 明写
+`START: unsupported`：未开启 `forceRecognision` 时，手指按下报成 **UNSURE**。
+任何「按下态」「长按」逻辑只判 `GestureState::START` 就是死代码——
+本项目曾因此「按钮按下态」看似已修、实际从未生效（2026-11-03 修复，见
+`setupGestures()` 的注释）。
+
+### 13. ffmpeg 不能继承父进程 stdin
+
+脚本里调 ffmpeg 必须 `stdin=subprocess.DEVNULL`：ffmpeg 会读 stdin 收交互命令，
+stdin 不关闭就**永久阻塞**（CPU 0%，像死锁）。`verify_ui.py` 曾因此整组挂死。
+
+### 14. 像素检查里能关的图层就关掉
+
+OSD 自动隐藏要 8 秒，半透明渐变会压在字幕上，把纯白像素压到 200 上下，
+导致「>245」判据在 OSD 显示期间必挂。判「字幕是否渲染」时两组抓帧都加
+`DECKPLAYER_OSD_OFF=1`，只比「字幕开/关」。UI 时序依赖是像素检查最大的不稳定源。
+
+### 15. `NVGcolor` 是 0..1 的浮点，不是 0..255
+
+直接写 `NVGcolor{0x18, 0x1B, 0x20, 1.0f}` 得到的是 `{24.0, 27.0, 32.0, 1.0}`，
+三个通道都远超 1.0，**整片颜色变白**。`ui::design` 里有 `c8(r,g,b,a)` 负责除以 255，
+自己写常量一律走它。
+
+### 16. 文字必须用 `nvgFontFaceId(getDefaultFont())`
+
+写 `nvgFontFace(vg, "sans")` 会拿到 `-1`，fontstash 找不到字体后 `nvgText` 直接 return，
+**整块文字一个都不画**（历史 bug，见 docs/UI-DESIGN.md 附录 B1）。
+现在统一走 `ui::text()` / `ui::textClipped()` / `ui::ellipsize()`，不要直接调 `nvgText`。
+
+### 17. 列表行用 `MediaCell`，不要再用 Label 拼
+
+`MediaCell` 里 `setHideHighlight(true)` 自己画选中态（底色 + 描边 + 左侧竖条）。
+borealis 默认焦点框是整块白，在深色卡片上非常突兀；`deck_theme.cpp` 的
+`highlight/padding` 也调成了 0，否则高亮框会比卡片小一圈。
+
+新增界面时颜色/间距/圆角/字号**一律引用 `ui::palette()` / `ui::space` /
+`ui::radius` / `ui::font`**，写字面量会让「一屏五种字号」的拼装观感回来。
+
 ---
 
 ## 代码风格
@@ -294,7 +392,7 @@ for (auto& f : alive_flags_) if (f) f->store(false);
 - **全页面对话框渲染**（第 36 轮，验证三类页面 + 修两处测试工具缺陷，见下）
 - **字幕轨记忆**（第 38 轮，通读文档发现并修复「选过不记住」的缺陷，见下）
 - **README 核对**（第 40 轮，发现倍速范围写错 + 把 README 纳入检查，见下）
-- 8 个测试套件（136 项断言），含 Zip Slip 攻击防护的真实恶意包测试
+- 8 个测试套件（断言数以 `./tests/run_tests.sh -v` 输出为准），含 Zip Slip 攻击防护的真实恶意包测试
 - ASan + UBSan：全部测试与主程序运行无报告
 - mpv 属性订阅、字幕切换、外部字幕加载（用真实 mkv 验证）
 - 音频解码、播放列表连播、App Nap 抑制 API
@@ -1778,11 +1876,18 @@ if (!subs.empty()) selectTrack("sub", subs.front().id);
 | `examples/webdav_plugin/` | **可工作的插件参考实现**（含真实 WebDAV 验证） |
 | `examples/demo_plugin/` | 最小演示插件（假数据，仅验证 ABI 链路） |
 | `tests/tools/analyze_framegrab.py` | 帧缓冲分析：验证单帧 UI 是否渲染 |
-| `tests/tools/verify_ui.py` | **端到端验证：57 项自动检查**（渲染/播放/字幕/手势/插件/屏幕/性能/ASan/稳定性/对话框/字幕轨记忆） |
-| `tests/tools/check_docs.py` | **文档一致性检查：48 项**（按键/数值/文件/环境变量/脚本路径/README） |
-| `tests/tools/release_check.py` | **发布前清单：30 项**（安装/desktop/图标/许可证/产物审计） |
+| `tests/tools/verify_ui.py` | **端到端验证**（渲染/播放/字幕/手势/插件/屏幕/性能/ASan/稳定性/对话框/字幕轨记忆）；`--list` 看分组，`--only <组>` 只跑一组 |
+| `tests/tools/check_docs.py` | **文档与实现一致性**（按键/数值/文件/环境变量/脚本路径/README） |
+| `tests/tools/release_check.py` | **发布前清单**（安装/desktop/图标/许可证/产物审计）；`--dev` 开发模式只警告 |
+
+> 上面三套的**项数不写死**：脚本每次运行都会打印自己的总数，
+> 文档里写数字必然过期（实测已漂移过三次）。
 | `tests/tools/license_audit.py` | **产物级许可证审计**（顺依赖链查 GPL） |
-| `tests/tools/goal_check.py` | **目标符合性检查：16 项**（需求 → 代码位置） |
+| `tests/tools/goal_check.py` | **目标符合性检查**（需求 → 代码位置） |
+| `docs/AUDIT.md` | 子代理审计流程 + 每轮发现记录（**历史复盘在这里**） |
+| `docs/UI-DESIGN.md` | UI/交互设计规格（尺寸、色板、OSD 布局） |
+| `docs/LINUX-BUILD.md` | Linux / SteamOS 构建与运行时依赖 |
+| `android/README.md` | Android 构建前置（NDK 版本、SDL2 源码） |
 
 ---
 

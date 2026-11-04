@@ -2,6 +2,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <chrono>
 #include "utils/frame_grabber.hpp"
 #include <borealis/core/logger.hpp>
 #include <cstdlib>
@@ -29,6 +30,16 @@ bool g_exit_after = true;   // 抓完是否退出
 int  g_grabbed    = 0;      // 已抓帧数
 int  g_start      = kGrabAfterFrames;  // 首次抓帧的起始帧
 
+// 时间模式（可选）。帧号模式受启动期影响不可预测：
+// mpv 初始化完成前主循环空转到数百 fps，「第 N 帧」与
+// 「播放后第 N 秒」没有稳定映射——这正是 verify_ui 里
+// 「时序相关像素检查偶发失败」的根源之一。
+// 按墙钟毫秒锚定才是确定性的。
+int  g_start_ms    = -1;    // DECKPLAYER_FRAMEGRAB_AT_MS，<0 = 帧号模式
+int  g_interval_ms = -1;    // DECKPLAYER_FRAMEGRAB_INTERVAL_MS
+std::chrono::steady_clock::time_point g_t0{};
+bool g_t0_set = false;
+
 int envInt(const char* name, int fallback) {
     const char* v = std::getenv(name);
     if (!v || !*v) return fallback;
@@ -48,6 +59,8 @@ bool isEnabled() {
         g_exit_after = envInt("DECKPLAYER_FRAMEGRAB_EXIT", 1) != 0;
         g_start = envInt("DECKPLAYER_FRAMEGRAB_START", kGrabAfterFrames);
         if (g_start < 0) g_start = 0;
+        g_start_ms    = envInt("DECKPLAYER_FRAMEGRAB_AT_MS", -1);
+        g_interval_ms = envInt("DECKPLAYER_FRAMEGRAB_INTERVAL_MS", -1);
         return true;
     }();
     return enabled;
@@ -95,7 +108,15 @@ bool FrameGrabber::tick(int frame_index) {
 
     // 单帧模式：等 UI 稳定后抓一帧
     // 多帧模式：按 interval 连续抓，用于验证视频画面是否在变化
-    {
+    if (g_start_ms >= 0) {
+        // 时间模式：锚定主循环第一帧的墙钟时刻
+        if (!g_t0_set) { g_t0 = std::chrono::steady_clock::now(); g_t0_set = true; }
+        const long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - g_t0).count();
+        const int interval = g_interval_ms > 0 ? g_interval_ms : 30;
+        const long target = (long)g_start_ms + (long)g_grabbed * interval;
+        if (elapsed < target) return false;
+    } else {
         const int target = g_start + g_grabbed * g_interval;
         if (frame_index < target) return false;
     }

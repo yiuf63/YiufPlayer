@@ -152,9 +152,22 @@ private:
     TouchAction locked_action_ = TouchAction::Back;   // 仅当 has_locked_action_ 为真时有效
     bool has_locked_action_ = false;
 
+    // 长按加速：按住屏幕不动约 0.45 秒 → 临时提速，松手恢复。
+    // 这是所有成熟播放器都有、而本项目此前缺失的基础功能
+    // （跳过片头/快进广告时非常依赖它）。
+    bool touch_down_ = false;                 // 手指是否还按着
+    bool press_moved_ = false;                // 按下后是否已滑动（滑动就不算长按）
+    bool hold_boosting_ = false;              // 当前是否处于长按加速中
+    double speed_before_boost_ = 1.0;         // 用于松手后恢复
+    std::chrono::steady_clock::time_point press_down_time_{};
+    void updateHoldBoost();   // 每帧调用：到达阈值才真正提速
+    void beginHoldBoost();
+    void endHoldBoost();
+
     // 上一次点击的落点，用于双击判定（要求两次位置接近）。
     brls::Point last_touch_pos_{};
-    void drawTouchControls(NVGcontext* vg, float x, float y, float width, float height);
+    void drawTouchControls(NVGcontext* vg, float x, float y, float width, float height,
+                           float dy = 0.0f);
     bool hitTouchControls(float px, float py);
     void performTouchAction(TouchAction action);
 
@@ -201,10 +214,18 @@ private:
     int selected_sid_ = 1;  // 用户选择的字幕轨（<=0 表示关闭）
     bool subtitle_chosen_ = false;  // 本次加载是否已自动选过字幕
     int selected_aid_ = 1;  // 用户选择的音轨
+    int sub_pos_applied_ = 80;  // 已下发的字幕垂直位置（OSD 联动：显示时抬到控制栏上方）
+
+    // 用于 OSD 顶部信息行（分辨率 / 硬解状态）。
+    // 在 FILE_LOADED 时向 mpv 查询一次即可，不必每帧读属性。
+    int video_w_ = 0;
+    int video_h_ = 0;
+    bool hwdec_active_ = false;
+    // 触控锁定后轻点屏幕时，短暂显示「已锁定 · 双击解锁」提示。
+    std::chrono::steady_clock::time_point lock_hint_until_{};
 
     // 触控手势状态
-    GestureMode current_gesture_ = GestureMode::None;
-    brls::Point touch_start_point_;
+    GestureMode current_gesture_ = GestureMode::None;    brls::Point touch_start_point_;
     int64_t seek_start_pos_ = 0;
     int volume_start_ = 100;
     float brightness_start_ = 1.0f;
@@ -219,6 +240,12 @@ private:
 
     // OSD 悬浮显示状态
     bool osd_visible_ = true;
+    // OSD 渐显动画（帧率无关：目标翻转时记录起点 alpha 与时刻，每帧按耗时插值）。
+    // 背景：此前 osd_shown 是纯 bool，控制栏瞬间出现/消失——「直挺挺显示」。
+    float osd_alpha_ = 1.0f;        // 当前透明度 0..1
+    float osd_alpha_from_ = 1.0f;   // 本次动画的起点 alpha
+    bool  osd_anim_target_ = true;  // 动画目标（true=显示）
+    std::chrono::steady_clock::time_point osd_anim_t0_{};  // 动画开始时刻
     std::chrono::steady_clock::time_point last_user_action_time_;
     std::string hud_icon_;
     std::string hud_text_;

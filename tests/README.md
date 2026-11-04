@@ -16,7 +16,7 @@
 或通过 ctest（需先配置）：
 
 ```bash
-cmake -B build -DBUILD_TESTING=ON -DALLOW_GPL_LINKAGE=ON
+cmake -B build -DBUILD_TESTING=ON
 cd build && ctest --output-on-failure
 ```
 
@@ -24,7 +24,7 @@ cd build && ctest --output-on-failure
 
 没有引入 gtest / catch2 / doctest。原因：
 
-1. **减少依赖**：本项目要闭源分发，第三方库越少，许可证合规负担越轻。
+1. **减少依赖**：第三方库越少，构建与许可证合规负担越轻。
 2. **需求简单**：现有测试都是「断言 + 打印」形态，`tests/test_framework.hpp`
    约 120 行即可覆盖。
 3. **构建轻量**：测试是独立可执行文件，编译快、无链接负担。
@@ -43,8 +43,13 @@ tests/
     ├── test_media_library.cpp       # 媒体库扫描与过滤
     ├── test_plugin_installer.cpp    # ZIP 安装与安全隐患
     ├── test_plugin_config.cpp       # 插件配置持久化
+    ├── test_playback_history.cpp    # 播放进度持久化与并发
+    ├── test_scraper.cpp             # 插件加载与刮削（含本地 WebDAV 服务）
     └── test_concurrency.cpp         # 并发安全
 ```
+
+共 **8 个套件**（7 个在 `run_tests.sh` 的 `TESTS` 数组里登记，
+`plugin_installer` 因需要 fmt/borealis 头文件而单独编译）。
 
 ## 编写新测试
 
@@ -78,6 +83,8 @@ int main() {
 | `plugin_installer` | **Zip Slip 攻击**、越界卸载、无库包拒绝、同名不覆盖 |
 | `concurrency` | 后台扫描与 UI 读取并行、元数据多线程写入、保存/读取交错 |
 | `plugin_config` | 插件配置读写、特殊字符转义、多插件隔离、JSON 导出、持久化往返 |
+| `playback_history` | 进度记录的写入/读取、边界（过短不记、看完清除）、并发安全 |
+| `scraper` | 插件加载与 ABI 校验、刮削请求串联；若本地能起 WebDAV 测试服务则额外验证目录浏览 |
 
 后两项涉及安全边界，测试会构造**真实的恶意 ZIP 包**来验证防护生效，
 而不是仅检查代码里有没有某个 `if`。
@@ -103,7 +110,7 @@ c++ -std=c++17 -I include -I tests -fsanitize=address,undefined -g \
 /tmp/t
 ```
 
-结果：5 个测试套件、主程序 12 秒运行，**均无 ASan/UBSan 报告**。
+结果：8 个测试套件、主程序 12 秒运行，**均无 ASan/UBSan 报告**。
 
 `concurrency` 套件在 ASan 下完成约 1.7 万次并发读取，未出现崩溃或快照不一致。
 
