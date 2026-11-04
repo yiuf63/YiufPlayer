@@ -476,7 +476,9 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
   --outline-strong: #C6C2BA;
   --text: #1B1A18;
   --text-dim: #5F5C56;
-  --text-mute: #8C8880;
+  /* #8C8880 在 #F2F1ED 上只有 ~3.5:1，12.5px 的「10 项」「路径」这类
+     辅助文字会糊掉。压到 #6E6A63 后约 5.4:1，仍在层级上低于 text-dim。 */
+  --text-mute: #6E6A63;
   --accent: #C4650F;
   --accent-rgb: 196,101,15;
   --accent-ink: #FFFFFF;
@@ -553,12 +555,13 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
 /* 主体 */
 .app-body { flex: 1; display: flex; min-height: 0; }
 
-/* 侧栏 216 = 1280 的 16.9%。
-   原来是 300（23.4%），4 个条目右侧留一大片空，内容区被白挤掉 84px。
-   216 是「4 个汉字条目 + 32 左内边距 + 24 右内边距」的下限再加 20 的呼吸：
-   76 + 32 + 24 = 132 是硬需求，216 留了 84 的余量给将来的二级项。 */
+/* 侧栏 160 = 1280 的 12.5%，图标 + 文字。
+   只靠纯文字时，180 左右的宽度里汉字只占 51px，右边一大片空 —— 这正是
+   「看着还是太宽」的根源：不是数字大，是内容撑不起来。
+   加上 18px 图标之后同样的宽度有了密度，还能再收到 160。
+   低于 148 时「媒体库」会贴到内边距上，不能再窄。 */
 .sidebar {
-  flex: none; width: 216px;
+  flex: none; width: 160px;
   padding: 18px 0;
   background: var(--sidebar);
   display: flex; flex-direction: column; gap: 6px;
@@ -566,11 +569,14 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
 }
 .nav-item {
   position: relative; height: 56px; flex: none;
-  display: flex; align-items: center;
-  padding: 0 24px 0 32px;
-  font-size: 19px; color: var(--text-dim);
+  display: flex; align-items: center; gap: 11px;
+  padding: 0 14px 0 19px;
+  font-size: 17px; color: var(--text-dim);
   transition: color .1s;
 }
+.nav-item svg { flex: none; opacity: .82; }
+.nav-item.active svg,
+.nav-item.focused svg { opacity: 1; }
 .nav-item .bar {
   position: absolute; left: 0; top: 50%; transform: translateY(-50%);
   width: 3px; height: 0; border-radius: 2px; background: var(--accent);
@@ -611,16 +617,19 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
   background: rgba(255,159,69,.85);
 }
 
-/* 卡片行 */
+/* 卡片行。
+   2026-11：76 → 72，左侧改为 96×54（16:9）缩略图。
+   列表与网格共用同一套 .frame 渐变，只是尺寸不同 —— 两处不能各画一套，
+   否则「切到列表」会看到另一种色感，像换了个 App。 */
 .cell {
   position: relative;
-  height: 76px;
+  height: 72px;
   margin: 6px 14px;
-  padding: 0 18px 0 22px;
+  padding: 0 18px 0 18px;
   border-radius: 14px;
   background: var(--surface);
   border: 1px solid var(--cell-line);
-  display: flex; align-items: center; gap: 16px;
+  display: flex; align-items: center; gap: 14px;
   transition: background .12s, border-color .12s;
 }
 .cell.focused {
@@ -634,14 +643,32 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
   background: var(--accent); transform: translateY(-50%);
 }
 .cell .tile {
-  flex: none; width: 46px; height: 46px; border-radius: 13px;
+  flex: none; width: 40px; height: 40px; border-radius: 12px;
   background: var(--tile);
   display: grid; place-items: center;
   color: var(--text-dim);
 }
+.cell .tile svg { width: 21px; height: 21px; }
 .cell.focused .tile { background: var(--surface-sunken); color: var(--accent); }
+
+/* 列表里的缩略图：88×50，圆角 8，压一道内描边。
+   进度条进到缩略图内部，宽度与图对齐 —— 见 app.js cell() 的注释。 */
+.cell .thumb-sm {
+  position: relative; flex: none;
+  width: 88px; height: 50px; border-radius: 8px;
+  overflow: hidden; background: var(--surface-sunken);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.055);
+}
+.cell .thumb-sm .frame { position: absolute; inset: 0; }
+.cell.focused .thumb-sm { box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), .40); }
+.cell .thumb-sm .pbar {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 3px; background: rgba(0,0,0,.55);
+}
+.cell .thumb-sm .pbar i {
+  display: block; height: 100%; background: rgba(255,159,69,.96);
+}
 .cell .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.cell.has-progress .body { transform: translateY(-3px); }
 .cell .title {
   font-size: 17px; color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -656,20 +683,15 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
 }
 .cell.focused .badge { color: var(--text-dim); }
 .cell .chev { flex: none; color: rgba(113,120,132,.8); display: grid; place-items: center; }
-.cell .pbar {
-  position: absolute; left: 84px; right: 44px; bottom: 7px;
-  height: 3px; border-radius: 2px; overflow: hidden;
-  background: var(--track);
-}
 .cell .pbar i {
   display: block; height: 100%; border-radius: 2px;
   background: rgba(255,159,69,.95);
 }
 
 /* ── 网格布局 ──────────────────────────────────────────────
-   卡片 234 × 176：16:9 缩略图 131.6 + 标题区 44。
-   列宽由 (1280 − 216 侧栏 − 24/28 列表内边距 − 28 网格内边距 − 48 间隙) / 4 得出，
-   所以它跟着侧栏宽度一起变；改侧栏要回来重算列宽。 */
+   列宽不写死，由 (1280 − 180 侧栏 − 52 列表内边距 − 28 网格内边距 − 48 间隙) / 4
+   得出约 243。缩略图用 aspect-ratio 跟列宽走，改侧栏不用回来重算高度。
+   一屏 3 行：800 − 92 顶栏 − 58 工具行 − 64 提示栏 ≈ 586。 */
 .grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -707,7 +729,7 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
   content: ""; position: absolute; inset: 0; pointer-events: none;
   background: radial-gradient(78% 76% at 50% 44%, transparent 36%, rgba(0,0,0,.55) 100%);
 }
-.gcard .thumb .frame.t0 {
+.frame.t0 {
   background:
     radial-gradient(circle 20px at 71% 34%, rgba(255,236,198,.95) 0 52%, rgba(255,190,130,0) 100%),
     linear-gradient(180deg, transparent 58%, rgba(255,182,120,.17) 58% 74%, transparent 74%),
@@ -715,7 +737,7 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
 }
 /* 黄昏城市剪影：六个高度不同的深色竖条压出一条天际线。
    直接堆亮色方块会像柱状图 —— 楼是"剪影"，亮的是它们背后的天光。 */
-.gcard .thumb .frame.t1 {
+.frame.t1 {
   background:
     linear-gradient(to bottom, transparent 0 30%, #0E0B09 30%) 0%   0 / 17% 100% no-repeat,
     linear-gradient(to bottom, transparent 0 52%, #0E0B09 52%) 17%  0 / 12% 100% no-repeat,
@@ -725,18 +747,60 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
     linear-gradient(to bottom, transparent 0 60%, #0E0B09 60%) 76%  0 / 24% 100% no-repeat,
     linear-gradient(180deg, #6E3E1C 0%, #B8702F 56%, #E3A870 100%);
 }
-.gcard .thumb .frame.t2 {
+.frame.t2 {
   background:
     linear-gradient(180deg, #D8AF7E 0%, #C18F5E 100%) 7% 38% / 17% 30% no-repeat,
     linear-gradient(114deg, rgba(255,214,168,.44) 0 23%, rgba(255,214,168,.05) 23% 31%, rgba(255,214,168,0) 31% 100%),
     linear-gradient(180deg, #2C2024 0 72%, #120C0E 72% 100%);
 }
-.gcard .thumb .frame.t3 {
+.frame.m0 {
+  background:
+    radial-gradient(58% 62% at 50% 47%, #E8A25C 0%, #8B4F2A 62%, #2A1710 100%);
+}
+.frame.m1 {
+  background:
+    radial-gradient(58% 62% at 50% 47%, #7FA8C9 0%, #35566B 60%, #0E1A22 100%);
+}
+.frame.m2 {
+  background:
+    radial-gradient(58% 62% at 50% 47%, #C97F9A 0%, #6E3A50 60%, #22101A 100%);
+}
+.frame.t3 {
   background:
     radial-gradient(circle 8px at 27% 50%, rgba(186,216,240,.6), transparent 100%),
     radial-gradient(circle 5px at 41% 54%, rgba(186,216,240,.4), transparent 100%),
     linear-gradient(158deg, transparent 0 48%, #16202A 48% 100%),
     linear-gradient(180deg, #1B2833 0 54%, #0A1014 54% 100%);
+}
+/* t4–t7：同样的「一条硬边 + 一个亮源」结构，换色相与构图。
+   必须比 4 张多 —— 一屏 3 行就是 8–12 张，
+   只有 4 套渐变会看出明显的循环重复，整面墙立刻变假。 */
+.frame.t4 {
+  background:
+    radial-gradient(64% 46% at 52% 66%, rgba(158,198,150,.30), transparent 72%),
+    linear-gradient(90deg, transparent 0 13%, #08110D 13% 18%, transparent 18% 37%,
+      #07100C 37% 43%, transparent 43% 66%, #08110D 66% 71%, transparent 71% 100%),
+    linear-gradient(180deg, #24422F 0%, #16281E 56%, #09120D 100%);
+}
+/* 雪原：全片最亮的一类画面。缩略图墙必须能承受一张这样的，否则真实库里
+   一出现雪景就会显得"过曝/坏了"。 */
+.frame.t5 {
+  background:
+    linear-gradient(180deg, transparent 0 60%, rgba(255,255,255,.13) 60% 100%),
+    linear-gradient(178deg, #7E9BB4 0%, #A9BECD 40%, #DCE7EE 62%, #B4C3D0 100%);
+}
+.frame.t6 {
+  background:
+    linear-gradient(180deg, #F0CC96 0%, #D9A45F 100%) 57% 44% / 24% 60% no-repeat,
+    radial-gradient(58% 52% at 68% 48%, rgba(240,190,120,.22), transparent 70%),
+    linear-gradient(180deg, #3B2A1E 0 76%, #160F0A 76% 100%);
+}
+.frame.t7 {
+  background:
+    radial-gradient(circle 7px at 22% 68%, rgba(255,214,150,.72), transparent 100%),
+    radial-gradient(circle 6px at 74% 64%, rgba(190,225,255,.55), transparent 100%),
+    radial-gradient(64% 26% at 50% 88%, rgba(120,180,215,.32), transparent 72%),
+    linear-gradient(180deg, #16222D 0 74%, #0B1218 74% 100%);
 }
 .gcard .thumb .dur {
   position: absolute; right: 8px; bottom: 8px;
@@ -747,10 +811,16 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
   font-variant-numeric: tabular-nums; letter-spacing: .01em;
 }
 .gcard .thumb .seen {
-  position: absolute; left: 8px; top: 8px;
+  /* 放右上：左上角在多数画面里是主体（人脸 / 光源），
+     角标压上去会直接挡住那一块的辨识度。 */
+  position: absolute; right: 8px; top: 8px;
   height: 22px; padding: 0 8px; border-radius: 6px;
   display: grid; place-items: center;
-  background: rgba(255,159,69,.9); color: #1A1208;
+  background: rgba(10,12,15,.72);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: inset 0 0 0 1px rgba(255,159,69,.5);
+  color: var(--accent);
   font-size: 11.5px; font-weight: 500;
 }
 .gcard .thumb .pl {
@@ -1112,6 +1182,237 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
   background: rgba(8,12,18,.92); border: 1px solid rgba(106,166,255,.55);
   color: #A9C9FF; font: 10px/1.4 var(--font-num); white-space: nowrap;
 }
+
+/* ── 媒体库工具行 ────────────────────────────────────────────
+   搜索 / 类型 / 筛选跟着内容走，不放进全局顶栏：
+   全局顶栏是「这个 App 层面」的东西（品牌、设备、主题），
+   而「我在这一页要筛什么」是内容层面的，混在一起会让顶栏变成杂物架。 */
+#toolbar { flex: none; }
+.toolbar {
+  height: 58px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 28px 0 24px;
+}
+.searchbox {
+  display: flex; align-items: center; gap: 8px;
+  height: 36px; width: 264px; padding: 0 8px 0 11px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--cell-line);
+  color: var(--text-mute);
+  transition: border-color .12s;
+}
+.searchbox:focus-within { border-color: rgba(var(--accent-rgb), .55); }
+.searchbox input {
+  flex: 1; min-width: 0;
+  background: none; border: 0; outline: 0;
+  color: var(--text); font-size: 14px; font-family: inherit;
+}
+.searchbox input::placeholder { color: var(--text-mute); }
+.searchbox .clear {
+  flex: none; width: 22px; height: 22px; border-radius: 50%;
+  display: grid; place-items: center;
+  color: var(--text-mute); background: var(--tile);
+  transition: opacity .12s;
+}
+.searchbox input:placeholder-shown + .clear { opacity: 0; pointer-events: none; }
+.searchbox .clear:hover { color: var(--text); }
+
+.toolbar .chips {
+  display: flex; gap: 2px; padding: 3px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--cell-line);
+}
+.toolbar .chip {
+  height: 28px; padding: 0 11px; border-radius: 8px;
+  font-size: 13px; color: var(--text-dim);
+  transition: background .1s, color .1s;
+}
+.toolbar .chip:hover { color: var(--text); }
+.toolbar .chip.on { background: var(--surface-sunken); color: var(--text); }
+.toolbar .count {
+  margin-left: auto; font-size: 12.5px; color: var(--text-mute);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 设置项的当前值 / 开关 */
+.cell .val { flex: none; font-size: 13px; color: var(--text-mute); }
+.cell .sw {
+  position: relative; flex: none;
+  width: 42px; height: 24px; border-radius: 12px;
+  background: var(--track);
+  transition: background .14s;
+}
+.cell .sw i {
+  position: absolute; top: 3px; left: 3px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; transition: transform .16s cubic-bezier(.3,.7,.4,1);
+}
+.cell .sw.on { background: rgba(var(--accent-rgb), .92); }
+.cell .sw.on i { transform: translateX(18px); }
+
+/* 说明条：不是卡片，是给当前页面补一句上下文 */
+.note {
+  display: flex; gap: 9px; align-items: flex-start;
+  margin: 14px 28px 0 22px; padding: 11px 13px;
+  border-radius: 11px;
+  background: var(--tile);
+  font-size: 12.5px; line-height: 1.6; color: var(--text-mute);
+}
+.note svg { flex: none; margin-top: 2px; }
+
+/* ── 字幕面板 ────────────────────────────────────────────────
+   面板永远用暗色，不跟浅色主题：它浮在视频画面上，
+   浅底控件压在亮场景里会直接消失（和 ghost 按钮改底色的原因相同）。 */
+.sub-panel {
+  position: absolute; z-index: 30;
+  border-radius: 16px; overflow: hidden;
+  background: rgba(13,15,19,.94);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,.13);
+  box-shadow: 0 26px 70px rgba(0,0,0,.62);
+  opacity: 0; transform: translateY(8px) scale(.985);
+  pointer-events: none;
+  transition: opacity .14s, transform .14s cubic-bezier(.22,.61,.36,1);
+}
+.sub-panel.on { opacity: 1; transform: none; pointer-events: auto; }
+
+.sp-head {
+  display: flex; align-items: center;
+  height: 46px; padding: 0 10px 0 16px;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+}
+.sp-head > span { font-size: 15px; color: #fff; }
+.sp-x {
+  margin-left: auto; width: 28px; height: 28px; border-radius: 50%;
+  display: grid; place-items: center;
+  color: rgba(255,255,255,.55);
+}
+.sp-x:hover { background: rgba(255,255,255,.08); color: #fff; }
+
+.sp-body { padding: 6px; max-height: 252px; overflow-y: auto; }
+.sp-body::-webkit-scrollbar { width: 4px; }
+.sp-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 2px; }
+.sp-row {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; height: 44px; padding: 0 10px;
+  border-radius: 10px; text-align: left;
+  color: rgba(255,255,255,.88);
+}
+.sp-row:hover { background: rgba(255,255,255,.06); }
+.sp-row.on {
+  background: rgba(255,159,69,.14);
+  box-shadow: inset 0 0 0 1px rgba(255,159,69,.34);
+}
+.sp-ic { flex: none; width: 20px; display: grid; place-items: center; color: rgba(255,255,255,.6); }
+.sp-row.on .sp-ic { color: var(--accent); }
+.sp-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sp-tx b {
+  font-size: 14px; font-weight: 400; color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sp-tx i {
+  font-style: normal; font-size: 11.5px; color: rgba(255,255,255,.44);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sp-ck { flex: none; color: var(--accent); display: grid; place-items: center; }
+
+.sp-add {
+  display: flex; align-items: center; gap: 8px;
+  width: calc(100% - 12px); margin: 2px 6px 8px; height: 42px; padding: 0 10px;
+  border-radius: 10px;
+  color: var(--accent);
+  background: rgba(255,159,69,.09);
+  border: 1px dashed rgba(255,159,69,.36);
+  font-size: 13.5px;
+}
+.sp-add:hover { background: rgba(255,159,69,.16); }
+
+.sp-delay { display: flex; align-items: center; gap: 6px; padding: 0 12px 10px; }
+.sp-delay button {
+  height: 30px; padding: 0 10px; border-radius: 8px;
+  background: rgba(255,255,255,.07); color: #fff; font-size: 12.5px;
+}
+.sp-delay button:hover { background: rgba(255,255,255,.12); }
+.sp-delay .sp-dv {
+  flex: 1; text-align: center;
+  font-size: 12.5px; color: rgba(255,255,255,.6);
+  font-variant-numeric: tabular-nums;
+}
+.sp-note { padding: 0 15px 13px; font-size: 11px; line-height: 1.55; color: rgba(255,255,255,.32); }
+
+/* ── 字幕文件选择器 ────────────────────────────────────────────
+   存在的理由：实机现在是 IME 输入框，让人在掌机上手打绝对路径。
+   这个弹层替代它，默认停在当前视频目录，只列字幕扩展名。 */
+.pk-layer {
+  position: absolute; inset: 0; z-index: 40;
+  display: grid; place-items: center;
+  background: rgba(4,5,7,.66);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  opacity: 0; pointer-events: none;
+  transition: opacity .14s;
+}
+.pk-layer.on { opacity: 1; pointer-events: auto; }
+.pk {
+  width: 620px; max-width: calc(100% - 80px); max-height: 566px;
+  display: flex; flex-direction: column;
+  border-radius: 18px; overflow: hidden;
+  background: #14171C;
+  border: 1px solid rgba(255,255,255,.11);
+  box-shadow: 0 40px 120px rgba(0,0,0,.72);
+  transform: scale(.985) translateY(4px);
+  transition: transform .16s cubic-bezier(.22,.61,.36,1);
+}
+.pk-layer.on .pk { transform: none; }
+.pk-head { display: flex; align-items: flex-start; padding: 18px 16px 12px 20px; }
+.pk-t { font-size: 17px; color: #fff; }
+.pk-s { margin-top: 5px; font-size: 11.5px; color: rgba(255,255,255,.42); }
+.pk-x {
+  margin-left: auto; width: 30px; height: 30px; border-radius: 50%;
+  display: grid; place-items: center; color: rgba(255,255,255,.55);
+}
+.pk-x:hover { background: rgba(255,255,255,.08); color: #fff; }
+.pk-body { padding: 0 8px 8px; overflow-y: auto; }
+.pk-body::-webkit-scrollbar { width: 4px; }
+.pk-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); }
+.pk-crumb {
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 12px 8px; font-size: 11.5px; color: rgba(255,255,255,.38);
+}
+.pk-row {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; height: 58px; padding: 0 12px;
+  border-radius: 11px; text-align: left; color: #fff;
+}
+.pk-row:hover { background: rgba(255,255,255,.06); }
+.pk-row.best {
+  background: rgba(255,159,69,.09);
+  box-shadow: inset 0 0 0 1px rgba(255,159,69,.30);
+}
+.pk-ic { flex: none; display: grid; place-items: center; color: rgba(255,255,255,.55); }
+.pk-row.best .pk-ic { color: var(--accent); }
+.pk-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.pk-tx b {
+  font-size: 14px; font-weight: 400;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pk-tx i { font-style: normal; font-size: 11.5px; color: rgba(255,255,255,.42); }
+.pk-tag {
+  flex: none; height: 20px; padding: 0 8px; border-radius: 10px;
+  display: grid; place-items: center;
+  font-size: 11px; color: var(--accent);
+  background: rgba(255,159,69,.14);
+}
+.pk-foot {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 11px 20px 15px;
+  font-size: 11.5px; color: rgba(255,255,255,.34);
+  border-top: 1px solid rgba(255,255,255,.06);
+}
+.pk-n { font-variant-numeric: tabular-nums; }
 
 /* ── 响应式 ───────────────────────────────────────────────── */
 

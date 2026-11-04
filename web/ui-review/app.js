@@ -44,6 +44,12 @@ const ICONS = {
   tv:        '<rect x="3" y="4.5" width="18" height="12.5" rx="2.4"/><path d="M8 20h8M12 17v3"/>',
   listLines: '<path d="M4 7h16M4 12h16M4 17h11"/>',
   grid2:     '<rect x="3.8" y="3.8" width="7" height="7" rx="1.6"/><rect x="13.2" y="3.8" width="7" height="7" rx="1.6"/><rect x="3.8" y="13.2" width="7" height="7" rx="1.6"/><rect x="13.2" y="13.2" width="7" height="7" rx="1.6"/>',
+  settings:  '<circle cx="12" cy="12" r="3.1"/><path d="M12 3.4v2.2M12 18.4v2.2M3.4 12h2.2M18.4 12h2.2M6.2 6.2l1.6 1.6M16.2 16.2l1.6 1.6M17.8 6.2l-1.6 1.6M7.8 16.2l-1.6 1.6"/>',
+  file:      '<path d="M6.4 3.6h7.2l4.6 4.6v11.4a.8.8 0 0 1-.8.8H6.4a.8.8 0 0 1-.8-.8V4.4a.8.8 0 0 1 .8-.8Z"/><path d="M13.4 3.8v4.8h4.6"/>',
+  filter:    '<path d="M3.6 6.4h16.8L14 13.2v5.6l-4 2v-7.6Z"/>',
+  more:      '<circle cx="5.6" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="18.4" cy="12" r="1.6" fill="currentColor" stroke="none"/>',
+  cloud:     '<path d="M7.4 18.4a3.9 3.9 0 0 1-.4-7.8 5.2 5.2 0 0 1 10-1.4 3.8 3.8 0 0 1 3 5.4"/>',
+  check2:    '<circle cx="12" cy="12" r="8.4"/><path d="M8.2 12.2 11 15l4.8-5.4"/>',
 };
 
 function ic(name, size, sw) {
@@ -59,19 +65,31 @@ function ic(name, size, sw) {
 
 const VIDEOS = [
   { title: '01. 漂流 冒険の島!', file: '01. 漂流 冒険の島!.mp4', sub: '403.4 KB · 含字幕',
-    badge: '已看 33%', progress: 0.33, dur: 206, pos: 68, meta: '640×360 · 软件解码', hw: false },
+    badge: '已看 33%', progress: 0.33, dur: 206, pos: 68, meta: '640×360 · 软件解码', hw: false, tone: 't0' },
   { title: '02. Blade Runner 2049', file: '02. Blade Runner 2049.mp4', sub: '52.3 KB · 含字幕',
-    badge: '已看 64%', progress: 0.64, dur: 955, pos: 611, meta: '1920×1080 · 硬件解码', hw: true },
+    badge: '已看 64%', progress: 0.64, dur: 955, pos: 611, meta: '1920×1080 · 硬件解码', hw: true, tone: 't1' },
   { title: '03. 大鱼海棠', file: '03. 大鱼海棠.mkv', sub: '162.5 KB · 含字幕',
-    badge: '已看完', progress: 1, dur: 5460, pos: 5460, meta: '1920×804 · 硬件解码', hw: true },
+    badge: '已看完', progress: 1, dur: 5460, pos: 5460, meta: '1920×804 · 硬件解码', hw: true, tone: 't2' },
   { title: '04. 你的名字', file: '04. 你的名字.mp4', sub: '208.1 KB',
-    badge: '', progress: -1, dur: 6360, pos: 0, meta: '1920×1080 · 硬件解码', hw: true },
+    badge: '', progress: -1, dur: 6360, pos: 0, meta: '1920×1080 · 硬件解码', hw: true, tone: 't3' },
+  { title: '05. 千与千寻', file: '05. 千与千寻.mkv', sub: '2.4 GB · 含字幕',
+    badge: '', progress: -1, dur: 7380, pos: 0, meta: '1920×1038 · 硬件解码', hw: true, tone: 't4' },
+  { title: '06. 攻壳机动队', file: '06. 攻壳机动队.mp4', sub: '1.8 GB · 含字幕',
+    badge: '已看 12%', progress: 0.12, dur: 4980, pos: 598, meta: '1920×1080 · 硬件解码', hw: true, tone: 't7' },
+  { title: '07. 蓝色巨星', file: '07. 蓝色巨星.mkv', sub: '3.1 GB',
+    badge: '', progress: -1, dur: 7200, pos: 0, meta: '1920×816 · 硬件解码', hw: true, tone: 't5' },
+  { title: '08. 沙丘', file: '08. 沙丘.mp4', sub: '4.7 GB · 含字幕',
+    badge: '已看完', progress: 1, dur: 9300, pos: 9300, meta: '3840×1600 · 硬件解码', hw: true, tone: 't6' },
+  { title: '09. 星际穿越', file: '09. 星际穿越.mkv', sub: '5.2 GB · 含字幕',
+    badge: '已看 78%', progress: 0.78, dur: 10140, pos: 7909, meta: '1920×800 · 硬件解码', hw: true, tone: 't3' },
+  { title: '10. 蜘蛛侠：平行宇宙', file: '10. 蜘蛛侠：平行宇宙.mp4', sub: '2.9 GB',
+    badge: '', progress: -1, dur: 7020, pos: 0, meta: '1920×804 · 硬件解码', hw: true, tone: 't1' },
 ];
 
 const MUSIC = [
-  { title: '01. 夜に駆ける', sub: 'YOASOBI · 3:21 · MP3 320k', badge: '3:21' },
-  { title: '02. Interstellar Theme', sub: 'Hans Zimmer · 4:20 · FLAC', badge: '4:20' },
-  { title: '03. 花の唄', sub: 'Aimer · 3:10 · MP3 320k', badge: '3:10' },
+  { title: '01. 夜に駆ける', sub: 'YOASOBI · 3:21 · MP3 320k', badge: '3:21', tone: 'm0' },
+  { title: '02. Interstellar Theme', sub: 'Hans Zimmer · 4:20 · FLAC', badge: '4:20', tone: 'm1' },
+  { title: '03. 花の唄', sub: 'Aimer · 3:10 · MP3 320k', badge: '3:10', tone: 'm2' },
 ];
 
 const HISTORY = [
@@ -81,11 +99,26 @@ const HISTORY = [
   { title: '04. 你的名字', sub: '未开始', badge: '3 天前', progress: -1, idx: 3 },
 ];
 
+/* 字幕轨道。
+   实机轨道来自 mpv 的 track-list：内嵌轨有 id，外挂轨带 "external" 标记。
+   loadExternalSubtitle() 走 `sub-add <path> select`，会新增一条 external 轨，
+   不会替换已有轨道 —— 所以「已加载的外挂字幕」可以和内嵌轨并存。 */
 const SUBS = [
   { title: '关闭字幕', sub: '不显示任何字幕', icon: 'subsOff', off: true },
   { title: '简体中文', sub: '内嵌 · ASS', icon: 'subtitles' },
   { title: 'English', sub: '内嵌 · SUBRIP', icon: 'subtitles' },
-  { title: '日本語', sub: '外挂 · 日本語.ass', icon: 'subtitles' },
+];
+
+/* 字幕文件选择器的候选：当前视频所在目录。
+   实机里默认就停在这个目录 —— 同名字幕有 90% 的概率已经在那里了，
+   这才是「加载外挂字幕」的正确起点，而不是让用户从 / 开始翻。 */
+const SUB_DIR = '/home/deck/Videos';
+const SUB_FILES = [
+  { name: '02. Blade Runner 2049.chs.ass', sub: 'ASS · 84.2 KB · 与片名匹配', best: true },
+  { name: '02. Blade Runner 2049.eng.srt', sub: 'SRT · 61.7 KB · 与片名匹配' },
+  { name: 'Blade Runner 2049 (2017).zh-Hans.ass', sub: 'ASS · 92.4 KB' },
+  { name: '简体中文.srt', sub: 'SRT · 58.1 KB' },
+  { name: 'English.srt', sub: 'SRT · 49.3 KB' },
 ];
 
 const AUDIOS = [
@@ -113,6 +146,12 @@ const FS = {
       { name: '02. Blade Runner 2049.mp4', sub: '52.3 KB · 含字幕', v: 1 },
       { name: '03. 大鱼海棠.mkv', sub: '162.5 KB', v: 2 },
       { name: '04. 你的名字.mp4', sub: '208.1 KB', v: 3 },
+      { name: '05. 千与千寻.mkv', sub: '2.4 GB · 含字幕', v: 4 },
+      { name: '06. 攻壳机动队.mp4', sub: '1.8 GB · 含字幕', v: 5 },
+      { name: '07. 蓝色巨星.mkv', sub: '3.1 GB', v: 6 },
+      { name: '08. 沙丘.mp4', sub: '4.7 GB · 含字幕', v: 7 },
+      { name: '09. 星际穿越.mkv', sub: '5.2 GB · 含字幕', v: 8 },
+      { name: '10. 蜘蛛侠：平行宇宙.mp4', sub: '2.9 GB', v: 9 },
     ],
   },
   '/home/deck/Music': {
@@ -150,14 +189,47 @@ const DEVICES = {
   tablet:   { label: '4:3',    name: '1920×1440 平板',  w: 1280, h: 960, pw: 1920, ph: 1440 },
 };
 
+/* 信息架构（2026-11 重排）
+ *
+ * 旧：存储位置 / 视频库 / 音乐库 / 播放历史
+ *   问题一：两个入口都能播视频（存储位置能进目录播，视频库能播），用户不知道去哪。
+ *   问题二：「视频库」里塞了「添加媒体文件夹」「重新扫描」—— 这是配置，不是内容。
+ *   问题三：「存储位置」里塞了插件视频源和插件管理 —— 插件不是存储位置。
+ *   问题四：库一大就没有搜索、筛选、排序，等于不可用。
+ *
+ * 新：媒体库 / 文件 / 历史 / 设置
+ *   按「你在这屏要干什么」切分，而不是按「数据从哪来」切分：
+ *     媒体库 → 消费内容（搜索、筛选、按类型看，网格或列表）
+ *     文件   → 按位置找东西（存储设备 → 目录树，MX Player 式）
+ *     历史   → 接着看
+ *     设置   → 一切配置：媒体文件夹、内容源与插件、字幕、外观、播放
+ *   配置项全部从内容页撤出，内容页只剩内容。
+ */
 const TABS = [
-  { key: 'sources', label: '存储位置' },
-  { key: 'library', label: '视频库' },
-  { key: 'audio',   label: '音乐库' },
-  { key: 'history', label: '播放历史' },
+  { key: 'media', label: '媒体库', icon: 'video' },
+  { key: 'files', label: '文件', icon: 'folder' },
+  { key: 'history', label: '历史', icon: 'clock' },
+  { key: 'settings', label: '设置', icon: 'settings' },
 ];
 
-const TAB_LABEL = { sources: '存储位置', library: '视频库', audio: '音乐库', history: '播放历史', plugins: '插件管理' };
+const TAB_LABEL = {
+  media: '媒体库', files: '文件', history: '历史', settings: '设置',
+  plugins: '插件管理', player: '播放器',
+};
+
+/* 媒体库的类型与筛选。实机对应 MediaLibrary 的 getVideos() / getAudios()。 */
+const KINDS = [
+  { key: 'video', label: '视频' },
+  { key: 'audio', label: '音乐' },
+  { key: 'all',   label: '全部' },
+];
+
+const FILTERS = [
+  { key: 'all',      label: '不限' },
+  { key: 'resume',   label: '未看完' },
+  { key: 'recent',   label: '最近添加' },
+  { key: 'finished', label: '已看完' },
+];
 
 const RISKS = [
   { tag: '小屏', name: '掌机上的物理缩水',
@@ -181,26 +253,35 @@ const STORE_KEY = 'deckplayer.ui-review.v1';
 /* ── 状态 ─────────────────────────────────────────────────── */
 
 const state = {
-  tab: 'library',
+  tab: 'media',
   browse: null,
   theme: 'dark',
   device: 'deck',
   scene: 'dark',
   layout: 'grid',
+  kind: 'video',
+  filter: 'all',
+  query: '',
   focus: { zone: 'main', i: 0 },
   annotate: false,
   zoom: 'fit',
   selected: null,
-  composerTarget: '整体 · 视频库',
+  composerTarget: '整体 · 媒体库',
   comments: [],
   dialog: null,
   pluginPage: false,
   player: {
     open: false, playing: true, pos: 68, dur: 206, index: 0,
     osd: true, locked: false, speed: 1, aspect: 0, sub: 1, audio: 0,
+    subPanel: false,        // 字幕面板（内嵌轨 + 外挂 + 延时）
+    subPicker: false,       // 字幕文件选择器
+    subDelay: 0,
+    subFiles: SUB_FILES.slice(),
   },
   np: { show: false, playing: true, pos: 78, dur: 201 },
   seekDrag: false,
+  autoSub: true,
+  rememberProgress: true,
 };
 
 try {
@@ -248,21 +329,40 @@ function saveComments() {
 
 /* ── 应用列表渲染 ─────────────────────────────────────────── */
 
+/* 列表卡片。
+ *
+ * 2026-11：视频 / 音乐行改为自带 16:9 缩略图（96×54），行高 76 → 72。
+ * 之前只有 46px 的类型图标，条目一多就退化成文件名列表，扫一眼认不出片子。
+ * 文件夹、设置项这类没有画面的条目仍然用图标块 —— 强行给它们配图只会更乱。
+ */
 function cell(o) {
   const chev = o.chevron ? '<span class="chev">' + ic('chevron', 16, 1.8) + '</span>' : '';
   const badge = o.badge ? '<span class="badge">' + esc(o.badge) + '</span>' : '';
+  const val = o.value != null ? '<span class="val">' + esc(o.value) + '</span>' : '';
+  const sw = o.toggle != null
+    ? '<span class="sw' + (o.toggle ? ' on' : '') + '"><i></i></span>' : '';
   const prog = (o.progress != null && o.progress >= 0)
     ? '<span class="pbar"><i style="width:' + Math.round(clamp(o.progress, 0, 1) * 100) + '%"></i></span>'
     : '';
   const risk = o.risk ? ' data-risk="' + esc(o.risk) + '"' : '';
-  const spec = o.spec || '高 76 · 圆角 14 · 标题 17 / 副标题 12.5';
-  return '<div class="cell focusable' + (o.progress >= 0 ? ' has-progress' : '') + '"' +
+  const spec = o.spec || (o.tone
+    ? '高 72 · 缩略图 88×50（16:9）· 圆角 8 · 标题 17 / 副标题 12.5'
+    : '高 72 · 图标块 40 · 圆角 14 · 标题 17 / 副标题 12.5');
+  /* 进度条压在缩略图底边，不再横贯整行。
+     横贯整行时它会从缩略图右侧一直拉到卡片右缘，和右侧的「已看 33%」
+     是同一个信息的两种表示，还额外切断了行的横向阅读线。
+     压在图上就是「这一格画面我看了多少」，语义也对上了。 */
+  const lead = o.tone
+    ? '<span class="thumb-sm"><span class="frame ' + o.tone + '"></span>' + prog + '</span>'
+    : '<span class="tile">' + ic(o.icon, 23, 1.9) + '</span>';
+  return '<div class="cell focusable' + (o.tone ? ' has-thumb' : '') +
+    (o.progress >= 0 ? ' has-progress' : '') + '"' +
     ' data-action="' + o.action + '" data-id="' + (o.id != null ? o.id : '') + '"' +
     ' data-name="' + esc(o.name || '列表卡片') + '" data-spec="' + esc(spec) + '"' + risk + '>' +
-    '<span class="tile">' + ic(o.icon, 23, 1.9) + '</span>' +
+    lead +
     '<span class="body"><span class="title">' + esc(o.title) + '</span>' +
     (o.sub ? '<span class="sub">' + esc(o.sub) + '</span>' : '') + '</span>' +
-    badge + chev + prog + '</div>';
+    badge + val + sw + chev + '</div>';
 }
 
 /* 网格卡片：234 × 176 = 16:9 缩略图 131.6 + 标题区 44。
@@ -303,54 +403,82 @@ function emptyState(icon, title, hint) {
 }
 
 function navHTML() {
-  return TABS.map((t, i) =>
+  return TABS.map((t) =>
     '<div class="nav-item' + (state.tab === t.key ? ' active' : '') + ' focusable" ' +
     'data-tab="' + t.key + '" data-name="侧边栏条目" ' +
-    'data-spec="高 56 · 左内边距 32 · 字号 19 · 强调条 3×26">' +
-    '<span class="bar"></span>' + t.label + '</div>').join('');
+    'data-spec="高 56 · 图标 18 + 间距 11 · 字号 17 · 强调条 3×26">' +
+    '<span class="bar"></span>' + ic(t.icon, 18, 1.8) + '<span>' + t.label + '</span></div>').join('');
 }
 
 function listHTML() {
   const t = state.tab;
-  if (t === 'sources') {
-    if (state.browse) return browseHTML();
-    return section('本地存储设备') +
-      cell({ icon: 'drive', title: '内置存储', sub: '/home/deck · 1.2 TB 可用', chevron: true, action: 'browse', id: '/home/deck' }) +
-      cell({ icon: 'drive', title: 'SD 卡', sub: '/run/media/deck/SD256 · 512 GB', chevron: true, action: 'browse', id: '/run/media/deck/SD256' }) +
-      section('插件视频源') +
-      cell({ icon: 'plugin', title: '示例视频源', sub: 'v1.0.0 · 视频源 · 含刮削器', chevron: true, action: 'source-plugin' }) +
-      cell({ icon: 'plus', title: '添加 / 管理插件', sub: '从 ZIP 或目录安装视频源 / 刮削源插件', chevron: true, action: 'plugins' });
-  }
-  if (t === 'library') {
-    const head =
-      section('媒体文件夹') +
-      cell({ icon: 'plus', title: '添加媒体文件夹', sub: '选择包含视频 / 音乐的目录，自动扫描并记住', action: 'add-folder' }) +
-      cell({ icon: 'folder', title: '影片', sub: '/home/deck/Videos', chevron: true, action: 'folder' }) +
-      cell({ icon: 'folder', title: '音乐', sub: '/home/deck/Music', chevron: true, action: 'folder' }) +
-      cell({ icon: 'search', title: '重新扫描媒体库', sub: '更新新增或修改的文件', action: 'rescan' }) +
-      section('视频 · ' + VIDEOS.length);
+  if (t === 'media') return mediaHTML();
+  if (t === 'files') return state.browse ? browseHTML() : filesHTML();
+  if (t === 'history') return historyHTML();
+  return settingsHTML();
+}
 
-    if (state.layout === 'grid') {
-      return head + grid(VIDEOS.map((v, i) => gcard({
-        action: 'play', id: i, tone: 't' + (i % 4),
-        title: v.title, sub: v.sub, dur: v.dur, progress: v.progress,
-        name: '视频缩略图卡片',
-        risk: i === 0 ? '缩略图按 min(时长×0.1, 30s) 抽帧。取第一帧会得到片头黑场，网格会花掉一半。' : '',
-      })));
-    }
-    return head + VIDEOS.map((v, i) => cell({
-      icon: 'video', title: v.title, sub: v.sub, badge: v.badge, progress: v.progress,
-      action: 'play', id: i, name: '视频卡片',
-      risk: i === 0 ? '列表模式没有缩略图：条目一多就退化成文件名列表。切到网格可看缩略图方案。' : '',
-    })).join('');
+/* ── 媒体库 ───────────────────────────────────────────────────
+   内容页只放内容。
+   搜索 / 类型 / 筛选是「在内容里找东西」，属于这一页；
+   「添加媒体文件夹」「重新扫描」「插件」是配置，全部撤到设置页。 */
+function mediaHTML() {
+  const q = state.query.trim().toLowerCase();
+  const prog = (x) => (x.progress == null ? -1 : x.progress);
+
+  let items = VIDEOS.map((v, i) => Object.assign({}, v, { i: i, kind: 'video' }));
+  if (state.kind === 'audio') {
+    items = MUSIC.map((m, i) => Object.assign({}, m, { i: i, kind: 'audio' }));
+  } else if (state.kind === 'all') {
+    items = items.concat(MUSIC.map((m, i) => Object.assign({}, m, { i: i, kind: 'audio' })));
   }
-  if (t === 'audio') {
-    return section('音乐 · ' + MUSIC.length) +
-      MUSIC.map((m, i) => cell({
-        icon: 'music', title: m.title, sub: m.sub, badge: m.badge,
-        action: 'play-music', id: i, name: '音乐卡片',
-      })).join('');
+
+  if (q) {
+    items = items.filter((x) =>
+      (x.title + ' ' + (x.file || '')).toLowerCase().indexOf(q) >= 0);
   }
+  if (state.filter === 'resume') items = items.filter((x) => prog(x) > 0 && prog(x) < 1);
+  if (state.filter === 'finished') items = items.filter((x) => prog(x) === 1);
+
+  if (!items.length) {
+    return emptyState('search', '没有匹配的内容',
+      state.query ? '换个关键词试试，或清空搜索框' : '这个筛选下还没有内容');
+  }
+
+  if (state.layout === 'grid') {
+    return grid(items.map((x, k) => gcard({
+      action: x.kind === 'audio' ? 'play-music' : 'play',
+      id: x.i, tone: x.tone || ('t' + (k % 4)),
+      title: x.title, sub: x.sub, dur: x.dur, progress: x.progress,
+      name: x.kind === 'audio' ? '音乐缩略图卡片' : '视频缩略图卡片',
+      risk: k === 0 && x.kind === 'video'
+        ? '缩略图按 min(时长×0.1, 30s) 抽帧。取第一帧会得到片头黑场，网格会花掉一半。'
+        : '',
+    })));
+  }
+  return items.map((x) => cell({
+    icon: x.kind === 'audio' ? 'music' : 'video',
+    tone: x.tone || ('t' + (x.i % 4)),
+    title: x.title, sub: x.sub, badge: x.badge, progress: x.progress,
+    action: x.kind === 'audio' ? 'play-music' : 'play', id: x.i,
+    name: x.kind === 'audio' ? '音乐行' : '视频行',
+  })).join('');
+}
+
+/* ── 文件 ─────────────────────────────────────────────────────
+   按位置浏览，不经过媒体库。这是 MX Player 的那条路径：
+   想找「昨天拷进 SD 卡的那个文件」时用这里，而不是去媒体库里翻。 */
+function filesHTML() {
+  return section('存储设备') +
+    cell({ icon: 'drive', title: '内置存储', sub: '/home/deck · 1.2 TB 可用',
+      chevron: true, action: 'browse', id: '/home/deck', name: '存储设备' }) +
+    cell({ icon: 'drive', title: 'SD 卡', sub: '/run/media/deck/SD256 · 512 GB',
+      chevron: true, action: 'browse', id: '/run/media/deck/SD256', name: '存储设备' }) +
+    '<div class="note">' + ic('info', 15, 1.8) +
+      '<span>这里是原始目录，不受媒体库扫描范围限制。媒体文件夹在「设置 → 媒体文件夹」里管理。</span></div>';
+}
+
+function historyHTML() {
   const body = state.layout === 'grid'
     ? grid(HISTORY.map((h) => gcard({
         action: 'play', id: h.idx, tone: 't' + (h.idx % 4),
@@ -359,10 +487,50 @@ function listHTML() {
         name: '历史缩略图卡片',
       })))
     : HISTORY.map((h) => cell({
-        icon: 'clock', title: h.title, sub: h.sub, badge: h.badge,
-        progress: h.progress, action: 'play', id: h.idx, name: '历史卡片',
+        icon: 'clock', tone: 't' + (h.idx % 4), title: h.title, sub: h.sub,
+        badge: h.badge, progress: h.progress, action: 'play', id: h.idx, name: '历史行',
       })).join('');
-  return section('最近播放 · ' + HISTORY.length) + body;
+  return section('继续观看 · ' + HISTORY.length) + body;
+}
+
+/* ── 设置 ─────────────────────────────────────────────────────
+   所有「配置」都收在这里。内容页里一个都不留。 */
+function settingsHTML() {
+  return section('媒体库') +
+    cell({ icon: 'folder', title: '媒体文件夹', value: '2 个', chevron: true,
+      action: 'open-folders', name: '设置项' }) +
+    cell({ icon: 'search', title: '重新扫描媒体库', sub: '更新新增或修改的文件',
+      action: 'rescan', name: '设置项' }) +
+    cell({ icon: 'video', title: '元数据刮削', value: '自动', chevron: true,
+      action: 'set-scrape', name: '设置项' }) +
+
+    section('内容源') +
+    cell({ icon: 'plugin', title: '插件视频源', value: '1 个', chevron: true,
+      action: 'plugins', name: '设置项' }) +
+    cell({ icon: 'cloud', title: '网络存储', value: '未配置', chevron: true,
+      action: 'set-network', name: '设置项' }) +
+
+    section('字幕') +
+    cell({ icon: 'subtitles', title: '默认字幕语言', value: '简体中文', chevron: true,
+      action: 'set-sub-lang', name: '设置项',
+      risk: '实机目前没有这一项：每次都从轨道列表里手动挑，换一部片就要重挑一次。' }) +
+    cell({ icon: 'check2', title: '自动加载同名外挂字幕', sub: '同目录下片名相同即自动挂载',
+      toggle: true, action: 'toggle-auto-sub', name: '设置项',
+      risk: '扫描时其实已经记录了 matched_subtitles（卡片上会显示「含字幕」），但没有自动挂载 —— 数据有，动作没接。' }) +
+    cell({ icon: 'subtitles', title: '字幕字号', value: '屏高 5.5%', chevron: true,
+      action: 'set-sub-size', name: '设置项' }) +
+
+    section('外观') +
+    cell({ icon: 'tv', title: '主题', value: state.theme === 'light' ? '浅色' : state.theme === 'oled' ? 'OLED 真黑' : '深色',
+      chevron: true, action: 'set-theme', name: '设置项' }) +
+    cell({ icon: 'grid2', title: '默认视图', value: state.layout === 'grid' ? '网格' : '列表',
+      chevron: true, action: 'set-layout', name: '设置项' }) +
+
+    section('播放') +
+    cell({ icon: 'clock', title: '记住播放进度', toggle: true, action: 'toggle-resume', name: '设置项' }) +
+    cell({ icon: 'play', title: '硬件解码', value: '自动', chevron: true, action: 'set-hw', name: '设置项' }) +
+    cell({ icon: 'info', title: '关于 DeckPlayer', value: 'GPL-3.0', chevron: true,
+      action: 'about', name: '设置项' });
 }
 
 function browseHTML() {
@@ -370,7 +538,7 @@ function browseHTML() {
   if (!node) { state.browse = null; return listHTML(); }
   const parent = PARENT[state.browse];
   const up = cell({
-    icon: 'back', title: '返回上一级', sub: parent || '存储位置',
+    icon: 'back', title: '返回上一级', sub: parent || '存储设备',
     chevron: true, action: 'up',
   });
 
@@ -393,13 +561,15 @@ function browseHTML() {
           progress: (VIDEOS[it.v] || {}).progress,
           name: '文件缩略图卡片',
         })))
-      : videos.map((it) =>
-          cell({ icon: 'video', title: it.name, sub: it.sub, action: 'play', id: it.v })).join('');
+      : videos.map((it, k) =>
+          cell({ icon: 'video', tone: 't' + (k % 4), title: it.name, sub: it.sub,
+            action: 'play', id: it.v, name: '文件行' })).join('');
   }
 
   const trackBlock = tracks.length
-    ? tracks.map((it) =>
-        cell({ icon: 'music', title: it.name, sub: it.sub, action: 'play-music', id: it.m })).join('')
+    ? tracks.map((it, k) =>
+        cell({ icon: 'music', tone: 'm' + (k % 3), title: it.name, sub: it.sub,
+          action: 'play-music', id: it.m, name: '音频行' })).join('')
     : '';
 
   const empty = node.items.length ? ''
@@ -415,15 +585,54 @@ function hintsHTML() {
   const h = (k, label, accent) =>
     '<span class="hint"><span class="k' + (accent ? ' a' : '') + '">' + k + '</span>' + label + '</span>';
   const map = {
-    sources: h('A', '打开', true) + h('B', '返回') + h('Y', '刷新'),
-    library: h('A', '播放', true) + h('B', '返回') + h('X', '获取信息') + h('Y', '重新扫描'),
-    audio:   h('A', '播放', true) + h('B', '返回') + h('X', '加入队列'),
-    history: h('A', '继续播放', true) + h('B', '返回') + h('X', '移除记录'),
+    media:    h('A', '播放', true) + h('B', '返回') + h('X', '获取信息') + h('Y', '切换视图'),
+    files:    h('A', '打开', true) + h('B', '返回上一级'),
+    history:  h('A', '继续播放', true) + h('B', '返回') + h('X', '移除记录'),
+    settings: h('A', '进入', true) + h('B', '返回'),
   };
-  if (state.tab === 'sources' && state.browse) {
-    return h('A', '打开', true) + h('B', '返回上一级') + h('X', '查看信息');
+  if (state.tab === 'files' && state.browse) {
+    return h('A', '播放', true) + h('B', '返回上一级') + h('X', '查看信息');
   }
-  return map[state.tab] || map.library;
+  return map[state.tab] || map.media;
+}
+
+/* 媒体库工具行：搜索 + 类型 + 筛选，外加布局切换的当前状态。
+   这些是「在内容里找东西」的控件，跟着内容走，不放进全局顶栏。 */
+function toolbarHTML() {
+  if (state.tab !== 'media') return '';
+  const chip = (key, label, on, attr) =>
+    '<button class="chip' + (on ? ' on' : '') + '" data-' + attr + '="' + key + '">' + label + '</button>';
+  const count = mediaCount();
+  return '<div class="toolbar" data-name="媒体库工具行" data-spec="高 56 · 搜索框 300×38 · 胶囊高 30">' +
+      '<label class="searchbox">' + ic('search', 17, 1.9) +
+        '<input id="searchInput" type="text" placeholder="搜索标题或文件名" ' +
+          'value="' + esc(state.query) + '" autocomplete="off" spellcheck="false">' +
+        /* 始终渲染，靠 :placeholder-shown 控制显隐 ——
+           如果按 state.query 决定要不要输出，输入时只重建列表不重建工具行，
+           这个按钮就会一直不出现。 */
+        '<button class="clear" id="searchClear" title="清空">' + ic('close', 14, 2) + '</button>' +
+      '</label>' +
+      '<div class="chips" id="kindChips">' +
+        KINDS.map((k) => chip(k.key, k.label, state.kind === k.key, 'kind')).join('') + '</div>' +
+      '<div class="chips" id="filterChips">' +
+        FILTERS.map((f) => chip(f.key, f.label, state.filter === f.key, 'filter')).join('') + '</div>' +
+      '<span class="count">' + count + ' 项</span>' +
+    '</div>';
+}
+
+function mediaCount() {
+  const q = state.query.trim().toLowerCase();
+  const prog = (x) => (x.progress == null ? -1 : x.progress);
+  let items = VIDEOS.map((v) => ({ title: v.title, file: v.file, progress: v.progress }));
+  if (state.kind !== 'video') {
+    items = state.kind === 'audio'
+      ? MUSIC.map((m) => ({ title: m.title, progress: -1 }))
+      : items.concat(MUSIC.map((m) => ({ title: m.title, progress: -1 })));
+  }
+  if (q) items = items.filter((x) => (x.title + ' ' + (x.file || '')).toLowerCase().indexOf(q) >= 0);
+  if (state.filter === 'resume') items = items.filter((x) => prog(x) > 0 && prog(x) < 1);
+  if (state.filter === 'finished') items = items.filter((x) => prog(x) === 1);
+  return items.length;
 }
 
 function npHTML() {
@@ -452,14 +661,17 @@ function renderApp() {
     '<header class="app-header" data-name="应用顶栏" data-spec="高 92 · 左右内边距 48 · 标题 29px">' +
       '<span class="mark">' + ic('video', 24, 1.8) + '</span>' +
       '<h1>DeckPlayer</h1>' +
-      layoutSeg +
+      (state.tab === 'media' || state.tab === 'history' ? layoutSeg : '') +
       '<span class="ver"><i></i>GPL-3.0</span>' +
     '</header>' +
     '<div class="app-body">' +
       '<nav class="sidebar" id="sidebar" data-name="侧边栏" ' +
-        'data-spec="宽 216（1280 的 16.9%）· 条目高 56 · 字号 19 · 强调条 3×26">' +
+        'data-spec="宽 160（1280 的 12.5%）· 条目高 56 · 图标 18 + 文字 17 · 强调条 3×26">' +
         navHTML() + '</nav>' +
-      '<section class="main" id="main"><div class="list" id="list">' + listHTML() + '</div></section>' +
+      '<section class="main" id="main">' +
+        '<div id="toolbar">' + toolbarHTML() + '</div>' +
+        '<div class="list" id="list">' + listHTML() + '</div>' +
+      '</section>' +
     '</div>' +
     npHTML() +
     '<footer class="app-footer" data-name="底部提示栏" data-spec="高 64 · 提示字号 13 · 左右内边距 40">' +
@@ -492,6 +704,15 @@ function bindAppEvents() {
     if (lay) { setLayout(lay.dataset.layout); return; }
     const nav = e.target.closest('.nav-item');
     if (nav) { switchTab(nav.dataset.tab); return; }
+    const kind = e.target.closest('[data-kind]');
+    if (kind) { state.kind = kind.dataset.kind; refreshToolbar(); refreshList(); return; }
+    const filt = e.target.closest('[data-filter]');
+    if (filt) { state.filter = filt.dataset.filter; refreshToolbar(); refreshList(); return; }
+    if (e.target.closest('#searchClear')) {
+      state.query = ''; refreshToolbar(); refreshList();
+      const si = $('#searchInput'); if (si) si.focus();
+      return;
+    }
     const c = e.target.closest('.cell, .gcard');
     if (c) { activateCell(c); return; }
     if (e.target.closest('.np')) {
@@ -500,6 +721,42 @@ function bindAppEvents() {
       toast(state.np.playing ? '继续播放 · 夜に駆ける' : '已暂停');
     }
   };
+
+  // 搜索框：输入时只重建列表，不重建输入框本身，否则每敲一个字就丢焦点
+  const si = $('#searchInput');
+  if (si) {
+    si.oninput = () => { state.query = si.value; refreshList(); };
+    // 方向键在输入框里是移动光标，不能触发侧栏/卡片导航
+    si.onkeydown = (e) => {
+      if (e.key === 'Escape') { si.value = ''; state.query = ''; refreshList(); refreshToolbar(); }
+      e.stopPropagation();
+    };
+  }
+}
+
+/* 只重建列表：保住搜索框的 DOM 与光标位置 */
+function refreshList() {
+  const list = $('#list');
+  if (!list) return;
+  list.innerHTML = listHTML();
+  const cnt = $('.toolbar .count');
+  if (cnt) cnt.textContent = mediaCount() + ' 项';
+  applyFocus();
+  decorate();
+}
+
+function refreshToolbar() {
+  const tb = $('#toolbar');
+  if (!tb) return;
+  tb.innerHTML = toolbarHTML();
+  const si = $('#searchInput');
+  if (si) {
+    si.oninput = () => { state.query = si.value; refreshList(); };
+    si.onkeydown = (e) => {
+      if (e.key === 'Escape') { si.value = ''; state.query = ''; refreshList(); refreshToolbar(); }
+      e.stopPropagation();
+    };
+  }
 }
 
 function activateCell(el) {
@@ -512,23 +769,42 @@ function activateCell(el) {
     return;
   }
   if (a === 'plugins') { openPlugins(); return; }
+  if (a === 'open-folders') { openDialog('folders'); return; }
   if (a === 'add-folder') { openDialog('folder'); return; }
   if (a === 'rescan') {
     toast('正在扫描媒体库…');
     setTimeout(() => toast('扫描完成 · 4 个视频 / 3 首音乐'), 1100);
     return;
   }
-  if (a === 'folder') { toast('打开文件夹（原型未实现文件浏览）'); return; }
+  if (a === 'set-theme') {
+    setTheme(state.theme === 'dark' ? 'oled' : state.theme === 'oled' ? 'light' : 'dark');
+    renderApp();
+    return;
+  }
+  if (a === 'set-layout') { setLayout(state.layout === 'grid' ? 'list' : 'grid'); return; }
+  if (a === 'toggle-auto-sub') {
+    state.autoSub = !state.autoSub;
+    renderApp();
+    toast(state.autoSub ? '已开启：同名字幕自动挂载' : '已关闭自动挂载');
+    return;
+  }
+  if (a === 'toggle-resume') {
+    state.rememberProgress = !state.rememberProgress;
+    renderApp();
+    toast(state.rememberProgress ? '已开启：记住播放进度' : '已关闭：每次从头播放');
+    return;
+  }
+  if (a.indexOf('set-') === 0) { toast('这一项在原型里只占位，等实机功能定了再做面板'); return; }
+  if (a === 'about') { toast('DeckPlayer · GPL-3.0 · 基于 borealis + libmpv'); return; }
   if (a === 'browse') {
     state.browse = el.dataset.id;
     state.focus = { zone: 'main', i: 0 };
     renderApp();
-    setTarget('存储位置 · ' + (FS[state.browse] ? FS[state.browse].name : '目录'));
+    setTarget('文件 · ' + (FS[state.browse] ? FS[state.browse].name : '目录'));
     renderDock();
     return;
   }
   if (a === 'up') { goUp(); return; }
-  if (a === 'source-plugin') { toast('视频源插件需要先在插件管理里配置'); return; }
 }
 
 function goUp() {
@@ -537,7 +813,7 @@ function goUp() {
   state.browse = parent || null;
   state.focus = { zone: 'main', i: 0 };
   renderApp();
-  setTarget(parent ? '存储位置 · ' + FS[parent].name : '整体 · 存储位置');
+  setTarget(parent ? '文件 · ' + FS[parent].name : '整体 · 文件');
   renderDock();
 }
 
@@ -677,6 +953,8 @@ function openPlayer(index) {
 function closePlayer() {
   state.player.open = false;
   state.player.locked = false;
+  state.player.subPanel = false;
+  state.player.subPicker = false;
   state.seekDrag = false;
   closeDialog();
   const pl = $('#player');
@@ -716,7 +994,7 @@ function buildPlayer() {
   place('btnPlaylist', 'playlist', '播放列表');
   place('btnAspect', 'aspect', '画面比例');
   const pillLeft = right - 78;
-  const speedLabel = (Math.round(p.speed * 10) % 10 === 0 ? p.speed.toFixed(0) : p.speed.toFixed(1)) + '×';
+  const speedLabel = speedText(p.speed);
   const speedPill =
     '<button class="osd-pill" id="btnSpeed" data-name="倍速胶囊" data-spec="78×34 · 间距 12 · 命中区 86×42" ' +
     'style="left:' + pillLeft + 'px;top:' + (g.toolCY - 17) + 'px;width:78px">' +
@@ -772,6 +1050,13 @@ function buildPlayer() {
         setBtns.join('') + speedPill +
       '</div>' +
 
+      /* 字幕面板与文件选择器都挂在 .osd 之外：
+         OSD 会在 8 秒后收起，但用户正在挑字幕时不能被收走。 */
+      '<div class="sub-panel' + (p.subPanel ? ' on' : '') + '" id="subPanel" ' +
+        'style="right:' + g.m + 'px;bottom:186px;width:324px">' + subPanelHTML() + '</div>' +
+      '<div class="pk-layer' + (p.subPicker ? ' on' : '') + '" id="subPicker">' +
+        '<div class="pk" id="pkBox">' + subPickerHTML() + '</div></div>' +
+
       /* HUD 与锁定提示必须挂在 .osd 之外：
          它们要在 OSD 收起（甚至锁定后）时仍然可见。 */
       '<div class="hud" id="hud"></div>' +
@@ -800,8 +1085,9 @@ function buildPlayer() {
   $('#btnAspect').onclick = (e) => { e.stopPropagation(); cycleAspect(); };
   $('#btnSpeed').onclick = (e) => { e.stopPropagation(); cycleSpeed(); };
   $('#btnAudio').onclick = (e) => { e.stopPropagation(); openDialog('audio'); };
-  $('#btnSub').onclick = (e) => { e.stopPropagation(); openDialog('subs'); };
+  $('#btnSub').onclick = (e) => { e.stopPropagation(); toggleSubPanel(); };
 
+  bindSubEvents();
   bindSeek();
 
   if (state.player.locked) {
@@ -810,6 +1096,160 @@ function buildPlayer() {
   }
   syncOSD();
   decorate();
+}
+
+/* ── 字幕 ─────────────────────────────────────────────────────
+   两条路都要有，缺一条就不可用：
+     · 播放器内轨道 —— 内嵌字幕，mpv 的 track-list 直接给
+     · 外挂字幕文件 —— 必须能「按文件挑」，而不是手打绝对路径
+   实机现状只有后者的一半：promptLoadExternalSubtitle() 弹的是 IME 输入框，
+   让用户在掌机上用虚拟键盘敲 /run/media/mmcblk0p1/Videos/... 这不可能用。
+   正确做法是把 FolderPickerActivity 泛化成 FilePicker，默认停在当前视频目录。 */
+
+function subTracks() {
+  const p = state.player;
+  const list = SUBS.slice();
+  if (p.loadedSub) {
+    list.push({
+      title: p.loadedSub.title, sub: '外挂 · ' + p.loadedSub.name,
+      icon: 'subtitles', ext: true, fresh: true,
+    });
+  }
+  return list;
+}
+
+function subPanelHTML() {
+  const p = state.player;
+  const tracks = subTracks();
+  const rows = tracks.map((s, i) =>
+    '<button class="sp-row' + (p.sub === i ? ' on' : '') + '" data-sub="' + i + '">' +
+      '<span class="sp-ic">' + ic(s.icon, 18, 1.8) + '</span>' +
+      '<span class="sp-tx"><b>' + esc(s.title) + '</b><i>' + esc(s.sub) + '</i></span>' +
+      (p.sub === i ? '<span class="sp-ck">' + ic('check', 15, 2.2) + '</span>' : '') +
+    '</button>').join('');
+
+  const delay = p.subDelay;
+  const delayTxt = (delay > 0 ? '+' : '') + delay.toFixed(1) + 's';
+
+  return '<div class="sp-head"><span>字幕</span>' +
+      '<button class="sp-x" id="subClose" title="关闭">' + ic('close', 14, 2.1) + '</button></div>' +
+    '<div class="sp-body">' + rows + '</div>' +
+    '<button class="sp-add" id="subAdd">' + ic('plus', 15, 2.1) + '<span>从文件加载…</span></button>' +
+    '<div class="sp-delay">' +
+      '<button data-delay="-0.5">−0.5s</button>' +
+      '<span class="sp-dv" id="subDelayVal">延时 ' + delayTxt + '</span>' +
+      '<button data-delay="0.5">+0.5s</button>' +
+    '</div>' +
+    '<div class="sp-note">外挂字幕不会覆盖内嵌轨，会作为新轨道排在后面</div>';
+}
+
+function subPickerHTML() {
+  const p = state.player;
+  const rows = p.subFiles.map((f, i) =>
+    '<button class="pk-row' + (f.best ? ' best' : '') + '" data-file="' + i + '">' +
+      '<span class="pk-ic">' + ic('file', 18, 1.8) + '</span>' +
+      '<span class="pk-tx"><b>' + esc(f.name) + '</b><i>' + esc(f.sub) + '</i></span>' +
+      (f.best ? '<span class="pk-tag">同名</span>' : '') +
+    '</button>').join('');
+
+  return '<div class="pk-head">' +
+      '<div><div class="pk-t">选择字幕文件</div>' +
+        '<div class="pk-s">' + SUB_DIR + ' · 只列 .srt / .ass / .vtt / .sup / .ssa</div></div>' +
+      '<button class="pk-x" id="pkClose" title="取消">' + ic('close', 15, 2.1) + '</button>' +
+    '</div>' +
+    '<div class="pk-body">' +
+      '<div class="pk-crumb">' + ic('folder', 14, 1.8) + '<span>Videos</span>' +
+        '<span class="pk-dot">·</span><span>默认停在当前视频所在目录</span></div>' +
+      rows +
+    '</div>' +
+    '<div class="pk-foot"><span>与片名匹配的文件已排在最前</span>' +
+      '<span class="pk-n">' + p.subFiles.length + ' 个</span></div>';
+}
+
+function toggleSubPanel(force) {
+  const p = state.player;
+  p.subPanel = force == null ? !p.subPanel : force;
+  p.subPicker = p.subPanel ? p.subPicker : false;
+  const panel = $('#subPanel');
+  const picker = $('#subPicker');
+  if (panel) panel.classList.toggle('on', p.subPanel);
+  if (picker) picker.classList.toggle('on', p.subPicker);
+  pokeOSD();
+}
+
+function renderSubPanel() {
+  const panel = $('#subPanel');
+  if (panel) panel.innerHTML = subPanelHTML();
+  const picker = $('#subPicker');
+  if (picker) picker.querySelector('.pk').innerHTML = subPickerHTML();
+  pokeOSD();
+}
+
+function selectSub(i) {
+  const p = state.player;
+  p.sub = i;
+  const icon = $('#btnSub');
+  if (icon) icon.innerHTML = ic(i > 0 ? 'subtitles' : 'subsOff', 19, 1.9);
+  const t = subTracks()[i];
+  showHUD(i > 0 ? 'subtitles' : 'subtitles_off', i > 0 ? '已选字幕: ' + t.title : '关闭字幕');
+  renderSubPanel();
+}
+
+function addSubFile(i) {
+  const p = state.player;
+  const f = p.subFiles[i];
+  if (!f) return;
+  // 与实机 sub-add 一致：新增一条 external 轨道并立刻选中，不动内嵌轨
+  p.loadedSub = { name: f.name, title: f.name.replace(/\.[^.]+$/, '') };
+  p.sub = SUBS.length;
+  p.subPicker = false;
+  const picker = $('#subPicker');
+  if (picker) picker.classList.remove('on');
+  const icon = $('#btnSub');
+  if (icon) icon.innerHTML = ic('subtitles', 19, 1.9);
+  showHUD('subtitles', '已加载字幕: ' + f.name);
+  renderSubPanel();
+}
+
+function bumpSubDelay(d) {
+  const p = state.player;
+  p.subDelay = Math.round((p.subDelay + d) * 10) / 10;
+  const txt = '延时 ' + (p.subDelay > 0 ? '+' : '') + p.subDelay.toFixed(1) + 's';
+  const el = $('#subDelayVal');
+  if (el) el.textContent = txt;
+  showHUD('timer', '字幕' + txt);
+  pokeOSD();
+}
+
+function bindSubEvents() {
+  const panel = $('#subPanel');
+  if (panel) {
+    panel.onclick = (e) => {
+      e.stopPropagation();
+      const x = e.target.closest('#subClose');
+      if (x) { toggleSubPanel(false); return; }
+      const add = e.target.closest('#subAdd');
+      if (add) { state.player.subPicker = true; $('#subPicker').classList.add('on'); pokeOSD(); return; }
+      const d = e.target.closest('[data-delay]');
+      if (d) { bumpSubDelay(parseFloat(d.dataset.delay)); return; }
+      const row = e.target.closest('[data-sub]');
+      if (row) { selectSub(parseInt(row.dataset.sub, 10)); return; }
+    };
+  }
+  const picker = $('#subPicker');
+  if (picker) {
+    picker.onclick = (e) => {
+      e.stopPropagation();
+      if (e.target.closest('#pkClose')) {
+        state.player.subPicker = false;
+        picker.classList.remove('on');
+        pokeOSD();
+        return;
+      }
+      const r = e.target.closest('[data-file]');
+      if (r) { addSubFile(parseInt(r.dataset.file, 10)); return; }
+    };
+  }
 }
 
 /* 播放控制 */
@@ -861,13 +1301,22 @@ function updateTitle() {
   renderDock();
 }
 
+/* 倍速标签：1.25 不能显示成 1.3×。
+   原来用 toFixed(1)，SPEEDS 里的 1.25 就被四舍五入成「1.3×」，
+   和实际播放速度不符 —— 用户会以为选的是 1.3 倍。 */
+function speedText(v) {
+  if (v % 1 === 0) return v.toFixed(0) + '×';
+  if (Math.round(v * 100) % 10 === 0) return v.toFixed(1) + '×';
+  return v.toFixed(2) + '×';
+}
+
 function cycleSpeed() {
   const p = state.player;
   const i = SPEEDS.indexOf(p.speed);
   p.speed = SPEEDS[(i + 1) % SPEEDS.length];
-  const label = (p.speed % 1 === 0 ? p.speed.toFixed(0) : p.speed.toFixed(1)) + '×';
+  const label = speedText(p.speed);
   $('#speedText').textContent = label;
-  showHUD('speed', '倍速 ' + label.replace('×', '×'), (i + 1) / SPEEDS.length);
+  showHUD('speed', '倍速 ' + label, (i + 1) / SPEEDS.length);
   pokeOSD();
 }
 
@@ -897,7 +1346,7 @@ function toggleLock() {
 }
 
 function onPlayerClick(e) {
-  if (e.target.closest('.osd-btn, .osd-pill, .seek-hit, .hud, .dialog-layer')) return;
+  if (e.target.closest('.osd-btn, .osd-pill, .seek-hit, .hud, .dialog-layer, .sub-panel, .pk-layer')) return;
   if (e.detail > 1) return;
   const p = state.player;
   if (p.locked) {
@@ -916,7 +1365,7 @@ function onPlayerClick(e) {
 }
 
 function onPlayerDblClick(e) {
-  if (e.target.closest('.osd-btn, .osd-pill, .seek-hit, .dialog-layer')) return;
+  if (e.target.closest('.osd-btn, .osd-pill, .seek-hit, .dialog-layer, .sub-panel, .pk-layer')) return;
   clearTimeout(clickTimer);
   if (state.player.locked) {
     toggleLock();
@@ -1229,13 +1678,14 @@ function renderDock() {
     : (state.player.open ? 'player' : (state.pluginPage ? 'plugins' : state.tab));
 
   const scenarios = [
-    { k: 'library', label: '视频库', icon: 'video' },
-    { k: 'sources', label: '存储位置', icon: 'folder' },
-    { k: 'audio', label: '音乐库', icon: 'music' },
-    { k: 'history', label: '播放历史', icon: 'clock' },
+    { k: 'media', label: '媒体库', icon: 'video' },
+    { k: 'files', label: '文件', icon: 'folder' },
+    { k: 'history', label: '历史', icon: 'clock' },
+    { k: 'settings', label: '设置', icon: 'settings' },
     { k: 'player', label: '播放器 OSD', icon: 'play' },
     { k: 'playlist', label: '播放列表', icon: 'playlist' },
-    { k: 'subs', label: '字幕选择', icon: 'subtitles' },
+    { k: 'subs', label: '字幕面板', icon: 'subtitles' },
+    { k: 'subfile', label: '字幕文件', icon: 'file' },
     { k: 'plugins', label: '插件管理', icon: 'plugin' },
   ];
   const box = $('#scenarios');
@@ -1256,9 +1706,22 @@ function renderDock() {
 function goScenario(k) {
   if (window.innerWidth <= 860) openDock(false);
   if (k === 'player') { openPlayer(state.player.open ? state.player.index : 0); return; }
-  if (k === 'playlist' || k === 'subs') {
+  if (k === 'playlist') {
     if (!state.player.open) openPlayer(state.player.index || 0);
-    openDialog(k === 'subs' ? 'subs' : 'playlist');
+    openDialog('playlist');
+    return;
+  }
+  if (k === 'subs') {
+    if (!state.player.open) openPlayer(state.player.index || 0);
+    toggleSubPanel(true);
+    return;
+  }
+  if (k === 'subfile') {
+    if (!state.player.open) openPlayer(state.player.index || 0);
+    toggleSubPanel(true);
+    state.player.subPicker = true;
+    const el = $('#subPicker');
+    if (el) el.classList.add('on');
     return;
   }
   if (k === 'plugins') { openPlugins(); return; }
@@ -1663,7 +2126,7 @@ function onKey(e) {
     }
     if (k === 'l' || k === 'L') { toggleLock(); return; }
     if (k === 'p' || k === 'P') { openDialog('playlist'); return; }
-    if (k === 's' || k === 'S') { openDialog('subs'); return; }
+    if (k === 's' || k === 'S') { toggleSubPanel(); return; }
     if (k === 'a' || k === 'A') { openDialog('audio'); return; }
   }
 
