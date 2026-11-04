@@ -207,6 +207,9 @@ private:
     int64_t total_duration_ = 0;   // 秒
     int volume_ = 100;
     float brightness_ = 1.0f;
+    // 平台有没有真正的背光接口（Steam Deck / 安卓 / Switch 有，桌面没有）。
+    // 有就直接调系统背光，没有才退回「叠一层黑色蒙层」的模拟。
+    bool backlight_capable_ = false;
     double playback_speed_ = 1.0;
     AspectRatioMode aspect_mode_ = AspectRatioMode::Auto;
     bool touch_locked_ = false;

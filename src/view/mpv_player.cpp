@@ -156,6 +156,11 @@ MPVPlayerView::MPVPlayerView() {
     this->setFocusable(true);
     initMPV();
 
+    // 背光能力只查一次：桌面 / macOS 返回 false，Steam Deck、安卓、Switch 返回 true。
+    // 有就改系统背光，没有才用蒙层模拟（见 setBrightness 与 draw 里的判断）。
+    if (auto* platform = brls::Application::getPlatform())
+        backlight_capable_ = platform->canSetBacklightBrightness();
+
     last_user_action_time_ = std::chrono::steady_clock::now();
 
     // 绑定基础播放与寻迹控制
@@ -177,17 +182,17 @@ MPVPlayerView::MPVPlayerView() {
         return true;
     }, false);
 
-    this->registerAction("大幅快退", brls::ControllerButton::BUTTON_LT, [this]([[maybe_unused]] brls::View* view) {
+    this->registerAction("音量减", brls::ControllerButton::BUTTON_LT, [this]([[maybe_unused]] brls::View* view) {
         if (touch_locked_) return false;
-        seek(-30);
+        setVolume(volume_ - 5);
         return true;
-    }, false);
+    }, false, true);   // 第 5 个参数 = 按住连发
 
-    this->registerAction("大幅快进", brls::ControllerButton::BUTTON_RT, [this]([[maybe_unused]] brls::View* view) {
+    this->registerAction("音量加", brls::ControllerButton::BUTTON_RT, [this]([[maybe_unused]] brls::View* view) {
         if (touch_locked_) return false;
-        seek(30);
+        setVolume(volume_ + 5);
         return true;
-    }, false);
+    }, false, true);
 
     this->registerAction("上一集", brls::ControllerButton::BUTTON_LB, [this]([[maybe_unused]] brls::View* view) {
         if (touch_locked_) return false;
@@ -679,8 +684,9 @@ void MPVPlayerView::drawOverlay() {
 //   这个 bug 曾存在很久而所有自动检查都通过（它们只看视频画面）。
 //   现在由 `verify_ui.py --only osd` 用纯黑视频做底来守卫。
 void MPVPlayerView::drawHud(NVGcontext* vg, float x, float y, float width, float height) {
-    // 亮度蒙层模拟
-    if (brightness_ < 0.99f) {
+    // 亮度蒙层模拟：仅在平台没有背光接口时使用（桌面 / macOS）。
+    // Deck、安卓这类能真正改背光的设备上，再叠一层黑只会二次压暗。
+    if (!backlight_capable_ && brightness_ < 0.99f) {
         nvgBeginPath(vg);
         nvgRect(vg, x, y, width, height);
         nvgFillColor(vg, nvgRGBAf(0.0f, 0.0f, 0.0f, (1.0f - brightness_) * 0.8f));
@@ -1766,6 +1772,13 @@ int MPVPlayerView::getVolume() const {
 
 void MPVPlayerView::setBrightness(float brightness) {
     brightness_ = std::clamp(brightness, 0.1f, 1.0f);
+    // 参考 wiliwili：能让系统改背光，就不要用黑色蒙层糊画面 —— 蒙层只是
+    // 「把亮部压暗」，暗部细节一起被吃掉，而且没有任何一个像素真的变暗。
+    // 只有在没有背光接口的平台（桌面 / macOS）才退回模拟。
+    if (backlight_capable_) {
+        if (auto* platform = brls::Application::getPlatform())
+            platform->setBacklightBrightness(brightness_);
+    }
     showHUD("brightness_high", "亮度 " + std::to_string((int)(brightness_ * 100)) + "%", brightness_);
 }
 

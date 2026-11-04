@@ -67,8 +67,8 @@ def check_keybindings(src_text, verbose):
         "BUTTON_A": "播放/暂停",
         "BUTTON_LEFT": "快退",
         "BUTTON_RIGHT": "快进",
-        "BUTTON_LT": "大幅快退",
-        "BUTTON_RT": "大幅快进",
+        "BUTTON_LT": "音量减",
+        "BUTTON_RT": "音量加",
         "BUTTON_LB": "上一集",
         "BUTTON_RB": "下一集",
         "BUTTON_UP": "播放列表",
@@ -109,13 +109,16 @@ def check_behaviors(src_text, doc_text, verbose):
               f"seek(-{doc_step})" in src_text and f"seek({doc_step})" in src_text,
               f"文档 {doc_step} / 代码 seeks")
 
-    m = re.search(r"\*\*LT / RT\*\*\s*\|\s*快退 / 快进\s*(\d+)\s*秒", doc_text)
-    doc_big = m.group(1) if m else None
-    check("文档写明 LT/RT 步长", bool(doc_big), f"{doc_big} 秒" if doc_big else "未找到")
-    if doc_big:
-        check("LT/RT 步长 文档=代码",
-              f"seek(-{doc_big})" in src_text and f"seek({doc_big})" in src_text,
-              f"文档 {doc_big} / 代码 seeks")
+    # LT/RT 已改为音量（原「快退/快进 30 秒」让位，见 UI-DESIGN 6.9），
+    # 判据随之改成音量步长 —— 同样要求文档与代码两边一致。
+    m = re.search(r"音量\s*[−–-]\s*/\s*\+\s*(\d+)\s*%", doc_text)
+    doc_vol = m.group(1) if m else None
+    check("文档写明 LT/RT 音量步长", bool(doc_vol), f"{doc_vol}%" if doc_vol else "未找到")
+    if doc_vol:
+        check("音量步长 文档=代码",
+              f"setVolume(volume_ - {doc_vol})" in src_text
+              and f"setVolume(volume_ + {doc_vol})" in src_text,
+              f"文档 {doc_vol}% / 代码 setVolume")
 
     # 倍速循环序列
     m = re.search(r"speeds\[\]\s*=\s*\{([^}]+)\}", src_text)
