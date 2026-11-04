@@ -122,6 +122,7 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
   background: #3A404A; border: 1px solid #4A515C;
 }
 .ghost-btn .dot.oled { background: #000; border-color: #545B66; }
+.ghost-btn .dot.light { background: #F2F1ED; border-color: #C6C2BA; }
 .pill-count {
   min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px;
   background: #2A303A; color: #C8CED8;
@@ -419,9 +420,19 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
   --text-dim: #A8AFBA;
   --text-mute: #717884;
   --accent: #FF9F45;
+  --accent-rgb: 255,159,69;
   --accent-ink: #1A1208;
   --danger: #FF6B6B;
   --sidebar: #0A0C0F;
+
+  /* 语义变量：这些位置原本写死了 rgba(255,255,255,…)，
+     一旦切到浅色主题就全部消失。集中成变量后只在这里分叉。 */
+  --hairline: rgba(255,255,255,.055); /* 顶栏 / 底栏 / 侧栏分隔线 */
+  --tile: rgba(42,47,55,.55);         /* 卡片图标块、次要按钮底 */
+  --track: rgba(243,244,246,.12);     /* 进度轨道 */
+  --cell-line: rgba(43,48,56,.75);    /* 卡片描边 */
+  --focused-bg: #21252C;              /* 选中卡片底 */
+  --dialog: #14171C;                  /* 弹层底 */
 
   position: relative;
   overflow: hidden;
@@ -445,6 +456,48 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
   --outline-strong: #333841;
   --text-mute: #6C737E;
   --sidebar: #000000;
+  --hairline: rgba(255,255,255,.05);
+  --tile: rgba(38,43,50,.55);
+  --track: rgba(243,244,246,.1);
+  --cell-line: rgba(46,52,61,.75);
+  --focused-bg: #15171B;
+  --dialog: #0D0F12;
+}
+
+/* 浅色主题：暖白而不是纯白 —— 纯白在掌机低亮度下会显得"发光"，
+   而且和橙色强调色的对比会过于刺眼。强调色同步压深，
+   否则 #FF9F45 压在 #FFF 上对比度只有 1.9:1，按钮文字读不出来。 */
+.screen[data-theme="light"] {
+  --bg: #F2F1ED;
+  --surface: #FFFFFF;
+  --surface-raised: #FFFFFF;
+  --surface-sunken: #E9E7E2;
+  --outline: #DFDCD5;
+  --outline-strong: #C6C2BA;
+  --text: #1B1A18;
+  --text-dim: #5F5C56;
+  --text-mute: #8C8880;
+  --accent: #C4650F;
+  --accent-rgb: 196,101,15;
+  --accent-ink: #FFFFFF;
+  --danger: #C0392B;
+  --sidebar: #EAE7E1;
+  --hairline: rgba(27,26,24,.09);
+  --tile: rgba(27,26,24,.055);
+  --track: rgba(27,26,24,.13);
+  --cell-line: rgba(27,26,24,.1);
+  --focused-bg: #FFF4E8;
+  --dialog: #FFFFFF;
+}
+/* 浅色下卡片靠边框区分不够：白卡压在暖灰底上几乎融在一起，
+   补一层极轻的阴影把卡片"抬"起来，比加深底色干净。 */
+.screen[data-theme="light"] .cell,
+.screen[data-theme="light"] .gcard {
+  box-shadow: 0 1px 2px rgba(27,26,24,.05), 0 2px 10px rgba(27,26,24,.045);
+}
+.screen[data-theme="light"] .cell.focused,
+.screen[data-theme="light"] .gcard.focused {
+  box-shadow: 0 0 0 1px rgba(196,101,15,.22), 0 4px 16px rgba(196,101,15,.13);
 }
 
 .screen button { cursor: pointer; }
@@ -456,7 +509,7 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
   flex: none; height: 92px;
   display: flex; align-items: center; gap: 16px;
   padding: 0 48px;
-  border-bottom: 1px solid rgba(255,255,255,.055);
+  border-bottom: 1px solid var(--hairline);
 }
 .app-header .mark {
   width: 44px; height: 44px; border-radius: 12px;
@@ -478,21 +531,44 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
   box-shadow: 0 0 0 3px rgba(76,158,106,.14);
 }
 
+/* 列表 / 网格切换：与版本标记同处顶栏右侧，不占内容区高度 */
+.layout-seg {
+  margin-left: auto;
+  display: flex; gap: 2px; padding: 3px;
+  border-radius: 10px;
+  background: var(--tile);
+  border: 1px solid var(--outline);
+}
+.layout-seg button {
+  width: 40px; height: 30px; border-radius: 7px;
+  display: grid; place-items: center;
+  color: var(--text-mute);
+  transition: background .12s, color .12s;
+}
+.layout-seg button:hover { color: var(--text); }
+.layout-seg button.on { background: var(--surface-raised); color: var(--accent); }
+.screen[data-theme="light"] .layout-seg button.on { background: #fff; }
+.layout-seg + .ver { margin-left: 12px; }
+
 /* 主体 */
 .app-body { flex: 1; display: flex; min-height: 0; }
 
+/* 侧栏 216 = 1280 的 16.9%。
+   原来是 300（23.4%），4 个条目右侧留一大片空，内容区被白挤掉 84px。
+   216 是「4 个汉字条目 + 32 左内边距 + 24 右内边距」的下限再加 20 的呼吸：
+   76 + 32 + 24 = 132 是硬需求，216 留了 84 的余量给将来的二级项。 */
 .sidebar {
-  flex: none; width: 300px;
-  padding: 20px 0;
+  flex: none; width: 216px;
+  padding: 18px 0;
   background: var(--sidebar);
-  display: flex; flex-direction: column; gap: 8px;
-  border-right: 1px solid rgba(255,255,255,.035);
+  display: flex; flex-direction: column; gap: 6px;
+  border-right: 1px solid var(--hairline);
 }
 .nav-item {
-  position: relative; height: 62px; flex: none;
+  position: relative; height: 56px; flex: none;
   display: flex; align-items: center;
-  padding: 0 40px 0 48px;
-  font-size: 20px; color: var(--text-dim);
+  padding: 0 24px 0 32px;
+  font-size: 19px; color: var(--text-dim);
   transition: color .1s;
 }
 .nav-item .bar {
@@ -501,12 +577,16 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
   transition: height .12s ease;
 }
 .nav-item.active { color: var(--text); }
+.nav-item.active::after {
+  content: ""; position: absolute; inset: 5px 10px 5px 5px;
+  border-radius: 9px; background: var(--tile); z-index: -1;
+}
 .nav-item.active .bar { height: 26px; opacity: .85; }
-.nav-item.focused { color: #fff; }
+.nav-item.focused { color: var(--text); }
 .nav-item.focused .bar { height: 26px; opacity: 1; }
 .nav-item.focused::after {
-  content: ""; position: absolute; inset: 6px 12px 6px 6px;
-  border-radius: 10px; background: rgba(255,255,255,.035); z-index: -1;
+  content: ""; position: absolute; inset: 5px 10px 5px 5px;
+  border-radius: 9px; background: var(--surface-sunken); z-index: -1;
 }
 
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -514,10 +594,10 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
   flex: 1; min-height: 0; overflow-y: auto;
   padding: 4px 28px 110px 24px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,.1) transparent;
+  scrollbar-color: var(--track) transparent;
 }
 .list::-webkit-scrollbar { width: 4px; }
-.list::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 2px; }
+.list::-webkit-scrollbar-thumb { background: var(--track); border-radius: 2px; }
 
 /* 分组标题 */
 .section-h {
@@ -539,15 +619,14 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
   padding: 0 18px 0 22px;
   border-radius: 14px;
   background: var(--surface);
-  border: 1px solid rgba(43,48,56,.75);
+  border: 1px solid var(--cell-line);
   display: flex; align-items: center; gap: 16px;
   transition: background .12s, border-color .12s;
 }
-.screen[data-theme="oled"] .cell { border-color: rgba(46,52,61,.75); }
 .cell.focused {
-  background: var(--surface-raised);
-  border-color: rgba(255,159,69,.65);
-  box-shadow: 0 0 0 1px rgba(255,159,69,.10);
+  background: var(--focused-bg);
+  border-color: rgba(var(--accent-rgb), .65);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), .10);
 }
 .cell.focused::before {
   content: ""; position: absolute; left: 5px; top: 50%;
@@ -556,9 +635,9 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
 }
 .cell .tile {
   flex: none; width: 46px; height: 46px; border-radius: 13px;
-  background: rgba(42,47,55,.55);
+  background: var(--tile);
   display: grid; place-items: center;
-  color: rgba(168,175,186,.85);
+  color: var(--text-dim);
 }
 .cell.focused .tile { background: var(--surface-sunken); color: var(--accent); }
 .cell .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
@@ -580,12 +659,120 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
 .cell .pbar {
   position: absolute; left: 84px; right: 44px; bottom: 7px;
   height: 3px; border-radius: 2px; overflow: hidden;
-  background: rgba(243,244,246,.12);
+  background: var(--track);
 }
 .cell .pbar i {
   display: block; height: 100%; border-radius: 2px;
   background: rgba(255,159,69,.95);
 }
+
+/* ── 网格布局 ──────────────────────────────────────────────
+   卡片 234 × 176：16:9 缩略图 131.6 + 标题区 44。
+   列宽由 (1280 − 216 侧栏 − 24/28 列表内边距 − 28 网格内边距 − 48 间隙) / 4 得出，
+   所以它跟着侧栏宽度一起变；改侧栏要回来重算列宽。 */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px 16px;
+  padding: 10px 14px 0;
+}
+.gcard {
+  position: relative;
+  display: flex; flex-direction: column;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--cell-line);
+  overflow: hidden;
+  transition: border-color .12s, box-shadow .12s, transform .12s;
+}
+.gcard.focused {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), .22);
+}
+.gcard .thumb {
+  position: relative;
+  width: 100%; flex: none;
+  aspect-ratio: 16 / 9;   /* 列宽随侧栏变化，比例不能写死 */
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+.gcard .thumb .frame {
+  position: absolute; inset: 0;
+  /* 缩略图不是「第一帧」——片头黑场太常见。实机按 min(时长×0.1, 30s) 抽帧。
+     这里的四套是同一思路的示意：硬边的地平线 + 一个明确的亮源。
+     纯径向渐变会糊成色斑，必须有一条看得见的边，才像"画面"而不像"雾"。 */
+}
+/* 暗角：让色块"像画面"而不是"像色斑"的关键一层 */
+.gcard .thumb::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(78% 76% at 50% 44%, transparent 36%, rgba(0,0,0,.55) 100%);
+}
+.gcard .thumb .frame.t0 {
+  background:
+    radial-gradient(circle 20px at 71% 34%, rgba(255,236,198,.95) 0 52%, rgba(255,190,130,0) 100%),
+    linear-gradient(180deg, transparent 58%, rgba(255,182,120,.17) 58% 74%, transparent 74%),
+    linear-gradient(180deg, #3A5566 0 58%, #16232C 58% 100%);
+}
+/* 黄昏城市剪影：六个高度不同的深色竖条压出一条天际线。
+   直接堆亮色方块会像柱状图 —— 楼是"剪影"，亮的是它们背后的天光。 */
+.gcard .thumb .frame.t1 {
+  background:
+    linear-gradient(to bottom, transparent 0 30%, #0E0B09 30%) 0%   0 / 17% 100% no-repeat,
+    linear-gradient(to bottom, transparent 0 52%, #0E0B09 52%) 17%  0 / 12% 100% no-repeat,
+    linear-gradient(to bottom, transparent 0 22%, #0E0B09 22%) 29%  0 / 15% 100% no-repeat,
+    linear-gradient(to bottom, transparent 0 46%, #0E0B09 46%) 44%  0 / 10% 100% no-repeat,
+    linear-gradient(to bottom, transparent 0 38%, #0E0B09 38%) 54%  0 / 22% 100% no-repeat,
+    linear-gradient(to bottom, transparent 0 60%, #0E0B09 60%) 76%  0 / 24% 100% no-repeat,
+    linear-gradient(180deg, #6E3E1C 0%, #B8702F 56%, #E3A870 100%);
+}
+.gcard .thumb .frame.t2 {
+  background:
+    linear-gradient(180deg, #D8AF7E 0%, #C18F5E 100%) 7% 38% / 17% 30% no-repeat,
+    linear-gradient(114deg, rgba(255,214,168,.44) 0 23%, rgba(255,214,168,.05) 23% 31%, rgba(255,214,168,0) 31% 100%),
+    linear-gradient(180deg, #2C2024 0 72%, #120C0E 72% 100%);
+}
+.gcard .thumb .frame.t3 {
+  background:
+    radial-gradient(circle 8px at 27% 50%, rgba(186,216,240,.6), transparent 100%),
+    radial-gradient(circle 5px at 41% 54%, rgba(186,216,240,.4), transparent 100%),
+    linear-gradient(158deg, transparent 0 48%, #16202A 48% 100%),
+    linear-gradient(180deg, #1B2833 0 54%, #0A1014 54% 100%);
+}
+.gcard .thumb .dur {
+  position: absolute; right: 8px; bottom: 8px;
+  height: 22px; padding: 0 8px; border-radius: 6px;
+  display: grid; place-items: center;
+  background: rgba(0,0,0,.72); backdrop-filter: blur(4px);
+  color: #F3F4F6; font-size: 12px;
+  font-variant-numeric: tabular-nums; letter-spacing: .01em;
+}
+.gcard .thumb .seen {
+  position: absolute; left: 8px; top: 8px;
+  height: 22px; padding: 0 8px; border-radius: 6px;
+  display: grid; place-items: center;
+  background: rgba(255,159,69,.9); color: #1A1208;
+  font-size: 11.5px; font-weight: 500;
+}
+.gcard .thumb .pl {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+  background: rgba(255,255,255,.22);
+}
+.gcard .thumb .pl i { display: block; height: 100%; background: var(--accent); }
+.gcard .cap {
+  padding: 7px 12px 0;
+  display: flex; flex-direction: column; gap: 2px;
+  min-width: 0;
+}
+.gcard .cap .tt {
+  font-size: 14px; line-height: 18px; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.gcard .cap .ss {
+  font-size: 12.5px; line-height: 15px; color: var(--text-mute);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  padding-bottom: 4px;
+}
+
 
 /* 空态 */
 .empty-state {
@@ -595,14 +782,14 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
 }
 .empty-state .ring {
   width: 76px; height: 76px; border-radius: 50%;
-  background: rgba(24,27,32,.9); border: 1px solid rgba(43,48,56,.9);
-  display: grid; place-items: center; color: rgba(255,159,69,.9);
+  background: var(--surface); border: 1px solid var(--cell-line);
+  display: grid; place-items: center; color: var(--accent);
   margin-bottom: 22px;
 }
 .empty-state .t { font-size: 17px; color: var(--text); }
 .empty-state .h {
   margin-top: 10px; font-size: 12.5px; line-height: 1.6;
-  color: rgba(168,175,186,.78); text-align: center; white-space: pre-line;
+  color: var(--text-dim); text-align: center; white-space: pre-line;
 }
 
 /* 底部提示栏 */
@@ -610,7 +797,7 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
   flex: none; height: 64px;
   display: flex; align-items: center;
   padding: 0 40px;
-  border-top: 1px solid rgba(255,255,255,.055);
+  border-top: 1px solid var(--hairline);
   font-size: 13px; color: var(--text-mute);
 }
 .app-footer .clock {
@@ -645,7 +832,7 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
 .np .t { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .np .s { font-size: 12.5px; color: var(--text-dim); }
 .np .time { margin-left: auto; font-size: 14px; color: var(--text-mute); font-variant-numeric: tabular-nums; }
-.np .line { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: rgba(255,255,255,.08); }
+.np .line { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--track); }
 .np .line i { display: block; height: 100%; background: var(--accent); }
 
 /* ── 播放器 ───────────────────────────────────────────────── */
@@ -713,11 +900,17 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
     rgba(0,0,0,.42) 58%, rgba(0,0,0,.16) 84%, rgba(0,0,0,0) 100%);
   pointer-events: none;
 }
+/* 底栏 168（原 238）。
+   原来分三行：设置行(距底 196) / 主控行(130) / 进度条(66) / 时间(34)，
+   三条对齐轴互不相干。现在压成两行：
+     工具条 距底 124 —— 左右两端分别锚在 m 与 w−m
+     进度条 距底 58 —— 时间并进来，占进度条两端
+   底栏少掉 70px 就是画面多出来的 70px。 */
 .osd-bottom {
-  position: absolute; left: 0; right: 0; bottom: 0; height: 238px;
+  position: absolute; left: 0; right: 0; bottom: 0; height: 168px;
   background: linear-gradient(to bottom,
-    rgba(0,0,0,.06) 0%, rgba(0,0,0,.06) 26%,
-    rgba(0,0,0,.60) 60%, rgba(0,0,0,.94) 100%);
+    rgba(0,0,0,.02) 0%, rgba(0,0,0,.34) 24%,
+    rgba(0,0,0,.74) 62%, rgba(0,0,0,.95) 100%);
   pointer-events: none;
 }
 
@@ -782,11 +975,11 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
 }
 .seek-hit.dragging .seek-knob { opacity: 1; transform: scale(1); }
 .seek-bubble {
-  position: absolute; bottom: 34px; transform: translateX(-50%);
-  height: 34px; padding: 0 14px; border-radius: 17px;
+  position: absolute; bottom: 30px; transform: translateX(-50%);
+  height: 28px; padding: 0 12px; border-radius: 14px;
   background: rgba(20,22,26,.94);
   border: 1px solid rgba(255,159,69,.47);
-  color: #fff; font-size: 15px; display: grid; place-items: center;
+  color: #fff; font-size: 13.5px; display: grid; place-items: center;
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 
@@ -842,9 +1035,9 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
 .dialog {
   width: 720px; max-width: calc(100% - 80px);
   border-radius: 20px; overflow: hidden;
-  background: #14171C;
-  border: 1px solid rgba(255,255,255,.09);
-  box-shadow: 0 40px 120px rgba(0,0,0,.66);
+  background: var(--dialog);
+  border: 1px solid var(--cell-line);
+  box-shadow: 0 40px 120px rgba(0,0,0,.5);
   transform: scale(.985) translateY(4px);
   transition: transform .16s cubic-bezier(.22,.61,.36,1);
 }
@@ -858,11 +1051,11 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
   margin-left: auto; width: 34px; height: 34px; border-radius: 50%;
   display: grid; place-items: center; color: var(--text-dim);
 }
-.dialog-head .close:hover { background: rgba(255,255,255,.07); color: #fff; }
+.dialog-head .close:hover { background: var(--tile); color: var(--text); }
 .dialog-sub { padding: 0 22px 8px; font-size: 12.5px; color: var(--text-mute); }
 .dialog-list { padding: 0 8px 10px; max-height: 460px; overflow-y: auto; }
 .dialog-list::-webkit-scrollbar { width: 4px; }
-.dialog-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); }
+.dialog-list::-webkit-scrollbar-thumb { background: var(--track); }
 .dialog .cell { height: 64px; margin: 4px 8px; }
 .dialog .cell .tile { width: 40px; height: 40px; border-radius: 11px; }
 .dialog .cell .tile svg { width: 20px; height: 20px; }
@@ -874,10 +1067,10 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
 }
 .dialog-foot button {
   height: 40px; padding: 0 18px; border-radius: 20px;
-  background: rgba(255,255,255,.06); color: var(--text);
-  border: 1px solid rgba(255,255,255,.1); font-size: 14px;
+  background: var(--tile); color: var(--text);
+  border: 1px solid var(--outline); font-size: 14px;
 }
-.dialog-foot button:hover { background: rgba(255,255,255,.1); }
+.dialog-foot button:hover { background: var(--surface-sunken); }
 .dialog-foot button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 500; }
 
 /* 插件管理全屏页 */

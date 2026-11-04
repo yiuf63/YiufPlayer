@@ -42,6 +42,8 @@ const ICONS = {
   plus:      '<path d="M12 5v14M5 12h14"/>',
   arrowUp:   '<path d="M12 19V6M6.5 11.5 12 6l5.5 5.5"/>',
   tv:        '<rect x="3" y="4.5" width="18" height="12.5" rx="2.4"/><path d="M8 20h8M12 17v3"/>',
+  listLines: '<path d="M4 7h16M4 12h16M4 17h11"/>',
+  grid2:     '<rect x="3.8" y="3.8" width="7" height="7" rx="1.6"/><rect x="13.2" y="3.8" width="7" height="7" rx="1.6"/><rect x="3.8" y="13.2" width="7" height="7" rx="1.6"/><rect x="13.2" y="13.2" width="7" height="7" rx="1.6"/>',
 };
 
 function ic(name, size, sw) {
@@ -166,8 +168,10 @@ const RISKS = [
     text: '触屏用户要在 8 秒内从 6 个图标里找到「画面比例」。手柄有焦点导航，触屏只能靠记忆。是否改成「点空白处才收起」？' },
   { tag: '输入', name: '亮度仍只有手势',
     text: 'LT/RT 已经接管音量，但亮度在没有触摸屏的设备上无法调节。要不要把亮度也放进 OSD，或做成「LT/RT + 长按」？' },
-  { tag: '列表', name: '卡片没有封面',
-    text: '现在只有 46px 的类型图标。媒体库条目一多，页面就退化成文件名列表，缺少「一眼认出这是什么片子」的能力。' },
+  { tag: '缩略图', name: '首帧多半是黑场',
+    text: '抽「第一帧」会得到片头黑场或淡入前的纯黑，整面网格会有一半是黑的。实机按 min(时长×0.1, 30s) 抽帧，缓存到 ~/.cache/deck-player/thumbs。' },
+  { tag: '主题', name: '浅色只管浏览页',
+    text: '浅色主题不作用于播放页 OSD：亮底控件压在亮画面上会直接消失。切浅色时播放器仍然是暗的，这是有意为之，不是漏做。' },
   { tag: '对比', name: '亮场下的进度条轨道',
     text: '未播放段是 20% 白，压在雪景、天空这类高亮画面上几乎消失（切到「亮场」就能看到）。是否改成「深色槽 + 亮色细边」？' },
 ];
@@ -182,6 +186,7 @@ const state = {
   theme: 'dark',
   device: 'deck',
   scene: 'dark',
+  layout: 'grid',
   focus: { zone: 'main', i: 0 },
   annotate: false,
   zoom: 'fit',
@@ -260,6 +265,30 @@ function cell(o) {
     badge + chev + prog + '</div>';
 }
 
+/* 网格卡片：234 × 176 = 16:9 缩略图 131.6 + 标题区 44。
+   缩略图用渐变示意「按 10% 时长抽的那一帧」，不是真实视频帧 ——
+   原型不引入 ffmpeg.wasm，接入成本远大于它带来的评审价值。 */
+function gcard(o) {
+  const seen = o.progress === 1 ? '<span class="seen">已看完</span>' : '';
+  const dur = o.dur ? '<span class="dur">' + fmt(o.dur) + '</span>' : '';
+  const pl = (o.progress != null && o.progress > 0 && o.progress < 1)
+    ? '<span class="pl"><i style="width:' + Math.round(clamp(o.progress, 0, 1) * 100) + '%"></i></span>'
+    : '';
+  const spec = o.spec || '234 × 176 · 缩略图 16:9 · 圆角 14 · 标题 14 / 副标题 12.5';
+  return '<div class="gcard focusable" data-action="' + o.action + '"' +
+    ' data-id="' + (o.id != null ? o.id : '') + '"' +
+    ' data-name="' + esc(o.name || '网格卡片') + '" data-spec="' + esc(spec) + '"' +
+    (o.risk ? ' data-risk="' + esc(o.risk) + '"' : '') + '>' +
+    '<span class="thumb"><span class="frame ' + (o.tone || 't0') + '"></span>' +
+    seen + dur + pl + '</span>' +
+    '<span class="cap"><span class="tt">' + esc(o.title) + '</span>' +
+    '<span class="ss">' + esc(o.sub) + '</span></span></div>';
+}
+
+function grid(items) {
+  return '<div class="grid" data-cols="4">' + items.join('') + '</div>';
+}
+
 function section(title) {
   return '<div class="section-h" data-name="分组标题" ' +
     'data-spec="高 46 · 标题 13px / 字距 0.6 · 强调短条 3×12">' +
@@ -277,7 +306,7 @@ function navHTML() {
   return TABS.map((t, i) =>
     '<div class="nav-item' + (state.tab === t.key ? ' active' : '') + ' focusable" ' +
     'data-tab="' + t.key + '" data-name="侧边栏条目" ' +
-    'data-spec="高 62 · 左内边距 48 · 字号 20 · 强调条 3×26">' +
+    'data-spec="高 56 · 左内边距 32 · 字号 19 · 强调条 3×26">' +
     '<span class="bar"></span>' + t.label + '</div>').join('');
 }
 
@@ -293,17 +322,27 @@ function listHTML() {
       cell({ icon: 'plus', title: '添加 / 管理插件', sub: '从 ZIP 或目录安装视频源 / 刮削源插件', chevron: true, action: 'plugins' });
   }
   if (t === 'library') {
-    return section('媒体文件夹') +
+    const head =
+      section('媒体文件夹') +
       cell({ icon: 'plus', title: '添加媒体文件夹', sub: '选择包含视频 / 音乐的目录，自动扫描并记住', action: 'add-folder' }) +
       cell({ icon: 'folder', title: '影片', sub: '/home/deck/Videos', chevron: true, action: 'folder' }) +
       cell({ icon: 'folder', title: '音乐', sub: '/home/deck/Music', chevron: true, action: 'folder' }) +
       cell({ icon: 'search', title: '重新扫描媒体库', sub: '更新新增或修改的文件', action: 'rescan' }) +
-      section('视频 · ' + VIDEOS.length) +
-      VIDEOS.map((v, i) => cell({
-        icon: 'video', title: v.title, sub: v.sub, badge: v.badge, progress: v.progress,
-        action: 'play', id: i, name: '视频卡片',
-        risk: i === 0 ? '卡片只有类型图标，没有封面图：条目一多就退化成文件名列表。' : '',
-      })).join('');
+      section('视频 · ' + VIDEOS.length);
+
+    if (state.layout === 'grid') {
+      return head + grid(VIDEOS.map((v, i) => gcard({
+        action: 'play', id: i, tone: 't' + (i % 4),
+        title: v.title, sub: v.sub, dur: v.dur, progress: v.progress,
+        name: '视频缩略图卡片',
+        risk: i === 0 ? '缩略图按 min(时长×0.1, 30s) 抽帧。取第一帧会得到片头黑场，网格会花掉一半。' : '',
+      })));
+    }
+    return head + VIDEOS.map((v, i) => cell({
+      icon: 'video', title: v.title, sub: v.sub, badge: v.badge, progress: v.progress,
+      action: 'play', id: i, name: '视频卡片',
+      risk: i === 0 ? '列表模式没有缩略图：条目一多就退化成文件名列表。切到网格可看缩略图方案。' : '',
+    })).join('');
   }
   if (t === 'audio') {
     return section('音乐 · ' + MUSIC.length) +
@@ -312,11 +351,18 @@ function listHTML() {
         action: 'play-music', id: i, name: '音乐卡片',
       })).join('');
   }
-  return section('最近播放 · ' + HISTORY.length) +
-    HISTORY.map((h) => cell({
-      icon: 'clock', title: h.title, sub: h.sub, badge: h.badge,
-      progress: h.progress, action: 'play', id: h.idx, name: '历史卡片',
-    })).join('');
+  const body = state.layout === 'grid'
+    ? grid(HISTORY.map((h) => gcard({
+        action: 'play', id: h.idx, tone: 't' + (h.idx % 4),
+        title: h.title, sub: h.sub,
+        dur: (VIDEOS[h.idx] || {}).dur, progress: h.progress,
+        name: '历史缩略图卡片',
+      })))
+    : HISTORY.map((h) => cell({
+        icon: 'clock', title: h.title, sub: h.sub, badge: h.badge,
+        progress: h.progress, action: 'play', id: h.idx, name: '历史卡片',
+      })).join('');
+  return section('最近播放 · ' + HISTORY.length) + body;
 }
 
 function browseHTML() {
@@ -327,18 +373,42 @@ function browseHTML() {
     icon: 'back', title: '返回上一级', sub: parent || '存储位置',
     chevron: true, action: 'up',
   });
-  const rows = node.items.map((it) => {
-    if (it.dir) {
-      return cell({ icon: 'folder', title: it.name, sub: '文件夹', chevron: true, action: 'browse', id: it.path });
-    }
-    if (it.m != null) {
-      return cell({ icon: 'music', title: it.name, sub: it.sub, action: 'play-music', id: it.m });
-    }
-    return cell({ icon: 'video', title: it.name, sub: it.sub, action: 'play', id: it.v });
-  }).join('');
+
+  const dirs = node.items.filter((it) => it.dir);
+  const videos = node.items.filter((it) => !it.dir && it.v != null);
+  const tracks = node.items.filter((it) => it.m != null);
+
+  const dirBlock = dirs.length
+    ? section('子文件夹') + dirs.map((it) =>
+        cell({ icon: 'folder', title: it.name, sub: '文件夹', chevron: true, action: 'browse', id: it.path })).join('')
+    : '';
+
+  let vidBlock = '';
+  if (videos.length) {
+    vidBlock = state.layout === 'grid'
+      ? grid(videos.map((it, k) => gcard({
+          action: 'play', id: it.v, tone: 't' + (k % 4),
+          title: it.name, sub: it.sub,
+          dur: (VIDEOS[it.v] || {}).dur,
+          progress: (VIDEOS[it.v] || {}).progress,
+          name: '文件缩略图卡片',
+        })))
+      : videos.map((it) =>
+          cell({ icon: 'video', title: it.name, sub: it.sub, action: 'play', id: it.v })).join('');
+  }
+
+  const trackBlock = tracks.length
+    ? tracks.map((it) =>
+        cell({ icon: 'music', title: it.name, sub: it.sub, action: 'play-music', id: it.m })).join('')
+    : '';
+
   const empty = node.items.length ? ''
     : emptyState('folder', '这个文件夹是空的', '支持常见的视频 / 音频格式\n同名字幕会自动匹配');
-  return up + section(node.name + ' · ' + node.items.length + ' 项') + rows + empty;
+
+  return up + dirBlock +
+    (videos.length ? section('视频 · ' + videos.length) + vidBlock : '') +
+    (tracks.length ? section('音频 · ' + tracks.length) + trackBlock : '') +
+    empty;
 }
 
 function hintsHTML() {
@@ -370,14 +440,24 @@ function npHTML() {
 
 function renderApp() {
   const app = $('#app');
+  const layoutSeg =
+    '<div class="layout-seg" id="layoutSeg" role="group" aria-label="布局">' +
+      '<button data-layout="list" class="' + (state.layout === 'list' ? 'on' : '') + '" ' +
+        'title="列表：一行一部片，信息密度高">' + ic('listLines', 17, 1.9) + '</button>' +
+      '<button data-layout="grid" class="' + (state.layout === 'grid' ? 'on' : '') + '" ' +
+        'title="网格：缩略图墙，一眼认出片子">' + ic('grid2', 17, 1.9) + '</button>' +
+    '</div>';
+
   app.innerHTML =
     '<header class="app-header" data-name="应用顶栏" data-spec="高 92 · 左右内边距 48 · 标题 29px">' +
       '<span class="mark">' + ic('video', 24, 1.8) + '</span>' +
       '<h1>DeckPlayer</h1>' +
+      layoutSeg +
       '<span class="ver"><i></i>GPL-3.0</span>' +
     '</header>' +
     '<div class="app-body">' +
-      '<nav class="sidebar" id="sidebar" data-name="侧边栏" data-spec="宽 300 · 条目高 62 · 字号 20 · 强调条 3×26">' +
+      '<nav class="sidebar" id="sidebar" data-name="侧边栏" ' +
+        'data-spec="宽 216（1280 的 16.9%）· 条目高 56 · 字号 19 · 强调条 3×26">' +
         navHTML() + '</nav>' +
       '<section class="main" id="main"><div class="list" id="list">' + listHTML() + '</div></section>' +
     '</div>' +
@@ -395,14 +475,24 @@ function renderApp() {
   bindAppEvents();
 }
 
+function setLayout(v) {
+  if (state.layout === v) return;
+  state.layout = v;
+  state.focus = { zone: 'main', i: state.focus.i };
+  renderApp();
+  toast(v === 'grid' ? '网格：缩略图墙 · 一屏 3 行 × 4 列' : '列表：一行一部片 · 信息密度更高');
+}
+
 function bindAppEvents() {
   const app = $('#app');
 
   app.onclick = (e) => {
     if (state.annotate) return; // 标注模式由全局捕获处理
+    const lay = e.target.closest('[data-layout]');
+    if (lay) { setLayout(lay.dataset.layout); return; }
     const nav = e.target.closest('.nav-item');
     if (nav) { switchTab(nav.dataset.tab); return; }
-    const c = e.target.closest('.cell');
+    const c = e.target.closest('.cell, .gcard');
     if (c) { activateCell(c); return; }
     if (e.target.closest('.np')) {
       state.np.playing = !state.np.playing;
@@ -456,6 +546,43 @@ function goUp() {
 function navItems() { return $$('.nav-item'); }
 function mainItems() { return $$('#main .focusable'); }
 
+/* 网格模式下上下键要按「一行 4 个」跳，不是 ±1。
+   返回 0 表示当前焦点不在网格里（列表或侧栏）。 */
+function gridCols() {
+  if (state.focus.zone !== 'main') return 0;
+  const el = mainItems()[state.focus.i];
+  if (!el) return 0;
+  const g = el.closest('.grid');
+  return g ? parseInt(g.dataset.cols || '4', 10) : 0;
+}
+
+/* 在网格内按「网格自己的顺序」移动。
+   不能直接用 moveFocus(±4)：最后一行不足 4 张时，clamp 会把焦点甩出网格
+   （例如 8 项里从第 8 项上移 4 会落到列表区第 4 行），跳变毫无规律。
+   所以这里按网格内的相对位置算。
+
+   返回值：
+     'nogrid' 焦点不在网格里，交给调用方
+     'moved'  真的移动了
+     'before' 已经在第一张（按左键应该回侧栏）
+     'after'  已经在最后一张（按右键到头了，按键吃掉不移动） */
+function moveInGrid(step) {
+  const items = mainItems();
+  const cur = items[state.focus.i];
+  if (!cur) return 'nogrid';
+  const g = cur.closest('.grid');
+  if (!g) return 'nogrid';
+  const cards = items.filter((e) => e.closest('.grid') === g);
+  const pos = cards.indexOf(cur);
+  const next = pos + step;
+  if (next < 0) return 'before';
+  if (next >= cards.length) return 'after';
+  state.focus.i = items.indexOf(cards[next]);
+  applyFocus();
+  cards[next].scrollIntoView({ block: 'nearest' });
+  return 'moved';
+}
+
 function applyFocus() {
   const navs = $$('.nav-item');
   const mains = $$('#main .focusable');
@@ -508,13 +635,24 @@ function screenSize() {
   return { w: d.w, h: d.h };
 }
 
+/* OSD 几何 —— 对应实机 src/view/mpv_player.cpp 的 namespace osd。
+ *
+ * 2026-11 改版：从「三行 + 三条轴」压成「两行 + 两条轴」。
+ *   旧：设置行(距底 196, 右对齐) / 主控行(130, 居中) / 进度条(66) / 时间(34)
+ *   新：工具条(124, 左端 m ↔ 右端 w−m) / 进度条(58) + 时间内联在两端
+ * 底栏高度随之 238 → 168。 */
 function osdGeom(w, h) {
   const m = clamp(w * 0.042, 24, 56);
-  const barCY = h - 66;
-  const timeCY = h - 34;
-  const trCY = barCY - 64;
-  const setCY = trCY - 66;
-  return { m: m, barCY: barCY, timeCY: timeCY, trCY: trCY, setCY: setCY };
+  const barCY = h - 58;    // 进度条中心
+  const toolCY = h - 124;  // 工具条中心（唯一一行控件）
+  const gap = 62;          // 时间占位：进度条两端各让出这么多
+  return {
+    m: m,
+    barCY: barCY,
+    toolCY: toolCY,
+    barX: m + gap,
+    barW: w - m * 2 - gap * 2,
+  };
 }
 
 function openPlayer(index) {
@@ -570,7 +708,7 @@ function buildPlayer() {
   let right = settingsRight;
   const place = (id, icon, name) => {
     const cx = right - 20;
-    setBtns.push(btn(id, cx, g.setCY, 40, icon, 19, '', name,
+    setBtns.push(btn(id, cx, g.toolCY, 40, icon, 19, '', name,
       '直径 40 · 间距 12 · 命中区 48'));
     right = cx - 20 - 12;
   };
@@ -581,7 +719,7 @@ function buildPlayer() {
   const speedLabel = (Math.round(p.speed * 10) % 10 === 0 ? p.speed.toFixed(0) : p.speed.toFixed(1)) + '×';
   const speedPill =
     '<button class="osd-pill" id="btnSpeed" data-name="倍速胶囊" data-spec="78×34 · 间距 12 · 命中区 86×42" ' +
-    'style="left:' + pillLeft + 'px;top:' + (g.setCY - 17) + 'px;width:78px">' +
+    'style="left:' + pillLeft + 'px;top:' + (g.toolCY - 17) + 'px;width:78px">' +
     ic('speed', 16, 1.8) + '<span id="speedText">' + speedLabel + '</span></button>';
   right = pillLeft - 12;
   place('btnAudio', 'audio', '音轨');
@@ -594,7 +732,7 @@ function buildPlayer() {
       '<div class="scene ' + state.scene + '" id="scene"><div class="grain"></div></div>' +
 
       '<div class="osd on fade" id="osd" data-name="播放器 OSD" ' +
-        'data-spec="顶栏 112 / 底栏 238 / 进度条 5 / 主控 64·46·40 / 设置 40" ' +
+        'data-spec="顶栏 112 / 底栏 168 / 进度条 5 / 工具条 64·46·40 / 设置 40" ' +
         'data-risk="触屏用户要在 8 秒内从 6 个图标里找到目标；手柄有焦点导航，触屏只能靠记忆。">' +
         '<div class="osd-top"></div>' +
         '<div class="osd-bottom"></div>' +
@@ -609,22 +747,27 @@ function buildPlayer() {
         '<div class="osd-clock" style="right:' + g.m + 'px;top:31px;line-height:14px">' + clock(false) + '</div>' +
 
         '<div class="seek-hit" id="seekHit" data-name="播放进度条" ' +
-          'data-spec="可视高 5 · 命中高 46 · 左右边距 ' + Math.round(g.m) + '" ' +
-          'style="left:' + g.m + 'px;top:' + (g.barCY - 23) + 'px;width:' + (w - g.m * 2) + 'px">' +
+          'data-spec="可视高 5 · 命中高 46 · 两端让出 62 给时间" ' +
+          'style="left:' + g.barX + 'px;top:' + (g.barCY - 23) + 'px;width:' + g.barW + 'px">' +
           '<div class="seek-track"><div class="seek-fill" id="seekFill" style="width:' + fill + '%"></div></div>' +
           '<div class="seek-knob" id="seekKnob" style="left:' + fill + '%"></div>' +
           '<div class="seek-bubble" id="seekBubble" style="left:0;display:none">' + fmt(p.pos) + '</div>' +
         '</div>' +
 
-        '<div class="osd-time" id="timeNow" style="left:' + g.m + 'px;top:' + (g.timeCY - 7) + 'px;line-height:14px">' + fmt(p.pos) + '</div>' +
-        '<div class="osd-time total" id="timeTotal" style="left:' + (w - g.m) + 'px;top:' + (g.timeCY - 7) + 'px;line-height:14px;transform:translateX(-100%)">' + fmt(p.dur) + '</div>' +
+        '<div class="osd-time" id="timeNow" data-name="当前时间" ' +
+          'data-spec="14px · 与进度条同一基线 · 左端对齐 m" ' +
+          'style="left:' + g.m + 'px;top:' + (g.barCY - 7) + 'px;line-height:14px;width:56px">' + fmt(p.pos) + '</div>' +
+        '<div class="osd-time total" id="timeTotal" style="left:' + (w - g.m) + 'px;top:' + (g.barCY - 7) +
+          'px;line-height:14px;width:56px;text-align:right;transform:translateX(-100%)">' + fmt(p.dur) + '</div>' +
 
-        btn('btnPrev', w / 2 - 124, g.trCY, 40, 'prev', 20, '', '上一集', '直径 40 · 距中心 124') +
-        btn('btnBack10', w / 2 - 68, g.trCY, 46, 'seekBack', 21, '', '快退 10 秒', '直径 46 · 距中心 68') +
-        btn('btnPlay', w / 2, g.trCY, 64, p.playing ? 'pause' : 'play', 28, 'play', '播放 / 暂停',
-          '直径 64 · 全屏唯一的实心强调色主操作') +
-        btn('btnFwd10', w / 2 + 68, g.trCY, 46, 'seekFwd', 21, '', '快进 10 秒', '直径 46 · 距中心 68') +
-        btn('btnNext', w / 2 + 124, g.trCY, 40, 'next', 20, '', '下一集', '直径 40 · 距中心 124') +
+        /* 主控块左边缘贴 m，块内播放按钮居中 —— 这样它的左缘和进度条的
+           起点、右下设置块的右缘构成两条竖向对齐线，不再有第三条轴。 */
+        btn('btnPrev', g.m + 20, g.toolCY, 40, 'prev', 20, '', '上一集', '直径 40 · 块内第 1 位') +
+        btn('btnBack10', g.m + 75, g.toolCY, 46, 'seekBack', 21, '', '快退 10 秒', '直径 46 · 块内第 2 位') +
+        btn('btnPlay', g.m + 142, g.toolCY, 64, p.playing ? 'pause' : 'play', 28, 'play', '播放 / 暂停',
+          '直径 64 · 全屏唯一的实心强调色主操作 · 块内居中') +
+        btn('btnFwd10', g.m + 209, g.toolCY, 46, 'seekFwd', 21, '', '快进 10 秒', '直径 46 · 块内第 4 位') +
+        btn('btnNext', g.m + 264, g.toolCY, 40, 'next', 20, '', '下一集', '直径 40 · 块内末位') +
 
         setBtns.join('') + speedPill +
       '</div>' +
@@ -1202,7 +1345,8 @@ function exportMd() {
     '# DeckPlayer UI 评审',
     '',
     '- 设备：' + d.name + '（逻辑 1280×' + d.h + ' · windowScale ' + (d.pw / 1280).toFixed(2) + '）',
-    '- 主题：' + (state.theme === 'oled' ? 'OLED 真黑' : '深色'),
+    '- 主题：' + THEME_LABEL[state.theme],
+    '- 布局：' + (state.layout === 'grid' ? '网格' : '列表'),
     '- 时间：' + new Date().toLocaleString('zh-CN'),
     '- 条目：' + state.comments.length,
     '',
@@ -1441,18 +1585,35 @@ function updateStageMeta() {
     (portrait ? '<span class="chip warn">竖屏看不清细节 · 建议横屏或切 <b>1:1</b></span>' : '');
 }
 
+/* 三套主题。浅色只作用于浏览界面 —— 播放页 OSD 永远暗色，
+   浅底控件压在亮画面上会直接消失（这正是当初把 ghost 按钮从
+   「半透明白底 8%」改成「压暗底」的原因）。 */
+const THEMES = ['dark', 'oled', 'light'];
+const THEME_LABEL = { dark: '深色', oled: 'OLED', light: '浅色' };
+const THEME_NOTE = {
+  dark: '标准深色主题',
+  oled: 'OLED 真黑：背景纯黑，表面只提 2–3 个灰阶',
+  light: '浅色主题：暖白底，强调色压深到 #C4650F 以保住对比度',
+};
+
+function applyThemeLabel() {
+  const t = state.theme;
+  $('#themeLabel').textContent = THEME_LABEL[t];
+  const dot = $('#themeDot');
+  dot.classList.toggle('oled', t === 'oled');
+  dot.classList.toggle('light', t === 'light');
+}
+
 function setTheme(t) {
   state.theme = t;
   $('#screen').dataset.theme = t;
-  $('#themeLabel').textContent = t === 'oled' ? 'OLED' : '深色';
-  $('#themeDot').classList.toggle('oled', t === 'oled');
-  toast(t === 'oled' ? 'OLED 真黑：背景纯黑，表面只提 2–3 个灰阶' : '标准深色主题');
+  applyThemeLabel();
+  toast(THEME_NOTE[t]);
 }
 
 function applyTheme() {
   $('#screen').dataset.theme = state.theme;
-  $('#themeLabel').textContent = state.theme === 'oled' ? 'OLED' : '深色';
-  $('#themeDot').classList.toggle('oled', state.theme === 'oled');
+  applyThemeLabel();
 }
 
 function openDock(open) {
@@ -1512,16 +1673,37 @@ function onKey(e) {
     return;
   }
 
-  if (k === 'ArrowDown') { e.preventDefault(); moveFocus(1); return; }
-  if (k === 'ArrowUp') { e.preventDefault(); moveFocus(-1); return; }
+  const cols = gridCols();
+  if (k === 'ArrowDown') {
+    e.preventDefault();
+    const r = moveInGrid(cols || 1);
+    // 'after' = 已经是最后一行，下方没有卡片：停在原地，但按键要吃掉，
+    // 否则会滑到「正在播放条」之类不该被方向键碰到的地方。
+    if (r === 'moved' || r === 'after') return;
+    moveFocus(1);
+    return;
+  }
+  if (k === 'ArrowUp') {
+    e.preventDefault();
+    const r = moveInGrid(cols ? -cols : -1);
+    if (r === 'moved') return;
+    // 已经在第一行：上方的分组标题不算焦点，直接落到网格前一个元素
+    moveFocus(-1);
+    return;
+  }
   if (k === 'ArrowRight') {
     e.preventDefault();
+    // 网格里左右就是「换一个卡片」，不离开主区域；到末张就停住
+    if (moveInGrid(1) !== 'nogrid') return;
     if (state.focus.zone === 'sidebar') { state.focus = { zone: 'main', i: 0 }; applyFocus(); }
     return;
   }
   if (k === 'ArrowLeft') {
     e.preventDefault();
-    if (state.focus.zone === 'main') {
+    const r = moveInGrid(-1);
+    if (r === 'moved') return;              // 网格内已经左移一格
+    // 'before'（网格首张）与 'nogrid'（列表区）都回侧栏
+    if (r !== 'nogrid' || state.focus.zone === 'main') {
       state.focus = { zone: 'sidebar', i: TABS.findIndex((t) => t.key === state.tab) };
       applyFocus();
     }
@@ -1554,7 +1736,7 @@ function init() {
   renderDock();
   if (window.innerWidth <= 860) $('#workbench').classList.add('dock-closed');
 
-  $('#themeBtn').onclick = () => setTheme(state.theme === 'dark' ? 'oled' : 'dark');
+  $('#themeBtn').onclick = () => setTheme(THEMES[(THEMES.indexOf(state.theme) + 1) % THEMES.length]);
   $('#annotateBtn').onclick = () => toggleAnnotate();
   $('#dockBtn').onclick = () => openDock();
   $('#dockClose').onclick = () => openDock(false);
