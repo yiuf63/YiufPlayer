@@ -11,6 +11,11 @@
 | `include/view/media_cell.hpp`、`src/view/media_cell.cpp` | 卡片行 / 分组标题 / 空态 |
 | `src/view/mpv_player.cpp` | 播放器 OSD |
 | `src/theme/deck_theme.cpp` | borealis 侧边栏 / 焦点框 / 头部度量覆盖 |
+| `web/ui-review/` | 浏览器里的可交互评审原型（1:1 逻辑像素） |
+
+> 原型不是第二套实现。它只把本文件的数值投影成 DOM，用于在电脑 / 手机 / 平板上
+> 随时检阅并记录需求；任何视觉决定仍以本文件与 `ui/design.hpp` 为准。
+> 打开方式：直接双击 `web/ui-review/index.html`，或在目录内起一个静态服务器。
 
 ---
 

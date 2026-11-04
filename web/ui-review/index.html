@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>DeckPlayer · UI 评审台</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23FF9F45'/%3E%3Cpath d='M12 9.5 22 16 12 22.5Z' fill='%231A1208'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="console" id="console">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg width="15" height="15" viewBox="0 0 24 24"><path d="M8 5.4 19 12 8 18.6Z" fill="currentColor"/></svg>
+      </span>
+      <span class="brand-text">DeckPlayer<em>UI 评审台</em></span>
+    </div>
+
+    <div class="topbar-sep" aria-hidden="true"></div>
+
+    <div class="seg" id="deviceSeg" role="group" aria-label="设备"></div>
+
+    <div class="topbar-right">
+      <button class="ghost-btn" id="themeBtn" title="切换深色 / OLED 真黑">
+        <span class="dot" id="themeDot"></span><span class="lbl" id="themeLabel">深色</span>
+      </button>
+      <button class="ghost-btn" id="annotateBtn" title="显示尺寸标注与风险点 (N)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/></svg>
+        <span class="lbl">标注</span>
+      </button>
+      <button class="ghost-btn" id="dockBtn" title="评审面板 (D)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+        <span class="lbl">需求单</span>
+        <span class="pill-count" id="dockCount">0</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="workbench" id="workbench">
+    <main class="stage" id="stage">
+      <div class="device-wrap">
+        <div class="device" id="device">
+          <div class="screen" id="screen" data-theme="dark"></div>
+        </div>
+        <div class="stage-meta" id="stageMeta"></div>
+      </div>
+
+      <div class="stage-hint" id="stageHint">
+        <kbd>↑</kbd><kbd>↓</kbd> 移动焦点 · <kbd>←</kbd><kbd>→</kbd> 切换区域 · <kbd>Enter</kbd> 确认 · <kbd>O</kbd> 呼出控件
+      </div>
+
+      <div class="stage-zoom" id="stageZoom" role="group" aria-label="缩放">
+        <button data-zoom="fit" class="on" title="缩放到适合窗口">适配</button>
+        <button data-zoom="actual" title="1:1 逻辑像素，可滚动查看细节">1:1</button>
+      </div>
+    </main>
+
+    <aside class="dock" id="dock" aria-label="评审面板">
+      <div class="dock-head">
+        <div>
+          <h2>评审台</h2>
+          <p>改动仅作用于原型，不影响实机</p>
+        </div>
+        <button class="icon-btn" id="dockClose" aria-label="收起">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+
+      <div class="dock-body">
+        <section class="dock-sec">
+          <h3>场景</h3>
+          <div class="scenarios" id="scenarios"></div>
+        </section>
+
+        <section class="dock-sec">
+          <h3>画面测试</h3>
+          <div class="seg tiny" id="sceneSeg" role="group" aria-label="播放器画面">
+            <button data-scene="dark" class="on">暗场</button>
+            <button data-scene="bright">亮场</button>
+            <button data-scene="bars">彩条</button>
+          </div>
+          <p class="dock-note">OSD 用 60% 黑玻璃，就是为了在这三种底上都稳定可读。亮场是压力测试：橙色填充没问题，未播放的轨道会接近消失。</p>
+        </section>
+
+        <section class="dock-sec" id="specSection">
+          <h3>当前元素 <span class="dim" id="specHint">标注模式可点选</span></h3>
+          <div id="specBox" class="spec-empty">
+            打开「标注」后，点任意卡片 / 按钮，这里显示它的实际尺寸与出处。
+          </div>
+        </section>
+
+        <section class="dock-sec">
+          <h3>待确认 <span class="dim">设计债，不是 bug</span></h3>
+          <div id="risks" class="risks"></div>
+        </section>
+
+        <section class="dock-sec">
+          <h3>需求单 <span class="count" id="count">0</span></h3>
+          <div class="composer" id="composer">
+            <div class="composer-target" id="composerTarget">整体 · 视频库</div>
+            <textarea id="commentInput" rows="2" placeholder="哪里不对、希望改成什么样…"></textarea>
+            <div class="composer-actions">
+              <button class="primary" id="addComment">记一条</button>
+              <button id="exportMd">导出 Markdown</button>
+              <button id="clearComments" class="danger-ghost">清空</button>
+            </div>
+          </div>
+          <div class="comments" id="comments"></div>
+        </section>
+
+        <p class="dock-foot">
+          原型与实机的差异：字体用系统字代替内置中文字体；画面是 CSS 模拟；
+          封面图尚未接入。其余尺寸、颜色、间距均取自 <code>ui/design.hpp</code>。
+        </p>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip" hidden></div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>
