@@ -747,11 +747,16 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
     linear-gradient(to bottom, transparent 0 60%, #0E0B09 60%) 76%  0 / 24% 100% no-repeat,
     linear-gradient(180deg, #6E3E1C 0%, #B8702F 56%, #E3A870 100%);
 }
+/* 室内窗光：一扇窗 + 两条窗棂 + 落在地上的光斑。
+   原来只画了一个亮方块，缩到 234 宽就退化成一个纯色矩形 —— 必须靠「窗棂」
+   这条内部结构，才读得出是「一扇窗」而不是「一个方块」。 */
 .frame.t2 {
   background:
-    linear-gradient(180deg, #D8AF7E 0%, #C18F5E 100%) 7% 38% / 17% 30% no-repeat,
-    linear-gradient(114deg, rgba(255,214,168,.44) 0 23%, rgba(255,214,168,.05) 23% 31%, rgba(255,214,168,0) 31% 100%),
-    linear-gradient(180deg, #2C2024 0 72%, #120C0E 72% 100%);
+    linear-gradient(90deg, transparent 0 28%, #2A1E22 28% 33%, transparent 33% 60%, #2A1E22 60% 65%, transparent 65% 100%) 12% 30% / 30% 38% no-repeat,
+    linear-gradient(180deg, #F4D8AC 0%, #C08650 100%) 12% 30% / 30% 38% no-repeat,
+    linear-gradient(180deg, #261B1F 0 100%) 10% 28% / 34% 42% no-repeat,
+    linear-gradient(102deg, transparent 0 26%, rgba(255,214,168,.13) 26% 54%, transparent 54% 100%),
+    linear-gradient(180deg, #2C2024 0 68%, #120C0E 68% 100%);
 }
 .frame.m0 {
   background:
@@ -765,12 +770,18 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
   background:
     radial-gradient(58% 62% at 50% 47%, #C97F9A 0%, #6E3A50 60%, #22101A 100%);
 }
+/* 夜山与山下灯火：星点 + 山脊 + 暖色灯点。
+   两个孤立圆点压在一条斜线上，读不出「山」—— 加星点和更低的脊线才成形。 */
 .frame.t3 {
   background:
-    radial-gradient(circle 8px at 27% 50%, rgba(186,216,240,.6), transparent 100%),
-    radial-gradient(circle 5px at 41% 54%, rgba(186,216,240,.4), transparent 100%),
-    linear-gradient(158deg, transparent 0 48%, #16202A 48% 100%),
-    linear-gradient(180deg, #1B2833 0 54%, #0A1014 54% 100%);
+    radial-gradient(circle 2px at 20% 22%, rgba(206,228,246,.80), transparent 100%),
+    radial-gradient(circle 1.6px at 33% 14%, rgba(206,228,246,.55), transparent 100%),
+    radial-gradient(circle 1.4px at 58% 30%, rgba(206,228,246,.50), transparent 100%),
+    radial-gradient(circle 1.2px at 46% 8%,  rgba(206,228,246,.40), transparent 100%),
+    radial-gradient(circle 6px at 72% 56%, rgba(255,196,120,.90), transparent 100%),
+    radial-gradient(circle 3.5px at 82% 60%, rgba(255,196,120,.55), transparent 100%),
+    linear-gradient(166deg, transparent 0 50%, #101A22 50% 100%),
+    linear-gradient(180deg, #1B2B3C 0 56%, #080F17 56% 100%);
 }
 /* t4–t7：同样的「一条硬边 + 一个亮源」结构，换色相与构图。
    必须比 4 张多 —— 一屏 3 行就是 8–12 张，
@@ -783,17 +794,28 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
     linear-gradient(180deg, #24422F 0%, #16281E 56%, #09120D 100%);
 }
 /* 雪原：全片最亮的一类画面。缩略图墙必须能承受一张这样的，否则真实库里
-   一出现雪景就会显得"过曝/坏了"。 */
+   一出现雪景就会显得"过曝/坏了"。
+   纯亮渐变会读成"图片没加载出来"，所以给它一条真正的地平线：远处树线 +
+   地平处的雪面阴影，亮部才有参照物。 */
 .frame.t5 {
   background:
-    linear-gradient(180deg, transparent 0 60%, rgba(255,255,255,.13) 60% 100%),
-    linear-gradient(178deg, #7E9BB4 0%, #A9BECD 40%, #DCE7EE 62%, #B4C3D0 100%);
+    radial-gradient(circle 15px at 73% 20%, rgba(255,255,255,.95) 0 40%, rgba(255,255,255,0) 100%),
+    linear-gradient(to bottom, transparent 0 50%, #3A5163 50% 62%, transparent 62%) 4%  0 / 8%  100% no-repeat,
+    linear-gradient(to bottom, transparent 0 55%, #3A5163 55% 62%, transparent 62%) 13% 0 / 6%  100% no-repeat,
+    linear-gradient(to bottom, transparent 0 46%, #3A5163 46% 62%, transparent 62%) 20% 0 / 11% 100% no-repeat,
+    linear-gradient(to bottom, transparent 0 53%, #3A5163 53% 62%, transparent 62%) 34% 0 / 7%  100% no-repeat,
+    linear-gradient(180deg, transparent 0 62%, rgba(118,142,161,.5) 62% 65%, transparent 65% 100%),
+    linear-gradient(180deg, transparent 0 62%, #E4EDF2 62% 78%, #B4C5D2 100%),
+    linear-gradient(180deg, #5F7E9B 0%, #93AEC2 42%, #C6D6E2 62%);
 }
+/* 沙丘：一道斜脊 + 背光坡 + 低角度太阳。
+   原来是一个亮矩形压在褐底上，读起来像 PPT 色块，看不出是地貌。 */
 .frame.t6 {
   background:
-    linear-gradient(180deg, #F0CC96 0%, #D9A45F 100%) 57% 44% / 24% 60% no-repeat,
-    radial-gradient(58% 52% at 68% 48%, rgba(240,190,120,.22), transparent 70%),
-    linear-gradient(180deg, #3B2A1E 0 76%, #160F0A 76% 100%);
+    radial-gradient(circle 13px at 72% 26%, rgba(255,235,198,.55) 0 34%, rgba(255,235,198,0) 100%),
+    linear-gradient(173deg, transparent 0 43%, #EAC994 43% 48%, transparent 48% 100%),
+    linear-gradient(186deg, transparent 0 46%, #6E4325 46% 100%),
+    linear-gradient(180deg, #C98C4E 0 58%, #A06A38 58% 100%);
 }
 .frame.t7 {
   background:
@@ -801,6 +823,29 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
     radial-gradient(circle 6px at 74% 64%, rgba(190,225,255,.55), transparent 100%),
     radial-gradient(64% 26% at 50% 88%, rgba(120,180,215,.32), transparent 72%),
     linear-gradient(180deg, #16222D 0 74%, #0B1218 74% 100%);
+}
+/* t8 / t9：给「一屏 3 行 × 4 列」补足不重复的构图。
+   只有 8 套时，10 条视频里必然有一对撞车（02 与 10 都是黄昏天际线，
+   04 与 09 都是夜山），一眼就看得出是模板循环。 */
+.frame.t8 {
+  background:
+    linear-gradient(to bottom, transparent 0 34%, #0A1018 34%) 0%   0 / 15% 100% no-repeat,
+    linear-gradient(to bottom, transparent 0 54%, #0A1018 54%) 15%  0 / 11% 100% no-repeat,
+    linear-gradient(to bottom, transparent 0 26%, #0A1018 26%) 26%  0 / 14% 100% no-repeat,
+    linear-gradient(to bottom, transparent 0 48%, #0A1018 48%) 40%  0 / 10% 100% no-repeat,
+    linear-gradient(to bottom, transparent 0 40%, #0A1018 40%) 50%  0 / 21% 100% no-repeat,
+    linear-gradient(to bottom, transparent 0 58%, #0A1018 58%) 71%  0 / 29% 100% no-repeat,
+    radial-gradient(circle 1.6px at 21% 46%, rgba(255,214,150,.85), transparent 100%),
+    radial-gradient(circle 1.4px at 31% 62%, rgba(255,214,150,.55), transparent 100%),
+    radial-gradient(circle 1.5px at 57% 52%, rgba(200,230,255,.55), transparent 100%),
+    linear-gradient(180deg, #17273A 0%, #243B52 58%, #101A26 100%);
+}
+.frame.t9 {
+  background:
+    repeating-linear-gradient(180deg, rgba(255,180,120,.10) 0 2px, transparent 2px 7px) 0 56% / 100% 44% no-repeat,
+    linear-gradient(180deg, transparent 0 56%, rgba(255,170,110,.26) 56% 64%, rgba(255,170,110,.10) 64% 76%, transparent 76% 100%),
+    radial-gradient(circle 16px at 50% 49%, rgba(255,206,150,.92) 0 36%, rgba(255,160,90,0) 100%),
+    linear-gradient(180deg, #3A2A32 0 56%, #1A1218 56% 100%);
 }
 .gcard .thumb .dur {
   position: absolute; right: 8px; bottom: 8px;

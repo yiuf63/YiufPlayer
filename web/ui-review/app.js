@@ -81,9 +81,9 @@ const VIDEOS = [
   { title: '08. 沙丘', file: '08. 沙丘.mp4', sub: '4.7 GB · 含字幕',
     badge: '已看完', progress: 1, dur: 9300, pos: 9300, meta: '3840×1600 · 硬件解码', hw: true, tone: 't6' },
   { title: '09. 星际穿越', file: '09. 星际穿越.mkv', sub: '5.2 GB · 含字幕',
-    badge: '已看 78%', progress: 0.78, dur: 10140, pos: 7909, meta: '1920×800 · 硬件解码', hw: true, tone: 't3' },
+    badge: '已看 78%', progress: 0.78, dur: 10140, pos: 7909, meta: '1920×800 · 硬件解码', hw: true, tone: 't9' },
   { title: '10. 蜘蛛侠：平行宇宙', file: '10. 蜘蛛侠：平行宇宙.mp4', sub: '2.9 GB',
-    badge: '', progress: -1, dur: 7020, pos: 0, meta: '1920×804 · 硬件解码', hw: true, tone: 't1' },
+    badge: '', progress: -1, dur: 7020, pos: 0, meta: '1920×804 · 硬件解码', hw: true, tone: 't8' },
 ];
 
 const MUSIC = [
@@ -481,13 +481,13 @@ function filesHTML() {
 function historyHTML() {
   const body = state.layout === 'grid'
     ? grid(HISTORY.map((h) => gcard({
-        action: 'play', id: h.idx, tone: 't' + (h.idx % 4),
+        action: 'play', id: h.idx, tone: 't' + (h.idx % 8),
         title: h.title, sub: h.sub,
         dur: (VIDEOS[h.idx] || {}).dur, progress: h.progress,
         name: '历史缩略图卡片',
       })))
     : HISTORY.map((h) => cell({
-        icon: 'clock', tone: 't' + (h.idx % 4), title: h.title, sub: h.sub,
+        icon: 'clock', tone: 't' + (h.idx % 8), title: h.title, sub: h.sub,
         badge: h.badge, progress: h.progress, action: 'play', id: h.idx, name: '历史行',
       })).join('');
   return section('继续观看 · ' + HISTORY.length) + body;
@@ -555,14 +555,14 @@ function browseHTML() {
   if (videos.length) {
     vidBlock = state.layout === 'grid'
       ? grid(videos.map((it, k) => gcard({
-          action: 'play', id: it.v, tone: 't' + (k % 4),
+          action: 'play', id: it.v, tone: 't' + (k % 8),
           title: it.name, sub: it.sub,
           dur: (VIDEOS[it.v] || {}).dur,
           progress: (VIDEOS[it.v] || {}).progress,
           name: '文件缩略图卡片',
         })))
       : videos.map((it, k) =>
-          cell({ icon: 'video', tone: 't' + (k % 4), title: it.name, sub: it.sub,
+          cell({ icon: 'video', tone: 't' + (k % 8), title: it.name, sub: it.sub,
             action: 'play', id: it.v, name: '文件行' })).join('');
   }
 
