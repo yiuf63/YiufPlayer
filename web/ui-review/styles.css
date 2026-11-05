@@ -490,6 +490,7 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
   --cell-line: rgba(27,26,24,.1);
   --focused-bg: #FFF4E8;
   --dialog: #FFFFFF;
+  --scrim: rgba(226,223,217,.68);
 }
 /* 浅色下卡片靠边框区分不够：白卡压在暖灰底上几乎融在一起，
    补一层极轻的阴影把卡片"抬"起来，比加深底色干净。 */
@@ -1348,21 +1349,51 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
 }
 
 /* ── 视图呼出菜单 ────────────────────────────────────────────
-   锚在入口下方，一次只显示「分组 / 内容 / 排序 / 筛选」四组，
-   每组 2–4 个选项。这东西在实机上对应一个 popover，
-   手柄上下几下就能走完，触屏也不用去瞄 28px 高的胶囊。 */
+   一次只显示「分组 / 内容 / 排序 / 筛选」四组，每组 2–4 个选项。
+
+   位置：**贴底居中**，不锚在入口下方。
+   入口在工具行最右端，锚着它往下弹，菜单就挤在右上角那一小块里，
+   和搜索框、计数贴在一起，视线落点跟内容区（左下 → 右下）对不上，
+   而且桌面上被 1600px 宽的窗口拉开后更像「飘在半空」。
+   贴底居中之后它是一条可预期的横带：拇指够得到，手柄焦点上下几格
+   就走完，也不会压住正在看的缩略图第一行。
+
+   底部留 88 = 提示栏 64 + 24 的呼吸位；宽度 460 是四组选项
+   一行放得下的最小宽度（排序组 4 项 + 标签 40 + 内边距）。 */
+/* 菜单层：整块背景淡出（压暗 + 虚化），面板成为唯一的视觉焦点。
+   只压暗不虚化时，背后的缩略图仍然清晰可读，视线会一直在墙上打转；
+   虚化之后「视图与排序」才是这一屏唯一要读的东西。 */
+.vs-layer {
+  position: absolute; inset: 0; z-index: 39;
+  pointer-events: none;
+}
+.vs-scrim {
+  position: absolute; inset: 0;
+  background: var(--scrim, rgba(4,6,10,.6));
+  backdrop-filter: blur(6px) saturate(.9);
+  -webkit-backdrop-filter: blur(6px) saturate(.9);
+  pointer-events: auto;
+  animation: vsScrimIn .2s ease;
+}
+@keyframes vsScrimIn { from { opacity: 0; } }
+
 .view-sheet {
-  position: absolute; top: 100px; right: 28px;
-  width: 336px; z-index: 40;
+  position: absolute; left: 50%; bottom: 88px;
+  transform: translateX(-50%);
+  width: 460px; z-index: 40;
+  pointer-events: auto;
   border-radius: 16px;
   background: var(--surface);
   border: 1px solid var(--outline-strong);
-  box-shadow: 0 28px 70px rgba(0,0,0,.5);
-  transform-origin: top right;
-  animation: vsIn .14s cubic-bezier(.22,.61,.36,1);
+  box-shadow: 0 -8px 60px rgba(0,0,0,.55), 0 2px 0 rgba(255,255,255,.04) inset;
+  animation: vsIn .16s cubic-bezier(.22,.61,.36,1);
 }
 @keyframes vsIn {
-  from { opacity: 0; transform: translateY(-6px) scale(.98); }
+  from { opacity: 0; transform: translateX(-50%) translateY(10px) scale(.985); }
+}
+/* 浅色下别用 55% 的黑投影：白面板配重阴影会糊出一圈灰边 */
+.screen[data-theme="light"] .view-sheet {
+  box-shadow: 0 -4px 28px rgba(27,26,24,.14), 0 -1px 4px rgba(27,26,24,.08);
 }
 .vs-head {
   display: flex; align-items: center; gap: 8px;
@@ -1379,7 +1410,7 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
 
 .vs-row { display: flex; align-items: center; gap: 10px; padding: 5px 12px; }
 .vs-label {
-  flex: none; width: 32px;
+  flex: none; width: 40px;
   font-size: 12.5px; color: var(--text-mute);
 }
 .vs-opts { flex: 1; display: flex; flex-wrap: wrap; gap: 4px; }
@@ -1396,6 +1427,16 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
   color: var(--accent);
 }
 .vs-opt svg { flex: none; }
+
+/* 手柄焦点：菜单打开时方向键在菜单内走动，焦点必须看得出来。
+   用内描边而不是 outline，避免描边撑出 1px 让整行选项抖动。 */
+.vs-opt.focused,
+.vs-dir.focused,
+.vs-reset.focused,
+.vs-close.focused {
+  box-shadow: inset 0 0 0 2px rgba(var(--accent-rgb), .8);
+  color: var(--text);
+}
 
 .vs-foot {
   display: flex; gap: 8px; align-items: center;

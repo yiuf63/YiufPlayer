@@ -844,7 +844,7 @@ function toolbarHTML() {
         ic('chevron', 13, 2) +
       '</button>' +
       '<span class="count">' + mediaCount() + ' 项</span>' +
-    '</div>' + viewSheetHTML();
+    '</div>';
 }
 
 function viewSummary() {
@@ -854,7 +854,7 @@ function viewSummary() {
   return g.label + ' · ' + s.label + (state.desc ? ' ↓' : '');
 }
 
-/* 呼出菜单：点工具行右侧的入口，锚在它下方。
+/* 呼出菜单：点工具行右侧的入口，菜单从屏幕底部中间升起。
    故意做成「一次只显示一组、每组只有 2–4 个选项」——
    手柄导航时上下只需要按几下，触屏也不用瞄准小胶囊。 */
 function viewSheetHTML() {
@@ -867,8 +867,10 @@ function viewSheetHTML() {
         '<span>' + o.label + '</span></button>').join('') +
     '</span></div>';
 
-  return '<div class="view-sheet on" id="viewSheet" data-name="视图呼出菜单"' +
-    ' data-spec="宽 336 · 圆角 16 · 四组选项 · 行高 40">' +
+  return '<div class="vs-layer" id="vsLayer">' +
+    '<div class="vs-scrim" id="vsScrim"></div>' +
+    '<div class="view-sheet on" id="viewSheet" data-name="视图呼出菜单"' +
+    ' data-spec="宽 460 · 贴底居中 · 四组选项 · 行高 40">' +
     '<div class="vs-head">' + ic('filter', 15, 1.9) + '<span>视图与排序</span>' +
       '<button class="vs-close" id="vsClose" title="收起">' + ic('close', 13, 2.2) + '</button></div>' +
     row('分组', 'vgroup', GROUPS, state.group) +
@@ -880,7 +882,27 @@ function viewSheetHTML() {
         '<span class="ic-flip">' + ic('arrowUp', 13, 2.2) + '</span>' +
         (state.desc ? '降序' : '升序') + '</button>' +
       '<button class="vs-reset" data-vreset="1">恢复默认</button>' +
-    '</div></div>';
+    '</div></div>' +
+    '</div>';
+}
+
+/* 菜单挂在独立的图层上，不放在工具行里：
+   工具行在改选项时会整块重建，菜单跟着重建就会每次闪一下入场动画。 */
+function refreshSheet(animate) {
+  const layer = $('#sheetLayer');
+  if (!layer) return;
+  layer.innerHTML = viewSheetHTML();
+  const s = $('#viewSheet');
+  if (s && animate === false) s.style.animation = 'none';
+}
+
+function setSheet(on, animate) {
+  const was = state.sheet;
+  state.sheet = !!on;
+  if (state.sheet && !was) state.focus = { zone: 'main', i: 0 };  // 焦点落进菜单
+  refreshToolbar();
+  refreshSheet(animate);
+  applyFocus();
 }
 
 function mediaCount() {
@@ -930,6 +952,7 @@ function renderApp() {
       '</section>' +
     '</div>' +
     npHTML() +
+    '<div id="sheetLayer">' + viewSheetHTML() + '</div>' +
     '<footer class="app-footer" data-name="底部提示栏" data-spec="高 64 · 提示字号 13 · 左右内边距 40">' +
       '<span class="clock">' + ic('clock', 18, 1.7) + '<span id="appClock">' + clock(true) + '</span></span>' +
       '<span class="hints">' + hintsHTML() + '</span>' +
@@ -946,6 +969,7 @@ function renderApp() {
 function setLayout(v) {
   if (state.layout === v) return;
   state.layout = v;
+  state.sheet = false;   // 布局切换走整页重建，菜单跟着收起（否则要重放入场动画）
   state.focus = { zone: 'main', i: state.focus.i };
   renderApp();
   toast(v === 'grid' ? '网格：缩略图墙 · 一屏 3 行 × 4 列' : '列表：一行一部片 · 信息密度更高');
@@ -964,11 +988,10 @@ function bindAppEvents() {
     /* 视图菜单：入口开合、四组选项、升序降序、恢复默认。
        全部走 refreshView()，它同时重建工具行（摘要变了）和列表。 */
     if (e.target.closest('#viewBtn')) {
-      state.sheet = !state.sheet;
-      refreshToolbar();
+      setSheet(!state.sheet, true);
       return;
     }
-    if (e.target.closest('#vsClose')) { state.sheet = false; refreshToolbar(); return; }
+    if (e.target.closest('#vsClose')) { setSheet(false, false); return; }
     const vg = e.target.closest('[data-vgroup]');
     if (vg) { state.group = vg.dataset.vgroup; state.libFolder = null; refreshView(); return; }
     const vk = e.target.closest('[data-vkind]');
@@ -987,8 +1010,7 @@ function bindAppEvents() {
     }
     // 点菜单和列表之外的地方收起菜单
     if (state.sheet && !e.target.closest('#viewSheet')) {
-      state.sheet = false;
-      refreshToolbar();
+      setSheet(false, false);
     }
 
     if (e.target.closest('#searchClear')) {
@@ -1058,6 +1080,7 @@ function refreshView() {
     }
   }
   refreshList();
+  refreshSheet(false);   // 只换选项的选中态，不重放入场动画
   const list = $('#list');
   if (list) list.scrollTop = 0;
 }
@@ -1137,7 +1160,12 @@ function goUp() {
 /* ── 焦点 ─────────────────────────────────────────────────── */
 
 function navItems() { return $$('.nav-item'); }
-function mainItems() { return $$('#main .focusable'); }
+/* 菜单打开时，方向键要走进菜单，而不是在遮罩背后移动列表焦点。
+   实机上这是焦点栈的压栈，原型里用同一套 zone 表示。 */
+function mainItems() {
+  if (state.sheet) return $$('#viewSheet .vs-opt, #viewSheet .vs-dir, #viewSheet .vs-reset');
+  return $$('#main .focusable');
+}
 
 /* 网格模式下上下键要按「一行 4 个」跳，不是 ±1。
    返回 0 表示当前焦点不在网格里（列表或侧栏）。 */
@@ -1178,7 +1206,10 @@ function moveInGrid(step) {
 
 function applyFocus() {
   const navs = $$('.nav-item');
-  const mains = $$('#main .focusable');
+  const mains = mainItems();
+  // 焦点集合会随状态换（列表 ↔ 菜单），旧元素上残留的 focused 必须先清掉，
+  // 否则遮罩背后的卡片会一直亮着，屏幕上出现两个焦点框。
+  $$('#main .focused, #sheetLayer .focused').forEach((el) => el.classList.remove('focused'));
   if (state.focus.zone === 'sidebar' && state.focus.i >= navs.length) {
     state.focus.i = Math.max(0, navs.length - 1);
   }
@@ -1215,6 +1246,7 @@ function switchTab(tab) {
   state.tab = tab;
   state.browse = null;
   state.pluginPage = false;
+  state.sheet = false;   // 菜单属于媒体库，换页就收起
   state.focus = { zone: 'main', i: 0 };
   renderApp();
   setTarget('整体 · ' + TAB_LABEL[tab]);
@@ -2050,8 +2082,7 @@ function goScenario(k) {
     switchTab('media');
     state.group = 'folder';
     state.libFolder = null;
-    state.sheet = true;
-    refreshToolbar();
+    setSheet(true, true);
     refreshList();
     return;
   }
@@ -2440,14 +2471,12 @@ function onKey(e) {
 
   // 视图菜单：V 开合，Esc 收起
   if ((k === 'v' || k === 'V') && state.tab === 'media') {
-    state.sheet = !state.sheet;
-    refreshToolbar();
+    setSheet(!state.sheet, true);
     e.preventDefault();
     return;
   }
   if (k === 'Escape' && state.sheet) {
-    state.sheet = false;
-    refreshToolbar();
+    setSheet(false, false);
     e.preventDefault();
     return;
   }
@@ -2505,6 +2534,8 @@ function onKey(e) {
   }
   if (k === 'ArrowRight') {
     e.preventDefault();
+    // 菜单里左右与上下同义：一条竖着走的选项带，不做二维网格
+    if (state.sheet) { moveFocus(1); return; }
     // 网格里左右就是「换一个卡片」，不离开主区域；到末张就停住
     if (moveInGrid(1) !== 'nogrid') return;
     if (state.focus.zone === 'sidebar') { state.focus = { zone: 'main', i: 0 }; applyFocus(); }
@@ -2512,6 +2543,7 @@ function onKey(e) {
   }
   if (k === 'ArrowLeft') {
     e.preventDefault();
+    if (state.sheet) { moveFocus(-1); return; }
     const r = moveInGrid(-1);
     if (r === 'moved') return;              // 网格内已经左移一格
     // 'before'（网格首张）与 'nogrid'（列表区）都回侧栏
