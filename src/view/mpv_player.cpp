@@ -76,7 +76,7 @@ constexpr float FONT_HUD_ICON = 24.0f;  // HUD 图标
 
 // 布局
 constexpr float TOP_H          = 112.0f;  // 顶部压边高度
-constexpr float BOTTOM_H       = 238.0f; // 底部压边高度
+constexpr float BOTTOM_H       = 168.0f; // 底部压边高度
 constexpr float BAR_H          = 5.0f;   // 进度条可视高度（细条更接近电视端）
 constexpr float BAR_HIT_H      = 46.0f;  // 触摸判定高度（触屏下限）
 constexpr float KNOB_R_DRAG    = 7.5f;   // 拖动时的滑块半径（静止不画滑块）
@@ -84,17 +84,22 @@ constexpr float TRANSPORT_D    = 64.0f;  // 播放/暂停主按钮直径
 constexpr float SIDE_D         = 46.0f;  // 快退/快进按钮直径
 constexpr float SKIP_D         = 40.0f;  // 上一集/下一集按钮直径
 constexpr float SETTINGS_D     = 40.0f;  // 设置行按钮直径
+constexpr float TIME_GAP       = 62.0f;  // 进度条两端让给时间的宽度
 
 // 内容左右安全边距：随宽度按比例，但设上下限（掌机窄屏不贴边，
 // 桌面宽屏也不至于离得太远）。
 inline float marginFor(float width) {
     return std::clamp(width * 0.042f, 24.0f, 56.0f);
 }
-// 底部三条水平基线的中心 Y（都由视口高推导，保证各分辨率比例一致）
-inline float barCenterY(float y, float h)          { return y + h - 66.0f; }
-inline float timeCenterY(float y, float h)         { return y + h - 34.0f; }
-inline float transportCenterY(float y, float h)    { return barCenterY(y, h) - 32.0f - 32.0f; }
-inline float settingsCenterY(float y, float h)     { return transportCenterY(y, h) - 32.0f - 14.0f - 20.0f; }
+// 底部两条水平基线（评审台 2026-11 改版：四条基线压成两条）。
+// 旧版是 设置行/主控行/进度条/时间 各一条轴，主控居中、设置右对齐、
+// 时间独占一行 —— 三条对齐轴互不相干，左下角整片空白，观感是「没对齐」。
+// 现在：工具条一条轴（主控块左缘贴 m、设置块右缘贴 w−m），
+// 进度条一条轴（时间内联在两端，条的两端各让出 TIME_GAP）。
+inline float barCenterY(float y, float h) { return y + h - 58.0f; }
+inline float toolCenterY(float y, float h) { return y + h - 124.0f; }
+// 主控块：左缘贴 m，块内播放按钮居中（块宽 = 124*2 + 64 = 312）。
+inline float transportCenterX(float x, float m) { return x + m + 142.0f; }
 } // namespace osd
 
 // 把 showHUD() 的历史字符串键映射到矢量图标。
@@ -855,8 +860,9 @@ void MPVPlayerView::drawHud(NVGcontext* vg, float x, float y, float width, float
                     osd::BOTTOM_H, a);
 
     const float bar_cy = osd::barCenterY(y, height) + bot_slide;
-    const float bar_x  = x + m;
-    const float bar_w  = width - m * 2.0f;
+    // 进度条两端各让出 TIME_GAP：时间并进同一条基线，不再独占一行
+    const float bar_x  = x + m + osd::TIME_GAP;
+    const float bar_w  = width - m * 2.0f - osd::TIME_GAP * 2.0f;
     const float bar_top = bar_cy - osd::BAR_H * 0.5f;
 
     // 拖动中的预览值优先，否则用真实播放位置
@@ -911,8 +917,8 @@ void MPVPlayerView::drawHud(NVGcontext* vg, float x, float y, float width, float
                  NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, label);
     }
 
-    // 时间：左侧已播、右侧总时长。都用等宽感更强的数字，避免跳动。
-    const float time_cy = osd::timeCenterY(y, height) + bot_slide;
+    // 时间：与进度条同一条基线。左侧已播、右侧总时长。
+    const float time_cy = bar_cy;
     ui::text(vg, bar_x, time_cy, osd::FONT_TIME,
              nvgRGBA(255, 255, 255, (int)(232 * a)),
              NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE,
@@ -1005,12 +1011,13 @@ void MPVPlayerView::drawTouchControls(NVGcontext* vg, float x, float y,
                               TouchAction::Back});
     }
 
-    // ── 主控行 ──
-    const float tcx = x + width * 0.5f;
-    const float tcy = osd::transportCenterY(y, height) + dy;
+    // ── 主控块：左缘贴 m，块内播放按钮居中 ──
+    // 它的左缘与进度条起点、右下设置块的右缘构成两条竖向对齐线。
+    const float tcx = osd::transportCenterX(x, m);
+    const float tcy = osd::toolCenterY(y, height) + dy;
 
-    ghost(tcx - 124.0f, tcy, osd::SKIP_D, ui::Icon::Prev, 20.0f, TouchAction::Prev);
-    ghost(tcx - 68.0f, tcy, osd::SIDE_D, ui::Icon::SeekBack, 21.0f,
+    ghost(tcx - 122.0f, tcy, osd::SKIP_D, ui::Icon::Prev, 20.0f, TouchAction::Prev);
+    ghost(tcx - 67.0f, tcy, osd::SIDE_D, ui::Icon::SeekBack, 21.0f,
           TouchAction::SeekBack);
 
     // 播放/暂停：整屏唯一的实心强调色，视线自然落在它上面
@@ -1024,12 +1031,12 @@ void MPVPlayerView::drawTouchControls(NVGcontext* vg, float x, float y,
         hit(tcx, tcy, osd::TRANSPORT_D, TouchAction::PlayPause);
     }
 
-    ghost(tcx + 68.0f, tcy, osd::SIDE_D, ui::Icon::SeekForward, 21.0f,
+    ghost(tcx + 67.0f, tcy, osd::SIDE_D, ui::Icon::SeekForward, 21.0f,
           TouchAction::SeekForward);
-    ghost(tcx + 124.0f, tcy, osd::SKIP_D, ui::Icon::Next, 20.0f, TouchAction::Next);
+    ghost(tcx + 122.0f, tcy, osd::SKIP_D, ui::Icon::Next, 20.0f, TouchAction::Next);
 
-    // ── 设置行（右对齐，从右往左排）──
-    const float scy = osd::settingsCenterY(y, height) + dy;
+    // ── 设置块：右对齐 w − m，与主控块同一条轴 ──
+    const float scy = tcy;
     float right = x + width - m;
 
     auto place = [&](ui::Icon ic, TouchAction ac, float iconSize) {
