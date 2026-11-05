@@ -157,8 +157,15 @@ void ScrollingFrame::naturalScrollingBehaviour()
     {
         // If current focus view is outside scrolling bounds,
         // change focus to this.
+        //
+        // DeckPlayer 补丁：currentFocus 可能为 nullptr。
+        // 列表被 rebuild（clearViews）时，正在被聚焦的子项会连同焦点一起
+        // 销毁 —— View 析构里的 focus sanity check 把 currentFocus 置空。
+        // 下一帧走到这里就是对着 nullptr 调 getFrame()，SEGV 在
+        // KERN_INVALID_ADDRESS at 0x5xx，堆栈完全看不出是「焦点为空」。
+        // 媒体库加文件夹层后，手柄按 A 进文件夹必踩。
         View* currentFocus = Application::getCurrentFocus();
-        if (!currentFocus->getFrame().inscribed(getFrame()))
+        if (!currentFocus || !currentFocus->getFrame().inscribed(getFrame()))
         {
             Application::giveFocus(this);
         }

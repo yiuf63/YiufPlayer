@@ -159,6 +159,53 @@ std::vector<MediaItem> MediaLibrary::getAudios() const {
     return out;
 }
 
+std::vector<MediaItem> MediaLibrary::getRecent(size_t limit) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<MediaItem> out = items_;
+    std::stable_sort(out.begin(), out.end(),
+        [](const MediaItem& a, const MediaItem& b) {
+            return a.modified > b.modified;
+        });
+    if (out.size() > limit) out.resize(limit);
+    return out;
+}
+
+std::vector<MediaLibrary::Group> MediaLibrary::getGroups() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<Group> groups;
+    groups.reserve(folders_.size());
+    for (const auto& f : folders_) {
+        Group g;
+        g.folder = f;
+        groups.push_back(std::move(g));
+    }
+
+    // 归属判定用「最长前缀」：库允许添加嵌套文件夹（~/Videos 与
+    // ~/Videos/新番），此时条目属于更近的那一层，否则同一条会在两张
+    // 目录卡里各出现一次，两边的计数都是错的。
+    for (const auto& item : items_) {
+        size_t best = groups.size(), best_len = 0;
+        for (size_t i = 0; i < groups.size(); ++i) {
+            const std::string& p = groups[i].folder.path;
+            if (item.path.size() <= p.size()) continue;
+            if (item.path.compare(0, p.size(), p) != 0) continue;
+            // 必须是路径边界，否则 /a/b 会把 /a/bc 也算进来
+            const char sep = item.path[p.size()];
+            const bool boundary = sep == '/' || sep == '\\' || p.back() == '/' || p.back() == '\\';
+            if (!boundary) continue;
+            if (p.size() >= best_len) {
+                best = i;
+                best_len = p.size();
+            }
+        }
+        if (best == groups.size()) continue;  // 找不到归属：丢弃，不猜
+        Group& g = groups[best];
+        if (item.is_video()) g.videos.push_back(item);
+        else if (item.is_audio()) g.audios.push_back(item);
+    }
+    return groups;
+}
+
 // ---------------- 扫描 ----------------
 
 void MediaLibrary::clearCache() {
@@ -229,6 +276,9 @@ void MediaLibrary::scanFolder(const MediaLibraryFolder& folder,
                 mtime = sctp.time_since_epoch().count();
             }
             signatures_[item.path] = {item.size, mtime};
+            // 修改时间同时记进条目本身：「最近添加」要用它排序。
+            // signatures_ 是增量扫描用的内部表，不对外暴露。
+            item.modified = mtime;
             out.push_back(std::move(item));
         }
     }
@@ -336,7 +386,7 @@ void MediaLibrary::load() {
             while (std::getline(infile, line)) {
                 if (line.empty() || line[0] == '#') continue;
                 auto f = splitPipe(line);
-                // path|name|type|size|ext
+                // path|name|type|size|ext[|mtime]
                 if (f.size() < 5) continue;
                 MediaItem item;
                 item.path = f[0];
@@ -346,6 +396,10 @@ void MediaLibrary::load() {
                                           : MediaType::Unknown;
                 try { item.size = std::stoll(f[3]); } catch (...) { item.size = 0; }
                 item.extension = f[4];
+                // 旧缓存没有第 6 列：留 0，等下一次扫描补上。
+                if (f.size() >= 6) {
+                    try { item.modified = std::stoll(f[5]); } catch (...) { item.modified = 0; }
+                }
                 items_.push_back(std::move(item));
             }
         }
@@ -372,12 +426,13 @@ void MediaLibrary::save() const {
         // 2) 媒体缓存
         std::ofstream cache(cacheFilePath(), std::ios::trunc);
         if (cache.is_open()) {
-            cache << "# DeckPlayer library cache v1\n";
-            cache << "# path|name|type|size|ext\n";
+            cache << "# DeckPlayer library cache v2\n";
+            cache << "# path|name|type|size|ext|mtime\n";
             for (const auto& item : items_) {
                 const char* t = item.is_video() ? "v" : (item.is_audio() ? "a" : "u");
                 writePipeLine(cache, {item.path, item.name, t,
-                                      std::to_string(item.size), item.extension});
+                                      std::to_string(item.size), item.extension,
+                                      std::to_string(item.modified)});
             }
         }
     }

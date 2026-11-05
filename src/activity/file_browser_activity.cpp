@@ -1,6 +1,8 @@
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <cstdio>
 #include <memory>
 #include <string>
 #include <thread>
@@ -21,6 +23,7 @@
 #include "model/metadata_store.hpp"
 #include "view/now_playing_bar.hpp"
 #include "view/media_cell.hpp"
+#include "view/media_folder_card.hpp"
 #include "ui/icons.hpp"
 #include "activity/player_activity.hpp"
 #include <borealis/views/scrolling_frame.hpp>
@@ -70,6 +73,21 @@ public:
 private:
     Slot slot_;
 };
+
+// 收集容器里的可聚焦控件（卡片装在行 Box 里，所以要下探两层）。
+// 列表重建后必须有人把焦点接过来：焦点一旦落在被删掉的子项上，
+// View 析构会把它置空，手柄按 A 就没有反应，ScrollingFrame 还会
+// 对着空焦点取 frame（见 scrolling_frame.cpp 里的补丁）。
+void collectFocusables(brls::Box* root, std::vector<brls::View*>& out, int depth = 0) {
+    if (!root || depth > 2) return;
+    if (root->isFocusable()) {
+        out.push_back(root);
+        return;
+    }
+    for (auto* child : root->getChildren()) {
+        collectFocusables(dynamic_cast<brls::Box*>(child), out, depth + 1);
+    }
+}
 
 FileBrowserActivity::FileBrowserActivity() = default;
 FileBrowserActivity::~FileBrowserActivity() {
@@ -151,8 +169,17 @@ brls::View* FileBrowserActivity::createContentView() {
                 brls::Logger::info("自检：注入触摸点击视频库第一项");
                 // 关键：走真实的手势路径，而不是直接 pushActivity。
                 // 用户报的闪退就发生在 TapGestureRecognizer -> giveFocus。
-                brls::View* target = frame_;
-                if (!target) { brls::Logger::warning("frame_ 为空"); return; }
+                //
+                // 必须先 hitTest 找到真正被点的那个控件：
+                // 直接拿 frame_ 派发，事件只到根节点自己的手势识别器，
+                // 卡片上的 TapGestureRecognizer 根本收不到 ——
+                // 这样的「点击自检」永远通过，也永远测不到东西。
+                brls::View* root = frame_ ? frame_->getContentView() : nullptr;
+                if (!root) { brls::Logger::warning("frame_ 为空"); return; }
+                brls::View* target = root->hitTest(brls::Point(700, 200));
+                if (!target) { brls::Logger::warning("hitTest 没有命中任何控件"); return; }
+                brls::Logger::info("自检：命中 {}（{}x{}）", typeid(*target).name(),
+                                   target->getWidth(), target->getHeight());
                 for (auto phase : {brls::TouchPhase::START, brls::TouchPhase::END}) {
                     brls::TouchState ts;
                     ts.fingerId = 0;
@@ -474,7 +501,101 @@ void FileBrowserActivity::renderSourcesContent() {
     sources_container_->addView(scroller);
 }
 
-// 媒体库视图：列出用户添加的文件夹及其中的视频
+// ─────────────────────────────────────────────────────────────────────────
+// 媒体库：文件夹总览 ⇄ 单个文件夹
+//
+// 为什么要多出「文件夹」这一层：
+//   把所有目录里的视频和音乐拉平成一条列表时，十个「01. 开头」的条目
+//   排成一列，视频与音乐混在一起，「3:21」既可能是短片也可能是歌 ——
+//   一屏扫过去读不出哪些是同一部剧。文件夹是用户自己在文件管理器里
+//   分好的桶：先看桶，再决定进哪个桶。
+//
+// 首屏另配一段「最近添加」：只有目录卡时，刚拷进去的片子反而找不到。
+// ─────────────────────────────────────────────────────────────────────────
+
+// 视频条目卡片。媒体库、文件夹内、最近添加三处共用同一套外观与行为，
+// 差别只在传入的播放列表（点开之后能连着往下放的那一组）。
+MediaCell* FileBrowserActivity::makeVideoCell(const MediaItem& item,
+                                              std::vector<MediaItem> playlist,
+                                              size_t idx) {
+    // 若已刮削过，优先显示正式标题
+    auto meta = MetadataStore::getInstance().get(item.path);
+    const bool has_meta = meta && !meta->title.empty();
+    const std::string title = has_meta ? meta->title : item.name;
+
+    std::string sub;
+    std::string badge;
+    float progress = -1.0f;
+
+    if (meta && !meta->is_empty()) {
+        if (!meta->release_date.empty()) sub = meta->release_date.substr(0, 4);
+        if (meta->runtime_minutes > 0) {
+            if (!sub.empty()) sub += " · ";
+            sub += std::to_string(meta->runtime_minutes) + " 分钟";
+        }
+        if (!meta->genres.empty()) {
+            if (!sub.empty()) sub += " · ";
+            sub += meta->genres;
+        }
+        if (meta->rating > 0) {
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "★ %.1f", meta->rating);
+            badge = buf;
+        }
+    }
+
+    if (sub.empty()) sub = MediaScanner::formatFileSize(item.size);
+    if (!item.matched_subtitles.empty()) sub += " · 含字幕";
+
+    HistoryRecord rec;
+    if (PlaybackHistory::getInstance().getRecord(item.path, rec)) {
+        if (rec.completed) {
+            badge = "已看完";
+            progress = 1.0f;
+        } else if (rec.duration > 0) {
+            progress = (float)((double)rec.position / rec.duration);
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "已看 %d%%", (int)(progress * 100));
+            badge = buf;
+        }
+    }
+
+    auto* cell = new MediaCell(ui::Icon::Video, title, sub);
+    if (!badge.empty()) cell->setBadge(badge);
+    if (progress >= 0.0f) cell->setProgress(progress);
+
+    cell->registerClickAction([playlist = std::move(playlist), idx](brls::View*) {
+        brls::Logger::info("[click] 视频条目被点击 idx={} 总数={}", idx, playlist.size());
+        brls::Application::pushActivity(new PlayerActivity(playlist, idx));
+        return true;
+    });
+
+    // X 键：对当前条目刮削元数据
+    std::string vpath = item.path;
+    std::string vname = item.name;
+    cell->registerAction("获取信息", brls::ControllerButton::BUTTON_X,
+        [this, vpath, vname](brls::View*) {
+            this->scrapeItem(vpath, vname);
+            return true;
+        }, false);
+    return cell;
+}
+
+MediaCell* FileBrowserActivity::makeAudioCell(const MediaItem& item,
+                                              std::vector<MediaItem> playlist,
+                                              size_t idx) {
+    auto* cell = new MediaCell(ui::Icon::Music, item.name,
+                               MediaScanner::formatFileSize(item.size));
+    cell->registerClickAction([playlist = std::move(playlist), idx](brls::View*) {
+        // 音乐走全局音频引擎，退出本界面后继续在后台播放
+        AudioPlayer::getInstance().playPlaylist(playlist, idx);
+        brls::Application::notify("正在播放：" + playlist[idx].name);
+        return true;
+    });
+    return cell;
+}
+
+// 媒体库视图
 brls::View* FileBrowserActivity::createLibraryView() {
     library_scroller_ = new brls::ScrollingFrame();
     library_scroller_->setGrow(1.0f);
@@ -492,143 +613,243 @@ brls::View* FileBrowserActivity::createLibraryView() {
     library_list_->setPaddingBottom(28.0f);
     library_scroller_->setContentView(library_list_);
 
-    // 重建库列表
-    auto rebuild = [this]() {
-        // 与 renderSourcesContent() 保持一致：以 slot 为准同步一次。
-        // DynamicBox 析构置空 slot 发生在 deletionPool drain，
-        // 比 removeView 晚一帧；不同步就会在那一帧里对已删除的 Box 调 clearViews()。
-        if (library_slot_) library_list_ = *library_slot_;
-        if (!library_list_) return;
-        library_list_->clearViews();
+    // 首次进入时若无缓存则触发一次扫描。
+    //
+    // 只判「整个库为空」不够：新加一个文件夹之后库里已经有东西，
+    // 那个新文件夹却会以「空文件夹」的样子挂在首屏，直到用户按 Y ——
+    // 用户不知道要按 Y，只会觉得加进来的目录没生效。
+    // 空目录本身不能每次进媒体库都重扫，所以按文件夹记一次「查过了」。
+    {
         auto& lib = MediaLibrary::getInstance();
-
-        // 配置项不在内容页：添加文件夹、重新扫描、清空缓存全在「设置」。
-        // 内容页只有内容 —— 上一版把「添加媒体文件夹」「重新扫描」压在影片
-        // 列表上方，每次扫库都要在影片之间找一遍这些按钮。
-        auto folders = lib.getFolders();
-        if (folders.empty()) {
-            library_list_->addView(new EmptyState(
-                ui::Icon::Folder, "媒体库还是空的",
-                "到「设置」里添加一个媒体文件夹\n扫描完成后，影片与音乐会出现在这里"));
-        }
-
-        // --- 视频段 ---
-        auto videos = lib.getVideos();
-        if (!videos.empty()) {
-            library_list_->addView(
-                new SectionHeader("视频 · " + std::to_string(videos.size())));
-        }
-            for (size_t i = 0; i < videos.size(); ++i) {
-                const auto& item = videos[i];
-                // 若已刮削过，优先显示正式标题
-                auto meta = MetadataStore::getInstance().get(item.path);
-                const bool has_meta = meta && !meta->title.empty();
-                const std::string title = has_meta ? meta->title : item.name;
-
-                std::string sub;
-                std::string badge;
-                float progress = -1.0f;
-
-                if (meta && !meta->is_empty()) {
-                    if (!meta->release_date.empty())
-                        sub = meta->release_date.substr(0, 4);
-                    if (meta->runtime_minutes > 0) {
-                        if (!sub.empty()) sub += " · ";
-                        sub += std::to_string(meta->runtime_minutes) + " 分钟";
-                    }
-                    if (!meta->genres.empty()) {
-                        if (!sub.empty()) sub += " · ";
-                        sub += meta->genres;
-                    }
-                    if (meta->rating > 0) {
-                        char buf[32];
-                        std::snprintf(buf, sizeof(buf), "★ %.1f", meta->rating);
-                        badge = buf;
-                    }
-                }
-
-                if (sub.empty()) sub = MediaScanner::formatFileSize(item.size);
-                if (!item.matched_subtitles.empty()) sub += " · 含字幕";
-
-                HistoryRecord rec;
-                if (PlaybackHistory::getInstance().getRecord(item.path, rec)) {
-                    if (rec.completed) {
-                        badge = "已看完";
-                        progress = 1.0f;
-                    } else if (rec.duration > 0) {
-                        progress = (float)((double)rec.position / rec.duration);
-                        char buf[32];
-                        std::snprintf(buf, sizeof(buf), "已看 %d%%", (int)(progress * 100));
-                        badge = buf;
-                    }
-                }
-
-                auto* cell = new MediaCell(ui::Icon::Video, title, sub);
-                if (!badge.empty()) cell->setBadge(badge);
-                if (progress >= 0.0f) cell->setProgress(progress);
-
-                size_t idx = i;
-                cell->registerClickAction([videos, idx](brls::View*) {
-                    brls::Logger::info("[click] 视频条目被点击 idx={} 总数={}",
-                                       idx, videos.size());
-                    brls::Application::pushActivity(new PlayerActivity(videos, idx));
-                    return true;
-                });
-
-                // X 键：对当前条目刮削元数据
-                std::string vpath = item.path;
-                std::string vname = item.name;
-                cell->registerAction("获取信息", brls::ControllerButton::BUTTON_X,
-                    [this, vpath, vname](brls::View*) {
-                        this->scrapeItem(vpath, vname);
-                        return true;
-                    }, false);
-
-                library_list_->addView(cell);
+        if (!lib.getFolders().empty() && !lib.isScanning()) {
+            bool need_scan = lib.getItems().empty();
+            std::vector<std::string> newly_empty;
+            for (const auto& g : lib.getGroups()) {
+                if (g.total() > 0) continue;
+                const bool checked = std::find(empty_checked_.begin(), empty_checked_.end(),
+                                               g.folder.path) != empty_checked_.end();
+                if (!checked) newly_empty.push_back(g.folder.path);
             }
-
-        // --- 音乐段 ---
-        // 视频与音乐同处媒体库，但**分段**而不是混排：
-        // 混排时「3:21」既可能是短片也可能是歌，扫一眼分不出来。
-        // 某一段为空就整段不出现 —— 空的「音乐 · 0」加一块大空状态，
-        // 只会把真正有内容的那一段挤出首屏。
-        auto audios = lib.getAudios();
-        if (!audios.empty()) {
-            library_list_->addView(
-                new SectionHeader("音乐 · " + std::to_string(audios.size())));
-            for (size_t i = 0; i < audios.size(); ++i) {
-                const auto& item = audios[i];
-                auto* cell = new MediaCell(ui::Icon::Music, item.name,
-                                           MediaScanner::formatFileSize(item.size));
-                size_t idx = i;
-                cell->registerClickAction([audios, idx](brls::View*) {
-                    // 音乐走全局音频引擎，退出本界面后继续在后台播放
-                    AudioPlayer::getInstance().playPlaylist(audios, idx);
-                    brls::Application::notify("正在播放：" + audios[idx].name);
-                    return true;
-                });
-                library_list_->addView(cell);
+            if (!newly_empty.empty()) {
+                need_scan = true;
+                for (const auto& p : newly_empty) empty_checked_.push_back(p);
             }
+            if (need_scan) startLibraryScan();
         }
-    };
-
-    // 首次进入时若无缓存则触发一次扫描
-    if (MediaLibrary::getInstance().getItems().empty() &&
-        !MediaLibrary::getInstance().getFolders().empty() &&
-        !MediaLibrary::getInstance().isScanning()) {
-        startLibraryScan();
     }
 
-    rebuild();
+    renderLibraryContent();
 
-    // 把 rebuild 挂到刷新路径上：用一个子类化的 Box 在析构时清理指针
     library_scroller_->registerAction("重新扫描", brls::ControllerButton::BUTTON_Y,
         [this](brls::View*) {
             startLibraryScan();
             return true;
         }, false);
 
+    // B 在文件夹内部是「上一级」，在总览上才交给系统（退出界面）。
+    // 不接管的话，从文件夹里退出去会直接关掉整个 Activity。
+    library_scroller_->registerAction("返回", brls::ControllerButton::BUTTON_B,
+        [this](brls::View*) {
+            if (open_folder_.empty()) return false;
+            openFolder(std::string());
+            return true;
+        }, false);
+
     return library_scroller_;
+}
+
+void FileBrowserActivity::openFolder(const std::string& path) {
+    open_folder_ = path;
+    renderLibraryContent();
+    // 进 / 出文件夹是一次导航：焦点必须落在新一层的第一项上。
+    // 不接管的话，原来那张卡片已经被删除，焦点是空的 ——
+    // 手柄按 A 没反应，看起来像「界面卡住了」。
+    //
+    // 进文件夹时跳过第 0 项（那是「全部文件夹」返回行）：
+    // 进了桶之后按 A 又退出来，是最容易让人以为「点不动」的行为。
+    if (library_list_) {
+        std::vector<brls::View*> items;
+        collectFocusables(library_list_, items);
+        if (!items.empty()) {
+            const size_t idx = (path.empty() || items.size() < 2) ? 0 : 1;
+            brls::Application::giveFocus(items[idx]);
+        }
+    }
+    // 换层之后要回到顶部：进文件夹还停在总览的滚动位置，
+    // 首屏直接从第三张卡片开始，看着像内容丢了。
+    if (library_scroller_) library_scroller_->setContentOffsetY(0.0f, false);
+}
+
+void FileBrowserActivity::renderLibraryContent() {
+    // 重建会把列表项连同焦点一起销毁。先记下重建前焦点是否已经不在，
+    // 重建完再决定要不要把焦点接回来（扫描完成的刷新走这条路径）。
+    brls::View* prev = brls::Application::getCurrentFocus();
+    const bool focus_lost = (prev == nullptr) || brls::Application::isViewDead(prev);
+
+    // 与 renderSourcesContent() 保持一致：以 slot 为准同步一次。
+    // DynamicBox 析构置空 slot 发生在 deletionPool drain，
+    // 比 removeView 晚一帧；不同步就会在那一帧里对已删除的 Box 调 clearViews()。
+    if (library_slot_) library_list_ = *library_slot_;
+    if (!library_list_) return;
+    library_list_->clearViews();
+
+    auto& lib = MediaLibrary::getInstance();
+    if (lib.getFolders().empty()) {
+        library_list_->addView(new EmptyState(
+            ui::Icon::Folder, "媒体库还是空的",
+            "到「设置」里添加一个媒体文件夹\n扫描完成后，影片与音乐会出现在这里"));
+        return;
+    }
+
+    auto groups = lib.getGroups();
+
+    // 文件夹被移除 / 换库之后，open_folder_ 可能指向已经不存在的目录
+    if (!open_folder_.empty()) {
+        const auto it = std::find_if(groups.begin(), groups.end(),
+            [this](const MediaLibrary::Group& g) { return g.folder.path == open_folder_; });
+        if (it == groups.end()) open_folder_.clear();
+    }
+
+    if (!open_folder_.empty()) {
+        renderLibraryFolder(groups);
+    } else {
+        renderLibraryOverview(groups);
+    }
+
+    if (focus_lost) {
+        std::vector<brls::View*> items;
+        collectFocusables(library_list_, items);
+        if (!items.empty()) brls::Application::giveFocus(items[0]);
+    }
+}
+
+void FileBrowserActivity::renderLibraryOverview(const std::vector<MediaLibrary::Group>& groups) {
+    auto& lib = MediaLibrary::getInstance();
+
+    size_t total = 0;
+    for (const auto& g : groups) total += g.total();
+
+    if (total == 0) {
+        library_list_->addView(new EmptyState(
+            ui::Icon::Video, "这些文件夹里还没有媒体文件",
+            "支持的视频与音频会自动进库\n按 Y 可以重新扫描"));
+        return;
+    }
+
+    library_list_->addView(
+        new SectionHeader("文件夹 · " + std::to_string(groups.size())));
+
+    // 一行 4 张。卡片自己左右各让 8，"缝"就有了，容器不需要管间距。
+    brls::Box* row = nullptr;
+    int col = 0;
+    for (const auto& g : groups) {
+        if (col == 0) {
+            row = new brls::Box();
+            row->setAxis(brls::Axis::ROW);
+            row->setWidthPercentage(100.0f);
+            row->setHeight(MediaFolderCard::HEIGHT);
+            library_list_->addView(row);
+        }
+
+        // 四宫格取前四个：视频优先，不足再用音乐补。
+        // 不复制已有条目来凑满四格 —— 同一张画面出现两次，用户会以为
+        // 文件夹里有两部片。
+        std::vector<MediaItem> covers;
+        covers.reserve(4);
+        for (const auto& v : g.videos) {
+            if (covers.size() >= 4) break;
+            covers.push_back(v);
+        }
+        for (const auto& a : g.audios) {
+            if (covers.size() >= 4) break;
+            covers.push_back(a);
+        }
+
+        auto* card = new MediaFolderCard(g.folder.display_name, g.folder.path,
+                                         std::move(covers),
+                                         static_cast<int>(g.videos.size()),
+                                         static_cast<int>(g.audios.size()));
+        card->setWidthPercentage(25.0f);
+        const std::string fpath = g.folder.path;
+        card->registerClickAction([this, fpath](brls::View*) {
+            openFolder(fpath);
+            return true;
+        });
+        row->addView(card);
+        col = (col + 1) % 4;
+    }
+
+    // 最近添加：按文件修改时间倒序，跨文件夹取 8 条。
+    // 只有目录卡时，刚拷进去的片子反而找不到。
+    const auto recent = lib.getRecent(8);
+    if (recent.empty()) return;
+
+    std::vector<MediaItem> recent_videos;
+    std::vector<MediaItem> recent_audios;
+    for (const auto& it : recent) {
+        if (it.is_video()) recent_videos.push_back(it);
+        else if (it.is_audio()) recent_audios.push_back(it);
+    }
+
+    library_list_->addView(
+        new SectionHeader("最近添加 · " + std::to_string(recent.size())));
+    for (const auto& item : recent) {
+        if (item.is_video()) {
+            size_t idx = 0;
+            for (size_t i = 0; i < recent_videos.size(); ++i) {
+                if (recent_videos[i].path == item.path) { idx = i; break; }
+            }
+            library_list_->addView(makeVideoCell(item, recent_videos, idx));
+        } else if (item.is_audio()) {
+            size_t idx = 0;
+            for (size_t i = 0; i < recent_audios.size(); ++i) {
+                if (recent_audios[i].path == item.path) { idx = i; break; }
+            }
+            library_list_->addView(makeAudioCell(item, recent_audios, idx));
+        }
+    }
+}
+
+void FileBrowserActivity::renderLibraryFolder(const std::vector<MediaLibrary::Group>& groups) {
+    const auto it = std::find_if(groups.begin(), groups.end(),
+        [this](const MediaLibrary::Group& g) { return g.folder.path == open_folder_; });
+    if (it == groups.end()) return;
+    const MediaLibrary::Group& g = *it;
+
+    // 返回行：和条目一样的卡片规格，位置也一致 —— 用户不需要为「回去」
+    // 学一套新的操作方式，方向键往上顶一条就是它。
+    // 不用右侧的 > 箭头：那是「进入下一层」的语义，而这一行是往上一层。
+    std::string back_sub = g.folder.display_name;
+    if (!g.videos.empty()) back_sub += " · " + std::to_string(g.videos.size()) + " 视频";
+    if (!g.audios.empty()) back_sub += " · " + std::to_string(g.audios.size()) + " 首音乐";
+    auto* back = new MediaCell(ui::Icon::Back, "全部文件夹", back_sub);
+    back->registerClickAction([this](brls::View*) {
+        openFolder(std::string());
+        return true;
+    });
+    library_list_->addView(back);
+
+    if (!g.videos.empty()) {
+        library_list_->addView(
+            new SectionHeader("视频 · " + std::to_string(g.videos.size())));
+        for (size_t i = 0; i < g.videos.size(); ++i) {
+            library_list_->addView(makeVideoCell(g.videos[i], g.videos, i));
+        }
+    }
+
+    if (!g.audios.empty()) {
+        library_list_->addView(
+            new SectionHeader("音乐 · " + std::to_string(g.audios.size())));
+        for (size_t i = 0; i < g.audios.size(); ++i) {
+            library_list_->addView(makeAudioCell(g.audios[i], g.audios, i));
+        }
+    }
+
+    if (g.total() == 0) {
+        library_list_->addView(new EmptyState(
+            ui::Icon::Folder, "这个文件夹里没有媒体文件",
+            "支持的视频与音频会自动进库\n按 Y 可以重新扫描"));
+    }
 }
 
 // 设置页：原来散落在「存储位置」「视频库」里的配置项全部收在这里。
@@ -982,6 +1203,9 @@ void FileBrowserActivity::showMediaInfo(const std::string& path, const std::stri
 
 void FileBrowserActivity::refresh() {
     renderSourcesContent();
+    // 扫描完成时用户可能正停在媒体库上：不重画的话，新扫出来的片子
+    // 要切一次标签才出现，看起来像扫描没生效。
+    renderLibraryContent();
 }
 
 } // namespace deck_player

@@ -6,12 +6,15 @@
 #include <vector>
 #include <borealis.hpp>
 #include "model/media_item.hpp"
+#include "model/media_library.hpp"
 #include <vector>
 #include <string>
 #include <atomic>
 #include <memory>
 
 namespace deck_player {
+
+class MediaCell;
 
 class FileBrowserActivity : public brls::Activity {
 public:
@@ -25,6 +28,9 @@ public:
     // 切换到指定标签页（0=媒体库 1=文件 2=历史 3=设置）。
     // 供自动化测试使用：设置环境变量后逐个标签抓帧。
     void selectTabForTest(int index);
+
+    // 供自动化测试：媒体库是否停在某个文件夹里（false = 文件夹总览）
+    bool libraryInFolderForTest() const { return !open_folder_.empty(); }
 
     void navigateTo(const std::string& path, const std::string& title = "");
     void navigateUp();
@@ -41,6 +47,18 @@ private:
     void promptAddFolder();
     void startLibraryScan();
     void showFolderOptions(const std::string& path, const std::string& name);
+
+    // 媒体库渲染：总览（文件夹卡片 + 最近添加）⇄ 单个文件夹
+    void renderLibraryContent();
+    void renderLibraryOverview(const std::vector<MediaLibrary::Group>& groups);
+    void renderLibraryFolder(const std::vector<MediaLibrary::Group>& groups);
+    void openFolder(const std::string& path);
+
+    // 条目卡片。三处共用同一套外观，差别只在传入的播放列表。
+    MediaCell* makeVideoCell(const MediaItem& item, std::vector<MediaItem> playlist,
+                             size_t idx);
+    MediaCell* makeAudioCell(const MediaItem& item, std::vector<MediaItem> playlist,
+                             size_t idx);
 
     // 对单个媒体文件执行刮削，并展示结果供用户确认
     void scrapeItem(const std::string& path, const std::string& filename);
@@ -61,6 +79,12 @@ private:
     brls::ScrollingFrame* library_scroller_ = nullptr;
     brls::Box* library_list_ = nullptr;
     std::shared_ptr<brls::Box*> library_slot_;
+
+    // 当前进入的文件夹（空 = 文件夹总览）
+    std::string open_folder_;
+    // 本次运行中已经为哪些「空文件夹」触发过扫描。
+    // 没有它，一个真实的空目录会让人每次进媒体库都全量重扫一遍。
+    std::vector<std::string> empty_checked_;
 
     // 后台扫描完成回调的存活标志，销毁时置 false
     // 每个后台任务各有一个存活标志。

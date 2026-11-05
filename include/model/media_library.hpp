@@ -51,6 +51,23 @@ public:
     std::vector<MediaItem> getVideos() const;
     // 获取所有音频条目
     std::vector<MediaItem> getAudios() const;
+    // 最近添加的条目（按文件修改时间倒序）。
+    // 媒体库首屏需要一块「最近添加」：只按文件夹分组时，
+    // 一屏几张目录卡，刚拷进去的片子反而找不到。
+    std::vector<MediaItem> getRecent(size_t limit) const;
+
+    // 按「用户添加的文件夹」归组后的结果。
+    //
+    // 为什么不复用 getVideos()：平铺列表把 10 个「01. 开头」排成一列，
+    // 视频和音乐混在一起，「3:21」既可能是短片也可能是歌。
+    // 文件夹是用户自己在文件管理器里分好的桶，让它露出来。
+    struct Group {
+        MediaLibraryFolder folder;
+        std::vector<MediaItem> videos;
+        std::vector<MediaItem> audios;
+        size_t total() const { return videos.size() + audios.size(); }
+    };
+    std::vector<Group> getGroups() const;
 
     // ---- 扫描 ----
     // 是否正在扫描

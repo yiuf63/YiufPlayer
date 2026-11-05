@@ -117,8 +117,23 @@ void runFunctionalSmoke() {
         if (fb) fb->selectTabForTest(0);   // 0 = 媒体库
     }});
 
-    // 3. 按 A 打开第一个视频 —— 这是最关键的功能断言
-    steps.push_back({200, "按 A 播放", []() {
+    // 3. 按 A 进入第一个文件夹。
+    //    媒体库首屏现在是文件夹卡片（不是影片列表），第一下 A 是「进桶」，
+    //    第二下 A 才是「播放」。少这一步，后面的「按 A 播放」必然失败 ——
+    //    但那是测试没跟上信息架构，不是产品坏了。
+    steps.push_back({300, "按 A 进入文件夹", []() {
+        auto* fb = dynamic_cast<deck_player::FileBrowserActivity*>(
+            brls::Application::getTopActivity());
+        const bool before = fb && fb->libraryInFolderForTest();
+        brls::Application::injectButton(brls::BUTTON_A);
+        const bool after = fb && fb->libraryInFolderForTest();
+        check("按 A 进入文件夹", !before && after,
+              std::string("进入前=") + (before ? "是" : "否") +
+              " 进入后=" + (after ? "是" : "否"));
+    }});
+
+    // 3.5 再按 A 打开文件夹里的第一个视频 —— 这是最关键的功能断言
+    steps.push_back({400, "按 A 播放", []() {
         size_t before = stackDepth();
         brls::View* f = brls::Application::getCurrentFocus();
         brls::Logger::info("[smoke] currentFocus = {} ({})", (void*)f,
@@ -153,12 +168,18 @@ void runFunctionalSmoke() {
               "栈深 " + std::to_string(before) + " -> " + std::to_string(stackDepth()));
     }});
 
-    // 6. 再按一次 B，验证「返回上级目录」也可用
+    // 6. 再按一次 B：这一下不再是「退到上一页」，而是「从文件夹退回总览」。
+    //    媒体库自己接管了 B，所以活动栈深度不变 —— 若它没接住，
+    //    用户从文件夹里退出去会直接关掉整个界面。
     steps.push_back({400, "再按 B", []() {
         size_t before = stackDepth();
+        auto* fb = dynamic_cast<deck_player::FileBrowserActivity*>(
+            brls::Application::getTopActivity());
         brls::Application::injectButton(brls::BUTTON_B);
-        check("连续返回不崩溃且深度不增", stackDepth() <= before,
-              "栈深 " + std::to_string(before) + " -> " + std::to_string(stackDepth()));
+        const bool still_in_folder = fb && fb->libraryInFolderForTest();
+        check("B 从文件夹退回总览", !still_in_folder && stackDepth() == before,
+              std::string("仍在文件夹=") + (still_in_folder ? "是" : "否") +
+              " 栈深 " + std::to_string(before) + " -> " + std::to_string(stackDepth()));
     }});
 
     // 6. 汇总

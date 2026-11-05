@@ -28,6 +28,7 @@ struct MediaItem {
     std::string path;          // 完整绝对路径
     MediaType type;            // 文件或目录
     int64_t size = 0;          // 文件字节大小
+    int64_t modified = 0;      // 文件修改时间（Unix 秒）
     int64_t duration = 0;      // 媒体总时长（秒）
     int64_t last_position = 0; // 上次播放进度（秒）
     std::string extension;     // 后缀名（小写）
