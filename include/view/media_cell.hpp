@@ -21,6 +21,7 @@
 #include <borealis/core/box.hpp>
 
 #include "ui/icons.hpp"
+#include "ui/scene_tile.hpp"
 
 namespace brls { class ScrollingFrame; }
 
@@ -42,6 +43,9 @@ public:
     void setProgress(float ratio);
     // 目录 / 需要进入下一层的条目显示右箭头
     void setChevron(bool show);
+    // 用 16:9 缩略图替代左侧的类型图标块。
+    // 只在视频行上调用 —— 音频没有画面，硬塞一张占位图只会让列表更花。
+    void setThumbnail(ui::SceneSpec spec);
 
     void draw(NVGcontext* vg, float x, float y, float width, float height,
               brls::Style style, brls::FrameContext* ctx) override;
@@ -53,6 +57,8 @@ private:
     std::string badge_;
     float progress_ = -1.0f;
     bool chevron_ = false;
+    bool has_thumb_ = false;
+    ui::SceneSpec thumb_;
 };
 
 // 分组标题：小号大写感 + 大留白，负责把列表切成「段落」。

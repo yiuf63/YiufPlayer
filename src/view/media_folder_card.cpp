@@ -8,6 +8,8 @@
 #include <borealis/core/touch/tap_gesture.hpp>
 
 #include "ui/design.hpp"
+#include "ui/scene_tile.hpp"
+#include "view/media_thumb.hpp"
 #include "ui/icons.hpp"
 
 namespace deck_player {
@@ -23,121 +25,12 @@ constexpr float INSET_BOTTOM = 8.0f;
 constexpr float CAPTION_H = 58.0f;   // 两行文字 + 呼吸
 constexpr float GAP = 2.0f;          // 四宫格的缝
 
-struct TilePalette {
-    unsigned int skyTop;
-    unsigned int skyBottom;
-    unsigned int sun;
-};
-
-// 八套「天空 → 地面」配色。同一屏里 8 张卡共 32 格，靠这里的色相
-// 和下面按哈希取的太阳位置拉开差异，不会读成一片同色色块。
-const TilePalette kPalettes[] = {
-    {0x3A5566, 0x16232C, 0xFFEBC6},  // 海港黄昏
-    {0x2B3340, 0x11161D, 0xFFCF9B},  // 城市傍晚
-    {0x24402F, 0x0E1A14, 0xD7F0B8},  // 林间晨光
-    {0x43536B, 0x1A222E, 0xE8F1FF},  // 雪原
-    {0x241E33, 0x0D0A14, 0xC9B6FF},  // 夜山
-    {0x5A4A34, 0x221A12, 0xFFD9A0},  // 沙滩
-    {0x2A2036, 0x100B17, 0xFF9F69},  // 都市霓虹
-    {0x1D3A44, 0x08161B, 0x9FE6F0},  // 深海
-};
-constexpr int kPaletteCount = static_cast<int>(sizeof(kPalettes) / sizeof(kPalettes[0]));
-
-uint32_t hashPath(const std::string& s) {
-    uint32_t h = 2166136261u;   // FNV-1a：短字符串上分布够散，且稳定
-    for (unsigned char c : s) {
-        h ^= c;
-        h *= 16777619u;
-    }
-    return h;
-}
-
 void fillRoundedVarying(NVGcontext* vg, float x, float y, float w, float h,
                         float tl, float tr, float br, float bl, NVGcolor color) {
     nvgBeginPath(vg);
     nvgRoundedRectVarying(vg, x, y, w, h, tl, tr, br, bl);
     nvgFillColor(vg, color);
     nvgFill(vg);
-}
-
-// 一道山脊剪影。
-//
-// 这是「像画面」的关键：渐变 + 圆点只能读成色斑，人眼认画面靠的是
-// **轮廓**。一条不规则的深色山脊压在渐变的天空上，缩到 80×70 也还是
-// 「落日下的山」，而同样的尺寸下纯渐变只是一块发光的雾。
-void hillShape(NVGcontext* vg, float x, float y, float w, float h,
-               float baseY, float amp, float phase01, NVGcolor color) {
-    // phase 决定主峰落在横向的哪个位置（0.18..0.52），
-    // 相邻格子因此不会长成同一座山
-    const float p1 = 0.18f + phase01 * 0.34f;
-    const float p2 = p1 + 0.30f;
-    nvgBeginPath(vg);
-    nvgMoveTo(vg, x, baseY + amp * 0.20f);
-    nvgBezierTo(vg, x + w * p1 * 0.60f, baseY + amp * 0.10f,
-                x + w * (p1 - 0.08f), baseY - amp * 0.90f,
-                x + w * p1, baseY - amp);
-    nvgBezierTo(vg, x + w * (p1 + 0.12f), baseY - amp * 1.05f,
-                x + w * (p2 - 0.10f), baseY - amp * 0.25f,
-                x + w * p2, baseY - amp * 0.35f);
-    nvgBezierTo(vg, x + w * (p2 + 0.12f), baseY - amp * 0.15f,
-                x + w * 0.92f, baseY - amp * 0.55f,
-                x + w, baseY - amp * 0.30f);
-    nvgLineTo(vg, x + w, y + h);
-    nvgLineTo(vg, x, y + h);
-    nvgClosePath(vg);
-    nvgFillColor(vg, color);
-    nvgFill(vg);
-}
-
-// 一格画面。
-//
-// 三层：天空渐变（有方向）→ 落日（一个明确的亮源）→ 两道山脊（轮廓）。
-// 少任何一层都会退化成色块：只有渐变是「雾」，只有渐变加圆点是「发光球」。
-// 山脊只压到格子底边，而格子底边本来就不需要圆角（拼贴的缝与文字区都在
-// 下面），所以可以直接画多边形，不用裁剪。
-void drawTile(NVGcontext* vg, float x, float y, float w, float h,
-              float tl, float tr, float br, float bl,
-              uint32_t seed, bool audio) {
-    if (w < 8.0f || h < 8.0f) return;
-    const TilePalette& p = kPalettes[seed % kPaletteCount];
-    const float jitter = static_cast<float>((seed >> 9) % 100) / 100.0f;
-    const float jitter2 = static_cast<float>((seed >> 17) % 100) / 100.0f;
-
-    NVGpaint sky = nvgLinearGradient(vg, x, y, x, y + h,
-                                     ui::hex(p.skyTop), ui::hex(p.skyBottom));
-    nvgBeginPath(vg);
-    nvgRoundedRectVarying(vg, x, y, w, h, tl, tr, br, bl);
-    nvgFillPaint(vg, sky);
-    nvgFill(vg);
-
-    // 落日：压在远山后面，别放在画面正中
-    const float sunR = std::max(3.0f, h * 0.13f);
-    const float sunX = x + w * (0.30f + jitter * 0.42f);
-    const float sunY = y + h * (0.50f + jitter2 * 0.10f);
-    NVGpaint glow = nvgRadialGradient(vg, sunX, sunY, sunR * 0.5f, sunR * 3.6f,
-                                      ui::rgba(ui::hex(p.sun), 0.75f),
-                                      ui::rgba(ui::hex(p.sun), 0.0f));
-    nvgBeginPath(vg);
-    nvgCircle(vg, sunX, sunY, sunR * 3.6f);
-    nvgFillPaint(vg, glow);
-    nvgFill(vg);
-    ui::fillCircle(vg, sunX, sunY, sunR, ui::hex(p.sun, 0.92f));
-
-    // 远山 / 近山：远山更接近天空色，形成空气透视
-    const NVGcolor far = ui::mix(ui::hex(p.skyBottom), ui::hex(0x000000), 0.35f);
-    const NVGcolor near = ui::mix(ui::hex(p.skyBottom), ui::hex(0x000000), 0.70f);
-    hillShape(vg, x, y, w, h, y + h * 0.68f, h * 0.26f, jitter, far);
-    hillShape(vg, x, y, w, h, y + h * 0.88f, h * 0.16f, jitter2, near);
-
-    // 音乐用一枚角标区分：音频没有「画面」，光靠配色分不出来
-    if (audio && w >= 44.0f) {
-        const float chip = 20.0f;
-        const float chipX = x + 6.0f;
-        const float chipY = y + h - chip - 6.0f;
-        ui::fillRoundRect(vg, chipX, chipY, chip, chip, 6.0f, ui::hex(0x000000, 0.6f));
-        ui::drawIcon(vg, ui::Icon::Music, chipX + chip * 0.5f, chipY + chip * 0.5f,
-                     chip * 0.62f, ui::hex(0xE7EDF5, 0.92f), 1.8f);
-    }
 }
 
 } // namespace
@@ -183,8 +76,7 @@ void MediaFolderCard::draw(NVGcontext* vg, float x, float y, float width, float 
                      ui::rgba(pal.textMute, 0.55f), 1.7f);
     } else if (n == 1) {
         // 只有一项：整张给它，不切成四格 —— 切了会读成「还有四部」
-        drawTile(vg, cx, cy, cw, thumbH, r, r, 0.0f, 0.0f,
-                 hashPath(covers_[0].path), covers_[0].is_audio());
+        ui::drawScene(vg, cx, cy, cw, thumbH, r, r, 0.0f, 0.0f, sceneSpecFor(covers_[0]));
     } else if (n < 4) {
         // 2–3 项：等分竖条。
         // 保留四宫格的空位会被读成「这里有东西没加载出来」—— 空格子比
@@ -192,9 +84,9 @@ void MediaFolderCard::draw(NVGcontext* vg, float x, float y, float width, float 
         const float tw = (cw - GAP * static_cast<float>(n - 1)) / static_cast<float>(n);
         for (size_t i = 0; i < n; ++i) {
             const float tx = cx + static_cast<float>(i) * (tw + GAP);
-            drawTile(vg, tx, cy, tw, thumbH,
-                     i == 0 ? r : 0.0f, i + 1 == n ? r : 0.0f, 0.0f, 0.0f,
-                     hashPath(covers_[i].path), covers_[i].is_audio());
+            ui::drawScene(vg, tx, cy, tw, thumbH,
+                          i == 0 ? r : 0.0f, i + 1 == n ? r : 0.0f, 0.0f, 0.0f,
+                          sceneSpecFor(covers_[i]));
         }
     } else {
         const float hw = (cw - GAP) * 0.5f;
@@ -206,8 +98,8 @@ void MediaFolderCard::draw(NVGcontext* vg, float x, float y, float width, float 
         const float trs[4] = {0.0f, r, 0.0f, 0.0f};
         for (int i = 0; i < 4; ++i) {
             const MediaItem& item = covers_[static_cast<size_t>(i)];
-            drawTile(vg, xs[i % 2], ys[i / 2], hw, hh, tls[i], trs[i], 0.0f, 0.0f,
-                     hashPath(item.path), item.is_audio());
+            ui::drawScene(vg, xs[i % 2], ys[i / 2], hw, hh, tls[i], trs[i], 0.0f, 0.0f,
+                          sceneSpecFor(item));
         }
     }
 

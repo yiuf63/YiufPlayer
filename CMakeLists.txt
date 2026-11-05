@@ -108,6 +108,24 @@ add_custom_target(license_check ALL
     add_dependencies(license_check license_probe)
 endif ()
 
+# ---------------------------------------------------------------------------
+# FFmpeg（可选）：列表缩略图与网格卡需要从视频里抽一帧。
+#
+# 刻意做成可选而不是 REQUIRED：
+#   · Android 的 jniLibs 里目前只有 libmpv.so，没有单独的 avformat/avcodec；
+#   · 抽帧只是一层装饰，拿不到就退回占位画面，界面照样能用。
+# 所以这里 find 不到就不定义 DECKPLAYER_HAVE_FFMPEG，thumbnail_cache 走空实现。
+pkg_check_modules(AVFORMAT libavformat)
+pkg_check_modules(AVCODEC libavcodec)
+pkg_check_modules(SWSCALE libswscale)
+if (AVFORMAT_FOUND AND AVCODEC_FOUND AND SWSCALE_FOUND)
+    set(DECKPLAYER_FFMPEG_FOUND TRUE)
+    message(STATUS "FFmpeg 抽帧：启用（avformat ${AVFORMAT_VERSION} / avcodec ${AVCODEC_VERSION}）")
+else ()
+    set(DECKPLAYER_FFMPEG_FOUND FALSE)
+    message(STATUS "FFmpeg 抽帧：未找到 avformat/avcodec/swscale，缩略图退回占位画面")
+endif ()
+
 # libcurl：为插件提供 HTTP 能力。许可证为 MIT/X 风格，允许闭源商业分发，
 # 仅需在第三方声明中保留版权信息（见 THIRD-PARTY-NOTICES.md）。
 if (ANDROID)
@@ -337,6 +355,17 @@ target_link_libraries(deck-player PRIVATE
     $<$<NOT:$<PLATFORM_ID:Android>>:pthread>
     $<$<NOT:$<PLATFORM_ID:Android>>:dl>
 )
+
+# 抽帧（可选）：找到 FFmpeg 才链接，否则 thumbnail_cache 里整段实现被编译掉
+if (DECKPLAYER_FFMPEG_FOUND)
+    target_compile_definitions(deck-player PRIVATE DECKPLAYER_HAVE_FFMPEG=1)
+    target_include_directories(deck-player SYSTEM PRIVATE
+        ${AVFORMAT_INCLUDE_DIRS} ${AVCODEC_INCLUDE_DIRS} ${SWSCALE_INCLUDE_DIRS})
+    target_link_directories(deck-player PRIVATE
+        ${AVFORMAT_LIBRARY_DIRS} ${AVCODEC_LIBRARY_DIRS} ${SWSCALE_LIBRARY_DIRS})
+    target_link_libraries(deck-player PRIVATE
+        ${AVFORMAT_LIBRARIES} ${AVCODEC_LIBRARIES} ${SWSCALE_LIBRARIES})
+endif ()
 
 # 针对 macOS 的 rpath 优化
 if (APPLE)

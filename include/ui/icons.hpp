@@ -16,6 +16,7 @@
 namespace deck_player::ui {
 
 enum class Icon {
+    None,         // 占位：只画文字、不画图标
     Play,
     Pause,
     SeekBack,     // «  后退 10 秒
@@ -47,6 +48,10 @@ enum class Icon {
     Plugin,
     Search,
     Plus,
+    Sliders,      // 三条滑轨（视图与排序）
+    Grid,         // 2×2（平铺视图）
+    List,         // 三行（列表视图）
+    Filter,       // 漏斗（筛选）
 };
 
 // 以 (cx, cy) 为中心绘制，size 为图标外框边长（逻辑像素）。

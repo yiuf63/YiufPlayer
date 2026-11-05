@@ -345,6 +345,58 @@ void iconPlus(NVGcontext* vg) {
     nvgStroke(vg);
 }
 
+// 三条滑轨，每条一个把手 —— 「可以调的东西」的通用符号。
+// 把手位置故意不对齐，否则三条线读成三条横杠（≡）。
+void iconSliders(NVGcontext* vg) {
+    const float ys[3] = {6.8f, 12.0f, 17.2f};
+    const float handles[3] = {9.4f, 15.0f, 7.0f};
+    for (int i = 0; i < 3; ++i) {
+        nvgBeginPath(vg);
+        nvgMoveTo(vg, 3.6f, ys[i]);
+        nvgLineTo(vg, 20.4f, ys[i]);
+        nvgStroke(vg);
+        // 把手画成实心小圆，压在线上（drawIcon 已把填充色与描边色设成同一个）
+        nvgBeginPath(vg);
+        nvgCircle(vg, handles[i], ys[i], 2.5f);
+        nvgFill(vg);
+    }
+}
+
+void iconGrid(NVGcontext* vg) {
+    const float s = 7.2f;
+    const float xs[2] = {3.8f, 13.0f};
+    const float ys[2] = {3.8f, 13.0f};
+    for (int r = 0; r < 2; ++r) {
+        for (int c = 0; c < 2; ++c) {
+            nvgBeginPath(vg);
+            nvgRoundedRect(vg, xs[c], ys[r], s, s, 1.8f);
+            nvgStroke(vg);
+        }
+    }
+}
+
+void iconList(NVGcontext* vg) {
+    const float ys[3] = {7.0f, 12.0f, 17.0f};
+    for (int i = 0; i < 3; ++i) {
+        nvgBeginPath(vg);
+        nvgMoveTo(vg, 3.8f, ys[i]);
+        nvgLineTo(vg, 20.2f, ys[i]);
+        nvgStroke(vg);
+    }
+}
+
+void iconFilter(NVGcontext* vg) {
+    nvgBeginPath(vg);
+    nvgMoveTo(vg, 4.0f, 5.4f);
+    nvgLineTo(vg, 20.0f, 5.4f);
+    nvgLineTo(vg, 13.6f, 12.6f);
+    nvgLineTo(vg, 13.6f, 18.6f);
+    nvgLineTo(vg, 10.4f, 16.6f);
+    nvgLineTo(vg, 10.4f, 12.6f);
+    nvgClosePath(vg);
+    nvgStroke(vg);
+}
+
 } // namespace
 
 void drawIcon(NVGcontext* vg, Icon icon, float cx, float cy, float size,
@@ -402,6 +454,11 @@ void drawIcon(NVGcontext* vg, Icon icon, float cx, float cy, float size,
         case Icon::Plugin:        iconPlugin(vg); break;
         case Icon::Search:        iconSearch(vg); break;
         case Icon::Plus:          iconPlus(vg); break;
+        case Icon::Sliders:       iconSliders(vg); break;
+        case Icon::Grid:          iconGrid(vg); break;
+        case Icon::List:          iconList(vg); break;
+        case Icon::Filter:        iconFilter(vg); break;
+        case Icon::None:          break;
     }
 
     nvgRestore(vg);

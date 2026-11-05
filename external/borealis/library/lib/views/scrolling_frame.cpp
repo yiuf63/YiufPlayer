@@ -165,7 +165,17 @@ void ScrollingFrame::naturalScrollingBehaviour()
         // KERN_INVALID_ADDRESS at 0x5xx，堆栈完全看不出是「焦点为空」。
         // 媒体库加文件夹层后，手柄按 A 进文件夹必踩。
         View* currentFocus = Application::getCurrentFocus();
-        if (!currentFocus || !currentFocus->getFrame().inscribed(getFrame()))
+        // DeckPlayer 补丁 2：还没走完一次布局的视图 frame 是 0×0，
+        // inscribed() 对任何容器都返回 false。列表刚重建、giveFocus 刚
+        // 落到新列表项的那一帧，这里会把焦点抢回 this（然后顺着
+        // findTopMostFocusableView 落到第一项）—— 手柄进文件夹后焦点
+        // 偶发停在「全部文件夹」返回行上，就是这一抢。
+        // 0×0 视图不参与「焦点是否出界」的判定，等布局完成再说。
+        const bool focusUnlaidOut = currentFocus &&
+            currentFocus->getFrame().getWidth() <= 0.0f &&
+            currentFocus->getFrame().getHeight() <= 0.0f;
+        if (!currentFocus ||
+            (!focusUnlaidOut && !currentFocus->getFrame().inscribed(getFrame())))
         {
             Application::giveFocus(this);
         }

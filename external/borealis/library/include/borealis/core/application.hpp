@@ -22,6 +22,8 @@
 
 #include <functional>
 
+#include <unordered_set>
+
 #include <borealis/core/activity.hpp>
 #include <borealis/core/audio.hpp>
 #include <borealis/core/font.hpp>
@@ -381,36 +383,27 @@ class Application
     //
     // 因此判断「还活着吗」不能靠问这个对象，只能靠外部登记：
     //   View 析构时把自己的地址放进 deadViews，giveFocus 先查这张表。
-    // 地址复用会带来极低概率的误判（把新对象当已销毁），但由于只在
-    // giveFocus 且该地址确实曾释放过时才跳过，影响可忽略。
+    //
+    // DeckPlayer 补丁：「地址复用误判」不是极低概率，而是重建列表的必经之路。
+    // clearViews 销毁一排卡片后，新卡片立刻 malloc 到同一个地址 ——
+    // 旧的死亡登记还在表里，isViewDead(新对象) 返回 true，
+    // giveFocus 对着活对象静默返回，焦点留在旧位置上
+    // （实测：手柄进媒体库文件夹后偶发停在返回行，按 A 直接退出）。
+    // 修复：View 构造时把地址从表里摘除（unmarkViewDead），登记表重新自洽。
     static bool isViewDead(const void* p)
     {
         if (p == nullptr) return false;
-        auto& v = deadViews;
-        const bool hit = std::find(v.begin(), v.end(), p) != v.end();
-        // 诊断：统计命中的指针，判断是否存在地址复用误判。
-        // 用 debug 而非 warning —— 这条结论已固化在上面的注释里，
-        // 保留能力即可，不应在发布构建里刷屏让用户误以为出错。
-        static int hit_count = 0;
-        if (hit && hit_count < 30)
-        {
-            ++hit_count;
-            brls::Logger::debug("isViewDead 命中: {} (表内 {} 项)",
-                                p, v.size());
-        }
-        return hit;
+        return deadViews.count(p) > 0;
     }
     static void markViewDead(const void* p)
     {
         if (p == nullptr) return;
-        auto& v = deadViews;
-        if (std::find(v.begin(), v.end(), p) == v.end())
-        {
-            v.push_back(p);
-            // 防止无限增长：超过上限时丢弃最早的一半
-            if (v.size() > 2048)
-                v.erase(v.begin(), v.begin() + 1024);
-        }
+        deadViews.insert(p);
+    }
+    static void unmarkViewDead(const void* p)
+    {
+        if (p == nullptr) return;
+        deadViews.erase(p);
     }
 
     // DeckPlayer 补丁：供自动化冒烟测试注入按键。
@@ -463,7 +456,7 @@ class Application
     inline static FontStash fontStash;
 
     inline static std::vector<Activity*> activitiesStack;
-    inline static std::vector<const void*> deadViews;  // DeckPlayer：已销毁视图地址
+    inline static std::unordered_set<const void*> deadViews;  // DeckPlayer：已销毁视图地址（构造时摘除，见 isViewDead 注释）
     inline static std::vector<View*> focusStack;
     inline static std::deque<View*> deletionPool;
 

@@ -30,6 +30,10 @@ void MediaCell::setSubtitle(std::string subtitle) { subtitle_ = std::move(subtit
 void MediaCell::setBadge(std::string badge) { badge_ = std::move(badge); }
 void MediaCell::setProgress(float ratio) { progress_ = ratio; }
 void MediaCell::setChevron(bool show) { chevron_ = show; }
+void MediaCell::setThumbnail(ui::SceneSpec spec) {
+    has_thumb_ = true;
+    thumb_ = std::move(spec);
+}
 
 void MediaCell::draw(NVGcontext* vg, float x, float y, float width, float height,
                      brls::Style style, brls::FrameContext* ctx) {
@@ -61,17 +65,34 @@ void MediaCell::draw(NVGcontext* vg, float x, float y, float width, float height
                           1.5f, pal.accent);
     }
 
-    // 类型图标块：随行高自适应（对话框里的行更矮，图标也要跟着收）
-    const float tile = std::clamp(height - 24.0f, 32.0f, 46.0f);
-    const float tile_x = card_x + 22.0f;
-    const float tile_y = y + height * 0.5f - tile * 0.5f;
-    ui::fillRoundRect(vg, tile_x, tile_y, tile, tile, 13.0f,
-                      focused ? pal.surfaceSunken
-                              : ui::rgba(pal.surfaceSunken, 0.55f));
-    // 图标只在选中时用强调色。以前整列都是橙色，一屏十几个橙色图标，
-    // 焦点反而看不出来 —— 强调色必须稀缺才有意义。
-    ui::drawIcon(vg, icon_, tile_x + tile * 0.5f, tile_y + tile * 0.5f, tile * 0.5f,
-                 focused ? pal.accent : ui::rgba(pal.textDim, 0.85f), 1.9f);
+    // 左侧：16:9 缩略图或类型图标块。
+    // 缩略图的宽度固定 96（16:9 → 54 高），行高 76 里放得下；
+    // 不用百分比 —— 列表在窄窗口下会让缩略图缩到认不出的尺寸。
+    float content_x = 0.0f;
+    if (has_thumb_) {
+        const float tw = 96.0f;
+        const float th = tw * 9.0f / 16.0f;
+        const float tx = card_x + 18.0f;
+        const float ty = y + height * 0.5f - th * 0.5f;
+        ui::drawScene(vg, tx, ty, tw, th, 8.0f, 8.0f, 8.0f, 8.0f, thumb_);
+        if (focused) {
+            ui::strokeRoundRect(vg, tx, ty, tw, th, 8.0f, ui::rgba(pal.accent, 0.9f), 1.6f);
+        }
+        content_x = tx + tw + 14.0f;
+    } else {
+        // 类型图标块：随行高自适应（对话框里的行更矮，图标也要跟着收）
+        const float tile = std::clamp(height - 24.0f, 32.0f, 46.0f);
+        const float tile_x = card_x + 22.0f;
+        const float tile_y = y + height * 0.5f - tile * 0.5f;
+        ui::fillRoundRect(vg, tile_x, tile_y, tile, tile, 13.0f,
+                          focused ? pal.surfaceSunken
+                                  : ui::rgba(pal.surfaceSunken, 0.55f));
+        // 图标只在选中时用强调色。以前整列都是橙色，一屏十几个橙色图标，
+        // 焦点反而看不出来 —— 强调色必须稀缺才有意义。
+        ui::drawIcon(vg, icon_, tile_x + tile * 0.5f, tile_y + tile * 0.5f, tile * 0.5f,
+                     focused ? pal.accent : ui::rgba(pal.textDim, 0.85f), 1.9f);
+        content_x = tile_x + tile + 16.0f;
+    }
 
     // 右侧：元信息 + 指示箭头
     const float right = card_x + card_w - 18.0f;
@@ -90,7 +111,7 @@ void MediaCell::draw(NVGcontext* vg, float x, float y, float width, float height
     }
 
     // 文字区
-    const float text_x = tile_x + tile + 16.0f;
+    const float text_x = content_x;
     const float text_right = badge_.empty() ? badge_right - 16.0f
                                             : badge_right - badge_w - 20.0f;
     const float text_max = std::max(40.0f, text_right - text_x);

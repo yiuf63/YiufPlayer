@@ -64,6 +64,12 @@ AppletFrameItem::~AppletFrameItem()
 
 View::View()
 {
+    // DeckPlayer 补丁：地址复用会使死亡登记表出现假阳性（详见
+    // application.hpp isViewDead 的注释）—— 新对象构造时把自己的地址
+    // 从表里摘掉，登记表重新自洽。必须放在最前面：构造过程中任何
+    // giveFocus / isViewDead 查询看到的都应当是「活着的自己」。
+    Application::unmarkViewDead(this);
+
     // Instantiate and prepare YGNode
     this->ygNode = YGNodeNew();
     YGNodeSetContext(this->ygNode, this);
