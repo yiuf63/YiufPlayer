@@ -350,6 +350,59 @@ borealis 的高亮内缩来自 `View::highlightPadding` 成员（读 XML 属性
 （`view.cpp` 里确实从 style 取值）。对话框按钮的内缩只能改
 `external/borealis/library/lib/views/dialog.cpp` 的 XML。
 
+### 19. borealis Activity 栈只渲染栈顶 —— 浮层不能用 pushActivity
+
+`Application::pushActivity()` 压栈后**只画栈顶 Activity**，底下的页面整个不渲染。
+做「媒体库上盖一层视图菜单」这类页内浮层时，pushActivity 会得到纯黑背景。
+正确做法：页内绝对定位 Box（见 `src/view/view_sheet.cpp` 的 `ViewSheet`，
+`PositionType::ABSOLUTE` 铺满宿主 + 自绘遮罩）。
+
+### 20. `isViewDead` 地址登记表假阳性（giveFocus 静默失败）
+
+borealis 的 `deadViews` 原来只增不减：View 销毁后地址登记还在，堆地址复用时
+**新对象会被误判为死 View**，`giveFocus` 静默早退，表现为「焦点莫名其妙不生效」。
+已修复：`View::View()` 构造时调 `Application::unmarkViewDead(this)`，
+`deadViews` 改 `unordered_set`。这条修复动的是 borealis（见 PATCHES.md），别丢。
+
+### 21. 持锁调内部会再锁同一把 mutex 的函数 = 死锁
+
+`ThumbnailCache::requestBatch` 持有 `g_mutex` 时调 `filePath()`，而后者也锁
+同一把**非递归** mutex —— 启动即挂死，且 `pkill -f "build/deck-player"`
+杀不掉（进程名是 `./deck-player`，要 `pkill -x`）。
+修复：`filePathUnlocked()` 无锁版供持锁路径使用。写缓存类代码时，
+**持锁状态下只能调标记为 Unlocked 的内部函数**。
+
+### 22. 缩略图「失败 → 重建 → 重试」死循环
+
+抽帧失败 → on_done 回调重建列表 → 又发起请求 → 再失败，每帧循环、CPU 占满。
+修复：`g_failed` 记录本会话已失败路径不再重试；`todo` 为空不回调。
+凡是「完成回调触发重建、重建又发起请求」的结构都要有这条退路。
+
+### 23. ScrollingFrame 会把未布局的视图抢回焦点
+
+`naturalScrollingBehaviour` 对 frame 为 0×0（还没走过布局）的视图
+`inscribed()` 必为 false → 判为「出界」→ 焦点被抢回第一项。
+已在 borealis 加 `focusUnlaidOut` 判定（0×0 不算出界）。
+新建容器后立刻 giveFocus 的路径都可能踩到。
+
+### 24. 自绘按钮宽度必须实测文字，不能粗估
+
+`ToolButton::measureWidth()` 最初按「字数 × 估计字宽」算，中文胶囊全被截成
+「按文…」。已改为 `nvgTextBounds` 实测（经 `ui::textWidth`）。
+新增自绘控件的 `measure` 一律走 `ui::textWidth`，别手算。
+
+### 25. 从自己的点击回调里 hide() 自己 = use-after-free
+
+`ViewSheet::hide()` 若用默认 `removeView(this)` 会当场 delete this，
+而调用栈还在这个对象的点击回调里。必须 `removeView(this, false)` 只 detach
+（宿主持有指针，下次 show 复用）。所有「浮层自关闭」都要遵守。
+
+### 26. 抓帧/杀进程的两个小坑
+
+- `DECKPLAYER_FRAMEGRAB` 默认在启动早期抓帧，想抓「打开浮层/切页/播放后」
+  的画面要加 `DECKPLAYER_FRAMEGRAB_AT_MS=<毫秒>`（如 2500）。
+- 抓帧产物是 **PPM** 不是 PNG，`ViewImage`/预览前要 `ffmpeg -i x.ppm x.png` 转一下。
+
 ---
 
 ## 代码风格
