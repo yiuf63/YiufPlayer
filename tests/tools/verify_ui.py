@@ -611,8 +611,12 @@ def check_screens(tmpdir, media):
         record("屏幕适配", f"{spec} 实际尺寸", f"{w}x{h}" == spec,
                f"抓帧 {w}x{h}")
         g = a.mean(axis=2)
-        record("屏幕适配", f"{spec} 有 UI（亮像素>1%）",
-               (g > 120).mean() * 100 > 1.0,
+        # 判据是「有没有渲染出 UI」，不是「内容够不够多」。
+        # 原来卡 1%，媒体库把配置项撤出内容页（只剩影片卡片）之后，
+        # 库里有 1 部片时首屏亮像素只有 0.8% —— 内容变少不是渲染失败。
+        # 与 basic 组对齐到 0.3%：低于这个数才是「整屏全黑」。
+        record("屏幕适配", f"{spec} 有 UI（亮像素>0.3%）",
+               (g > 120).mean() * 100 > 0.3,
                f"{(g > 120).mean() * 100:.2f}%")
         profs[spec] = profile(a)
 
