@@ -30,18 +30,31 @@ const std::string sidebarItemXML = R"xml(
     <brls:Box
         width="auto"
         height="@style/brls/sidebar/item_height"
+        alignItems="center"
         focusable="true" >
 
         <brls:Rectangle
             id="brls/sidebar/item_accent"
             width="@style/brls/sidebar/item_accent_rect_width"
-            height="auto"
+            height="26"
             visibility="invisible"
             color="@theme/brls/sidebar/active_item"
-            marginTop="@style/brls/sidebar/item_accent_margin_top_bottom"
-            marginBottom="@style/brls/sidebar/item_accent_margin_top_bottom"
+            marginTop="0"
+            marginBottom="0"
             marginLeft="@style/brls/sidebar/item_accent_margin_sides"
             marginRight="@style/brls/sidebar/item_accent_margin_sides" />
+
+        <!-- DeckPlayer 补丁：条目图标。
+             上游 Sidebar 只有文字，窄侧栏（160）里四个汉字撑不满一行，
+             右侧会空出一大片。加一个 18px 图标后侧栏才立得住。
+             纹理统一走 drawIcon 的矢量路径不方便（XML 里只能放 Image），
+             所以这里收 PNG：resources/icon/nav/*.png，36×36 供 2x 采样。 -->
+        <brls:Image
+            id="brls/sidebar/item_icon"
+            width="18"
+            height="18"
+            marginRight="11"
+            visibility="gone" />
 
         <brls:Label
             id="brls/sidebar/item_label"
@@ -152,6 +165,18 @@ void SidebarItem::setLabel(std::string label)
     this->label->setText(label);
 }
 
+void SidebarItem::setIcon(std::string path)
+{
+    if (path.empty())
+    {
+        this->icon->setVisibility(Visibility::GONE);
+        return;
+    }
+
+    this->icon->setImageFromFile(path);
+    this->icon->setVisibility(Visibility::VISIBLE);
+}
+
 Sidebar::Sidebar()
 {
     Style style = Application::getStyle();
@@ -184,7 +209,19 @@ void Sidebar::addItem(std::string label, GenericEvent::Callback focusCallback)
 
 SidebarItem* Sidebar::getItem(int position)
 {
-    return dynamic_cast<SidebarItem*>(this->contentBox->getChildren()[position]);
+    // DeckPlayer 补丁：上游直接下标访问 std::vector，越界拿到的是野指针，
+    // 随后在 dynamic_cast 里 SEGV。崩溃堆栈只显示
+    //   dyn_cast_get_derived_info ← __dynamic_cast ← createContentView
+    // 完全看不出是「索引越界」，极难定位。
+    //
+    // 调用方确实会探边界地查：TabFrame::addTab 用
+    //   while (getItem(idx)) ++idx;
+    // 数条目数量，越界是正常路径而不是错误。
+    auto& children = this->contentBox->getChildren();
+    if (position < 0 || position >= (int)children.size())
+        return nullptr;
+
+    return dynamic_cast<SidebarItem*>(children[position]);
 }
 
 void Sidebar::addSeparator()

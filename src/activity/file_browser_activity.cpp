@@ -84,10 +84,18 @@ brls::View* FileBrowserActivity::createContentView() {
     tab_frame_ = new brls::TabFrame();
 
     // 采用工厂 Lambda，每个 Tab 被切换激活时按需分配新 View，被切换离开时由 Borealis 自动安全释放
-    tab_frame_->addTab("存储位置", [this]() -> brls::View* { return createSourcesView(); });
-    tab_frame_->addTab("视频库", [this]() -> brls::View* { return createLibraryView(); });
-    tab_frame_->addTab("音乐库", [this]() -> brls::View* { return createAudioView(); });
-    tab_frame_->addTab("播放历史", [this]() -> brls::View* { return createRecentView(); });
+    //
+    // 顺序与命名对齐原型（web/ui-review）：媒体库 / 文件 / 历史 / 设置。
+    // 每一页回答一个问题 ——「我要看什么」「文件在哪」「上次看哪」「怎么改」，
+    // 而不是「数据从哪来」。配置项全部撤出内容页，集中到设置。
+    tab_frame_->addTab("媒体库", BRLS_ASSET("icon/nav/media.png"),
+                       [this]() -> brls::View* { return createLibraryView(); });
+    tab_frame_->addTab("文件", BRLS_ASSET("icon/nav/files.png"),
+                       [this]() -> brls::View* { return createSourcesView(); });
+    tab_frame_->addTab("历史", BRLS_ASSET("icon/nav/history.png"),
+                       [this]() -> brls::View* { return createRecentView(); });
+    tab_frame_->addTab("设置", BRLS_ASSET("icon/nav/settings.png"),
+                       [this]() -> brls::View* { return createSettingsView(); });
 
     frame_ = new brls::AppletFrame(tab_frame_);
     frame_->setTitle("DeckPlayer");
@@ -494,55 +502,22 @@ brls::View* FileBrowserActivity::createLibraryView() {
         library_list_->clearViews();
         auto& lib = MediaLibrary::getInstance();
 
-        // --- 文件夹管理区 ---
-        library_list_->addView(new SectionHeader("媒体文件夹"));
-
-        auto* add_cell = new MediaCell(ui::Icon::Plus, "添加媒体文件夹",
-                                       "选择包含视频 / 音乐的目录，自动扫描并记住");
-        add_cell->registerClickAction([this](brls::View*) {
-            promptAddFolder();
-            return true;
-        });
-        library_list_->addView(add_cell);
-
+        // 配置项不在内容页：添加文件夹、重新扫描、清空缓存全在「设置」。
+        // 内容页只有内容 —— 上一版把「添加媒体文件夹」「重新扫描」压在影片
+        // 列表上方，每次扫库都要在影片之间找一遍这些按钮。
         auto folders = lib.getFolders();
         if (folders.empty()) {
             library_list_->addView(new EmptyState(
-                ui::Icon::Folder, "还没有添加任何文件夹",
-                "先添加一个影视目录\n扫描完成后，影片会自动出现在下方"));
-        } else {
-            for (const auto& f : folders) {
-                auto* cell = new MediaCell(ui::Icon::Folder, f.display_name, f.path);
-                cell->setChevron(true);
-                std::string path = f.path;
-                std::string name = f.display_name;
-                cell->registerClickAction([this, path, name](brls::View*) {
-                    showFolderOptions(path, name);
-                    return true;
-                });
-                library_list_->addView(cell);
-            }
-
-            auto* rescan = new MediaCell(
-                ui::Icon::Search, "重新扫描媒体库",
-                lib.isScanning() ? "扫描进行中…" : "更新新增或修改的文件");
-            rescan->registerClickAction([this](brls::View*) {
-                startLibraryScan();
-                return true;
-            });
-            library_list_->addView(rescan);
+                ui::Icon::Folder, "媒体库还是空的",
+                "到「设置」里添加一个媒体文件夹\n扫描完成后，影片与音乐会出现在这里"));
         }
 
-        // --- 视频列表区 ---
+        // --- 视频段 ---
         auto videos = lib.getVideos();
-        library_list_->addView(
-            new SectionHeader("视频 · " + std::to_string(videos.size())));
-
-        if (videos.empty()) {
-            library_list_->addView(new EmptyState(
-                ui::Icon::Video, "媒体库里还没有视频",
-                "添加文件夹后会自动扫描\n也可以在「存储位置」里直接浏览目录"));
-        } else {
+        if (!videos.empty()) {
+            library_list_->addView(
+                new SectionHeader("视频 · " + std::to_string(videos.size())));
+        }
             for (size_t i = 0; i < videos.size(); ++i) {
                 const auto& item = videos[i];
                 // 若已刮削过，优先显示正式标题
@@ -611,6 +586,29 @@ brls::View* FileBrowserActivity::createLibraryView() {
 
                 library_list_->addView(cell);
             }
+
+        // --- 音乐段 ---
+        // 视频与音乐同处媒体库，但**分段**而不是混排：
+        // 混排时「3:21」既可能是短片也可能是歌，扫一眼分不出来。
+        // 某一段为空就整段不出现 —— 空的「音乐 · 0」加一块大空状态，
+        // 只会把真正有内容的那一段挤出首屏。
+        auto audios = lib.getAudios();
+        if (!audios.empty()) {
+            library_list_->addView(
+                new SectionHeader("音乐 · " + std::to_string(audios.size())));
+            for (size_t i = 0; i < audios.size(); ++i) {
+                const auto& item = audios[i];
+                auto* cell = new MediaCell(ui::Icon::Music, item.name,
+                                           MediaScanner::formatFileSize(item.size));
+                size_t idx = i;
+                cell->registerClickAction([audios, idx](brls::View*) {
+                    // 音乐走全局音频引擎，退出本界面后继续在后台播放
+                    AudioPlayer::getInstance().playPlaylist(audios, idx);
+                    brls::Application::notify("正在播放：" + audios[idx].name);
+                    return true;
+                });
+                library_list_->addView(cell);
+            }
         }
     };
 
@@ -633,41 +631,87 @@ brls::View* FileBrowserActivity::createLibraryView() {
     return library_scroller_;
 }
 
-brls::View* FileBrowserActivity::createAudioView() {
-    brls::ScrollingFrame* scroller = new brls::ScrollingFrame();
+// 设置页：原来散落在「存储位置」「视频库」里的配置项全部收在这里。
+// 内容页只留内容 —— 这是信息架构重排的核心，其余都是配套。
+brls::View* FileBrowserActivity::createSettingsView() {
+    auto* scroller = new brls::ScrollingFrame();
     scroller->setGrow(1.0f);
     scroller->setMarginRight(CONTENT_SAFE_MARGIN);
     styleScrollingFrame(scroller);
 
-    brls::Box* list = new brls::Box();
+    auto* list = new brls::Box();
     list->setAxis(brls::Axis::COLUMN);
-    // 底部留白：最后一个卡片滚到底时也要完整露出，
-    // 否则会被底部提示栏硬切一条边（观感非常像裁切错误）。
     list->setPaddingBottom(28.0f);
 
-    auto audios = MediaLibrary::getInstance().getAudios();
-    list->addView(new SectionHeader("音乐 · " + std::to_string(audios.size())));
+    auto& lib = MediaLibrary::getInstance();
 
-    if (audios.empty()) {
-        list->addView(new EmptyState(
-            ui::Icon::Music, "媒体库里还没有音乐",
-            "到「视频库」标签页添加一个包含音频的文件夹\n也可以直接在「存储位置」里播放"));
-    } else {
-        for (size_t i = 0; i < audios.size(); ++i) {
-            const auto& item = audios[i];
-            auto* cell = new MediaCell(ui::Icon::Music, item.name,
-                                       MediaScanner::formatFileSize(item.size));
+    // ── 媒体库 ──
+    list->addView(new SectionHeader("媒体库"));
 
-            size_t idx = i;
-            cell->registerClickAction([audios, idx](brls::View*) {
-                // 音乐走全局音频引擎，退出本界面后继续在后台播放
-                AudioPlayer::getInstance().playPlaylist(audios, idx);
-                brls::Application::notify("正在播放：" + audios[idx].name);
-                return true;
-            });
-            list->addView(cell);
-        }
+    auto* add_folder = new MediaCell(
+        ui::Icon::Plus, "添加媒体文件夹",
+        "选择包含视频 / 音乐的目录，自动扫描并记住");
+    add_folder->registerClickAction([this](brls::View*) {
+        promptAddFolder();
+        return true;
+    });
+    list->addView(add_folder);
+
+    for (const auto& f : lib.getFolders()) {
+        auto* cell = new MediaCell(ui::Icon::Folder, f.display_name, f.path);
+        cell->setChevron(true);
+        std::string path = f.path;
+        std::string name = f.display_name;
+        cell->registerClickAction([this, path, name](brls::View*) {
+            showFolderOptions(path, name);
+            return true;
+        });
+        list->addView(cell);
     }
+
+    auto* rescan = new MediaCell(
+        ui::Icon::Search, "重新扫描媒体库",
+        lib.isScanning() ? "扫描进行中…" : "更新新增或修改的文件");
+    rescan->registerClickAction([this](brls::View*) {
+        startLibraryScan();
+        return true;
+    });
+    list->addView(rescan);
+
+    auto* cache = new MediaCell(
+        ui::Icon::Info, "清空扫描缓存",
+        "不清除文件夹，只丢弃已缓存的条目与文件签名");
+    cache->registerClickAction([](brls::View*) {
+        MediaLibrary::getInstance().clearCache();
+        brls::Application::notify("已清空扫描缓存，下次扫描将重新读取");
+        return true;
+    });
+    list->addView(cache);
+
+    // ── 插件 ──
+    list->addView(new SectionHeader("插件"));
+
+    auto* plugins = new MediaCell(
+        ui::Icon::Plugin, "插件管理",
+        "安装 / 移除视频源与刮削源，来自 ZIP 或目录");
+    plugins->setChevron(true);
+    plugins->registerClickAction([](brls::View*) {
+        brls::Application::pushActivity(new PluginManagerActivity());
+        return true;
+    });
+    list->addView(plugins);
+
+    // ── 关于 ──
+    list->addView(new SectionHeader("关于"));
+
+    auto* about = new MediaCell(
+        ui::Icon::Info, "DeckPlayer",
+        "GPL-3.0 开源 · 手柄 / 触控优先的本地音视频播放器");
+    about->registerClickAction([](brls::View*) {
+        brls::Application::notify("DeckPlayer · GPL-3.0");
+        return true;
+    });
+    list->addView(about);
 
     scroller->setContentView(list);
     return scroller;

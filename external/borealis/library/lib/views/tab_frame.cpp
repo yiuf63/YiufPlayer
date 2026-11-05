@@ -95,6 +95,21 @@ void TabFrame::addTab(std::string label, TabViewCreator creator)
     });
 }
 
+void TabFrame::addTab(std::string label, std::string icon, TabViewCreator creator)
+{
+    this->addTab(label, creator);
+
+    if (icon.empty())
+        return;
+
+    // Sidebar::addItem 不返回新建的条目，按「最后一个」取回来。
+    int idx = 0;
+    while (this->sidebar->getItem(idx))
+        ++idx;
+    if (SidebarItem* last = this->sidebar->getItem(idx - 1))
+        last->setIcon(icon);
+}
+
 void TabFrame::focusTab(int position)
 {
     Application::giveFocus(this->sidebar->getItem(position));

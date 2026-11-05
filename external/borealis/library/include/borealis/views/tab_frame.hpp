@@ -37,6 +37,9 @@ class TabFrame : public Box
     void handleXMLElement(tinyxml2::XMLElement* element) override;
 
     void addTab(std::string label, TabViewCreator creator);
+
+    // DeckPlayer 补丁：带图标的标签页。icon 为 PNG 路径，空串等同不带图标。
+    void addTab(std::string label, std::string icon, TabViewCreator creator);
     void focusTab(int position);
 
     // 以编程方式切换到第 position 个标签（0 起）。

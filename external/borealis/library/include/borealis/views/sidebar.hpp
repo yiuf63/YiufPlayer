@@ -19,6 +19,7 @@
 
 #include <borealis/core/bind.hpp>
 #include <borealis/core/box.hpp>
+#include <borealis/views/image.hpp>
 #include <borealis/views/label.hpp>
 #include <borealis/views/rectangle.hpp>
 #include <borealis/views/scrolling_frame.hpp>
@@ -59,6 +60,9 @@ class SidebarItem : public Box
 
     void setLabel(std::string label);
 
+    // DeckPlayer 补丁：条目左侧图标（PNG 路径）。空字符串 = 不显示。
+    void setIcon(std::string path);
+
     void setActive(bool active);
 
     GenericEvent* getActiveEvent();
@@ -66,6 +70,7 @@ class SidebarItem : public Box
   private:
     BRLS_BIND(Rectangle, accent, "brls/sidebar/item_accent");
     BRLS_BIND(Label, label, "brls/sidebar/item_label");
+    BRLS_BIND(Image, icon, "brls/sidebar/item_icon");
 
     GenericEvent activeEvent;
 

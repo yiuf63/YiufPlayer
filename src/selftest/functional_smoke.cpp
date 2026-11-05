@@ -105,17 +105,16 @@ void runFunctionalSmoke() {
               " 扫描中=" + (MediaLibrary::getInstance().isScanning() ? "是" : "否"));
     }});
 
-    // 2.5 切到「视频库」标签。
-    //     默认标签是「存储位置」，它列的是磁盘挂载点，
-    //     焦点所在的 DetailCell 是「本地存储设备」那一行，按 A 只是
-    //     进入目录，不会播放。必须先切标签才能验证「按 A 播放」。
-    steps.push_back({300, "切到视频库", []() {
+    // 2.5 切到「媒体库」标签（索引 0）。
+    //     默认也可能停在其他页上；只有媒体库的第一项是影片卡片，
+    //     按 A 才会打开播放页。
+    steps.push_back({300, "切到媒体库", []() {
         auto* act = brls::Application::getTopActivity();
         if (!act) { check("找到活动", false, "getTopActivity 返回空"); return; }
         auto* fb = dynamic_cast<deck_player::FileBrowserActivity*>(act);
         check("顶层是 FileBrowserActivity", fb != nullptr,
               fb ? "ok" : "类型不符");
-        if (fb) fb->selectTabForTest(1);   // 1 = 视频库
+        if (fb) fb->selectTabForTest(0);   // 0 = 媒体库
     }});
 
     // 3. 按 A 打开第一个视频 —— 这是最关键的功能断言

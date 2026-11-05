@@ -22,7 +22,7 @@ public:
     void onContentAvailable() override;
 
     // 目录导航
-    // 切换到指定标签页（0=存储位置 1=视频库 2=音乐库 3=播放历史）。
+    // 切换到指定标签页（0=媒体库 1=文件 2=历史 3=设置）。
     // 供自动化测试使用：设置环境变量后逐个标签抓帧。
     void selectTabForTest(int index);
 
@@ -34,7 +34,7 @@ private:
     brls::View* createSourcesView();
     brls::View* createLibraryView();
     brls::View* createRecentView();
-    brls::View* createAudioView();
+    brls::View* createSettingsView();
     void renderSourcesContent();
 
     // 媒体库相关

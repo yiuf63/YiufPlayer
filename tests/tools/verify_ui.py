@@ -1063,7 +1063,7 @@ def check_functional(tmpdir, media):
     # 注意：这里不能设 FRAMEGRAB —— 抓帧完成后程序会主动退出，
     # 冒烟步骤跑到一半就被截断，只能看到第一条断言。
     # 冒烟流程自己会在结束时 quick_exit，不依赖抓帧退出。
-    env = {"DECKPLAYER_SMOKE": "1", "DECKPLAYER_START_TAB": "1"}
+    env = {"DECKPLAYER_SMOKE": "1", "DECKPLAYER_START_TAB": "0"}
     rc, log = run_player(env, timeout=45)
 
     # 逐条把程序内部的判定转述出来，失败时能看到是哪一步
@@ -1189,7 +1189,7 @@ def check_input_and_font(tmpdir, media):
     # 按住期间扫描完成触发 clearViews，抬起时复用已释放指针。
     rc, log, _ = grab(tmpdir, "touch_rebuild",
                       {"DECKPLAYER_TOUCH_REBUILD": "1",
-                       "DECKPLAYER_START_TAB": "1",
+                       "DECKPLAYER_START_TAB": "0",
                        "DECKPLAYER_FRAMEGRAB_START": "900"}, start=900)
     record("稳定性", "按住期间重建列表不崩溃",
            rc not in (139, -11, 134, -6),
@@ -1211,7 +1211,7 @@ def check_input_and_font(tmpdir, media):
     if media:
         rc, log, _ = grab(tmpdir, "click_video",
                           {"DECKPLAYER_CLICK_FIRST_VIDEO": "1",
-                           "DECKPLAYER_START_TAB": "1",
+                           "DECKPLAYER_START_TAB": "0",
                            "DECKPLAYER_FRAMEGRAB_START": "300"}, start=300)
         crashed = rc in (139, -11, 134, -6)
         record("稳定性", "点击视频不崩溃", not crashed,

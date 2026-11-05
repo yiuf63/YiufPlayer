@@ -186,17 +186,23 @@ void applyDeckTheme() {
     // ── 尺寸/间距覆盖 ──
     // borealis 的默认值是给「Switch 系统菜单」调的：侧边栏 410px（占
     // 1280 屏宽的 32%）、菜单项 22px 字号。放在播放器上会显得空、字大、
-    // 内容区被挤窄。这里统一收到电视端影音软件的密度。
+    // 内容区被挤窄。
+    //
+    // 2026-11 再收一档到 160（1280 的 12.5%）：条目 4 个汉字只占 51px，
+    // 300 里右侧有百余像素完全空着 —— 「侧栏太宽」的根子是内容撑不起来，
+    // 不是数字大。补上 18px 图标（sidebar.cpp 的 item_icon）之后，
+    // 160 反而比 300 更密。数值与 web/ui-review 的原型一一对应。
     brls::Style style = brls::Application::getStyle();
-    style.addMetric("brls/tab_frame/sidebar_width", 300.0f);
-    style.addMetric("brls/sidebar/padding_left", 48.0f);
-    style.addMetric("brls/sidebar/padding_top", 40.0f);
-    style.addMetric("brls/sidebar/padding_bottom", 36.0f);
-    style.addMetric("brls/sidebar/item_height", 62.0f);
-    style.addMetric("brls/sidebar/item_font_size", 20.0f);
+    style.addMetric("brls/tab_frame/sidebar_width", 160.0f);
+    style.addMetric("brls/sidebar/padding_left", 24.0f);
+    style.addMetric("brls/sidebar/padding_top", 24.0f);
+    style.addMetric("brls/sidebar/padding_bottom", 24.0f);
+    style.addMetric("brls/sidebar/item_height", 56.0f);
+    style.addMetric("brls/sidebar/item_font_size", 19.0f);
     style.addMetric("brls/sidebar/item_accent_rect_width", 3.0f);
     style.addMetric("brls/sidebar/item_accent_margin_sides", 0.0f);
-    style.addMetric("brls/sidebar/item_accent_margin_top_bottom", 14.0f);
+    // 强调条固定 26 高、条目内垂直居中，不再靠上下 margin 撑出来
+    style.addMetric("brls/sidebar/item_accent_margin_top_bottom", 0.0f);
 
     style.addMetric("brls/applet_frame/header_height", 92.0f);
     style.addMetric("brls/applet_frame/header_padding_sides", 40.0f);
