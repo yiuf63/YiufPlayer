@@ -23,8 +23,18 @@
 //   文字与强调色不变。
 //
 //   切换方式（见 resolveThemeKind）：
-//     - 环境变量 DECKPLAYER_THEME=oled（临时 / CI）
+//     - 环境变量 DECKPLAYER_THEME=oled / light（临时 / CI）
 //     - <configDir>/theme 文件持久化（设置 UI 写入，格式为一行 "oled"）
+//
+// 浅色变体：
+//   暖白纸感底（#F2F1ED），色值取自 web/ui-review 原型的
+//   [data-theme="light"] 变量组。强调色加深为 #C4650F——
+//   暖橙 #FF9F45 在白底上对比度不足 2:1，按钮文字会看不清。
+//
+//   注意 applyDeckTheme 会把选中的色板**同时**写进 borealis 的
+//   深色与浅色主题：borealis 会跟随系统 ThemeVariant 切主题，
+//   若只覆盖深色主题，系统开浅色模式后界面就会露出 Switch 的
+//   青绿配色。覆盖两份保证观感恒定。
 
 #include "theme/deck_theme.hpp"
 
@@ -52,6 +62,7 @@ struct Palette {
     unsigned char muted[3];   // 次文字
     unsigned char accent[3];  // 强调
     unsigned char highlight[3]; // 列表/条目选中底
+    unsigned char btn_text[3];  // 主按钮（强调色底）上的文字
     // 分层
     unsigned char sidebar[3];    // 侧边栏（比背景略亮，自然分层）
     unsigned char separator[3];  // 分隔线 / 边框
@@ -66,6 +77,7 @@ constexpr Palette kDark = {
     {0xF3, 0xF4, 0xF6},   // fg        #F3F4F6
     {0xA8, 0xAF, 0xBA},   // muted     #A8AFBA
     {0xFF, 0x9F, 0x45},   // accent    #FF9F45
+    {0x1A, 0x12, 0x08},   // btn_text  暖橙底上的深棕
     {0x21, 0x25, 0x2C},   // highlight #21252C（选中底 = 卡片悬停色）
     {0x0A, 0x0C, 0x0F},   // sidebar   #0A0C0F（比背景更暗，自然分栏）
     {0x23, 0x27, 0x2E},   // separator #23272E
@@ -82,10 +94,26 @@ constexpr Palette kOled = {
     {0xF3, 0xF4, 0xF6},   // fg        不变
     {0xA8, 0xAF, 0xBA},   // muted     不变
     {0xFF, 0x9F, 0x45},   // accent    不变
+    {0x1A, 0x12, 0x08},   // btn_text  不变
     {0x15, 0x17, 0x1B},   // highlight #15171B
     {0x00, 0x00, 0x00},   // sidebar   纯黑（A 屏上侧栏不发光）
     {0x1E, 0x21, 0x26},   // separator #1E2126
     {0x15, 0x17, 0x1B},   // btn_default
+};
+
+// 浅色：暖白纸感底，对应 ui::design 的 kLight 色板。
+// highlight 用比背景深一档的暖灰（对应原型的 surfaceSunken），
+// 选中态在浅色下靠「变深」而不是「变亮」来辨识。
+constexpr Palette kLight = {
+    {0xF2, 0xF1, 0xED},   // bg        #F2F1ED
+    {0x1B, 0x1A, 0x18},   // fg        #1B1A18
+    {0x5F, 0x5C, 0x56},   // muted     #5F5C56
+    {0xC4, 0x65, 0x0F},   // accent    #C4650F（白底可读的深橙）
+    {0xFF, 0xFF, 0xFF},   // btn_text  深橙底上的白字
+    {0xE9, 0xE7, 0xE2},   // highlight #E9E7E2
+    {0xE6, 0xE3, 0xDC},   // sidebar   #E6E3DC（比背景深半档，分栏）
+    {0xDF, 0xDC, 0xD5},   // separator #DFDCD5
+    {0xFF, 0xFF, 0xFF},   // btn_default 白底按钮
 };
 
 bool applied = false;
@@ -97,44 +125,9 @@ void set(brls::Theme& t, const char* key, NVGcolor c) {
     t.addColor(key, c);
 }
 
-std::string trimCopy(std::string s) {
-    // 去掉首尾空白与可能的 \r（跨平台换行）
-    auto notSpace = [](unsigned char ch) { return !std::isspace(ch); };
-    s.erase(s.begin(), std::find_if(s.begin(), s.end(), notSpace));
-    s.erase(std::find_if(s.rbegin(), s.rend(), notSpace).base(), s.end());
-    return s;
-}
-
-} // namespace
-
-ThemeKind resolveThemeKind() {
-    // 1. 环境变量优先（临时覆盖 / CI 用）
-    if (const char* env = std::getenv("DECKPLAYER_THEME"); env && *env) {
-        std::string v = trimCopy(env);
-        std::transform(v.begin(), v.end(), v.begin(), ::tolower);
-        if (v == "oled" || v == "amoled" || v == "trueblack") return ThemeKind::Oled;
-        if (v == "dark" || v == "default") return ThemeKind::Dark;
-    }
-    // 2. 配置文件持久化：一行 "oled" / "dark"
-    std::ifstream f(AppPaths::configFile("theme"));
-    if (f) {
-        std::string v = trimCopy({std::istreambuf_iterator<char>(f),
-                                  std::istreambuf_iterator<char>()});
-        std::transform(v.begin(), v.end(), v.begin(), ::tolower);
-        if (v == "oled") return ThemeKind::Oled;
-    }
-    // 3. 默认
-    return ThemeKind::Dark;
-}
-
-void applyDeckTheme() {
-    if (applied) return;
-    applied = true;
-
-    const Palette& p = resolveThemeKind() == ThemeKind::Oled ? kOled : kDark;
-
-    brls::Theme& t = brls::Theme::getDarkTheme();
-
+// 把一套色板写进一个 borealis 主题。深 / 浅主题各调一次，
+// 保证系统切换 ThemeVariant 时观感不变（见文件头注释）。
+void applyPaletteTo(brls::Theme& t, const Palette& p) {
     // ── 基础色 ──
     set(t, "brls/background", nvgRGB(p.bg[0], p.bg[1], p.bg[2]));
     set(t, "brls/clear",      nvgRGB(p.bg[0], p.bg[1], p.bg[2]));
@@ -166,7 +159,7 @@ void applyDeckTheme() {
     // ── 按钮 ──
     set(t, "brls/button/primary_enabled_background", nvgRGB(p.accent[0], p.accent[1], p.accent[2]));
     set(t, "brls/button/primary_disabled_background", nvgRGB(0x3A, 0x3D, 0x43));
-    set(t, "brls/button/primary_enabled_text",  nvgRGB(0x1A, 0x12, 0x08));
+    set(t, "brls/button/primary_enabled_text",  nvgRGB(p.btn_text[0], p.btn_text[1], p.btn_text[2]));
     set(t, "brls/button/primary_disabled_text", nvgRGB(0x70, 0x73, 0x78));
     set(t, "brls/button/default_enabled_background",  nvgRGB(p.btn_default[0], p.btn_default[1], p.btn_default[2]));
     set(t, "brls/button/default_disabled_background", nvgRGB(0x24, 0x26, 0x2B));
@@ -182,8 +175,64 @@ void applyDeckTheme() {
 
     // ── 载入指示 ──
     set(t, "brls/spinner/bar_color", nvgRGBA(p.accent[0], p.accent[1], p.accent[2], 110));
+}
 
-    // ── 尺寸/间距覆盖 ──
+std::string trimCopy(std::string s) {
+    // 去掉首尾空白与可能的 \r（跨平台换行）
+    auto notSpace = [](unsigned char ch) { return !std::isspace(ch); };
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), notSpace));
+    s.erase(std::find_if(s.rbegin(), s.rend(), notSpace).base(), s.end());
+    return s;
+}
+
+} // namespace
+
+ThemeKind resolveThemeKind() {
+    // 1. 环境变量优先（临时覆盖 / CI 用）
+    if (const char* env = std::getenv("DECKPLAYER_THEME"); env && *env) {
+        std::string v = trimCopy(env);
+        std::transform(v.begin(), v.end(), v.begin(), ::tolower);
+        if (v == "oled" || v == "amoled" || v == "trueblack") return ThemeKind::Oled;
+        if (v == "light" || v == "lightmode") return ThemeKind::Light;
+        if (v == "dark" || v == "default") return ThemeKind::Dark;
+    }
+    // 2. 配置文件持久化：一行 "oled" / "dark" / "light"
+    std::ifstream f(AppPaths::configFile("theme"));
+    if (f) {
+        std::string v = trimCopy({std::istreambuf_iterator<char>(f),
+                                  std::istreambuf_iterator<char>()});
+        std::transform(v.begin(), v.end(), v.begin(), ::tolower);
+        if (v == "oled") return ThemeKind::Oled;
+        if (v == "light") return ThemeKind::Light;
+    }
+    // 3. 默认
+    return ThemeKind::Dark;
+}
+
+const char* themeDisplayName(ThemeKind kind) {
+    switch (kind) {
+        case ThemeKind::Oled:  return "OLED 真黑";
+        case ThemeKind::Light: return "浅色";
+        default:               return "深色";
+    }
+}
+
+void applyDeckTheme() {
+    if (applied) return;
+    applied = true;
+
+    const ThemeKind kind = resolveThemeKind();
+    const Palette& p = kind == ThemeKind::Oled    ? kOled
+                     : kind == ThemeKind::Light   ? kLight
+                                                  : kDark;
+
+    // 深 / 浅两个主题写同一套色：borealis 会跟随系统 ThemeVariant
+    // 自动换主题，只覆盖一份的话，系统切到另一个变体时界面就会
+    // 露出 Switch 风格的默认配色。
+    applyPaletteTo(brls::Theme::getDarkTheme(), p);
+    applyPaletteTo(brls::Theme::getLightTheme(), p);
+
+    // ── 尺寸/间距覆盖（与主题色无关，只做一次）──
     // borealis 的默认值是给「Switch 系统菜单」调的：侧边栏 410px（占
     // 1280 屏宽的 32%）、菜单项 22px 字号。放在播放器上会显得空、字大、
     // 内容区被挤窄。

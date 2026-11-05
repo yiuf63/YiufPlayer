@@ -36,6 +36,7 @@ constexpr Palette kDark = {
     /* accentSoft    */ c8(0xFF, 0x9F, 0x45, 0.16f),
     /* danger        */ c8(0xFF, 0x6B, 0x6B),
     /* scrim         */ c8(0x00, 0x00, 0x00),
+    /* scrimAlpha    */ 0.55f,
 };
 
 // OLED 真黑：纯黑背景，表面只提 2-3 个灰阶。
@@ -56,12 +57,43 @@ constexpr Palette kOled = {
     /* accentSoft    */ c8(0xFF, 0x9F, 0x45, 0.16f),
     /* danger        */ c8(0xFF, 0x6B, 0x6B),
     /* scrim         */ c8(0x00, 0x00, 0x00),
+    /* scrimAlpha    */ 0.55f,
+};
+
+// 浅色：暖白纸感底，色值取自 web/ui-review 原型 [data-theme="light"]。
+// 浅色下的「压暗」变成「蒙白」——浮层遮罩用暖白低透明度盖一层，
+// 让背后的内容退后，而不是深色主题那种盖黑。
+constexpr Palette kLight = {
+    /* bg            */ c8(0xF2, 0xF1, 0xED),
+    /* surface       */ c8(0xFF, 0xFF, 0xFF),
+    /* surfaceRaised */ c8(0xFF, 0xFF, 0xFF),
+    /* surfaceSunken */ c8(0xE9, 0xE7, 0xE2),
+    /* outline       */ c8(0xDF, 0xDC, 0xD5),
+    /* outlineStrong */ c8(0xC6, 0xC2, 0xBA),
+    /* text          */ c8(0x1B, 0x1A, 0x18),
+    /* textDim       */ c8(0x5F, 0x5C, 0x56),
+    /* textMute      */ c8(0x6E, 0x6A, 0x63),
+    /* accent        */ c8(0xC4, 0x65, 0x0F),
+    /* accentInk     */ c8(0xFF, 0xFF, 0xFF),
+    /* accentSoft    */ c8(0xC4, 0x65, 0x0F, 0.14f),
+    /* danger        */ c8(0xC0, 0x39, 0x2B),
+    /* scrim         */ c8(0xE2, 0xDF, 0xD9),
+    /* scrimAlpha    */ 0.68f,
 };
 
 // 主题只在启动时解析一次，之后保持不变。
+// 色板只跟着 resolveThemeKind() 走，不读 borealis 的 ThemeVariant：
+// applyDeckTheme 会用同一套色覆盖深/浅两个 borealis 主题，
+// 系统「浅色模式」不会把界面染成 Switch 风格，也不会出现
+// 自绘色板与 borealis 主题各说各话的错位。
 const Palette& cachedPalette() {
-    static const Palette& p =
-        resolveThemeKind() == ThemeKind::Oled ? kOled : kDark;
+    static const Palette& p = []() -> const Palette& {
+        switch (resolveThemeKind()) {
+            case ThemeKind::Oled:  return kOled;
+            case ThemeKind::Light: return kLight;
+            default:               return kDark;
+        }
+    }();
     return p;
 }
 

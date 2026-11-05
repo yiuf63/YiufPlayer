@@ -40,7 +40,8 @@ struct Palette {
     NVGcolor accentInk;     // 强调色上的文字（深色）
     NVGcolor accentSoft;    // 强调色低透明度（图标底、胶囊）
     NVGcolor danger;
-    NVGcolor scrim;         // 视频上的遮罩（纯黑）
+    NVGcolor scrim;         // 浮层压暗底（浅色主题是暖白，见 kLight 注释）
+    float scrimAlpha;       // 压暗底的使用浓度（深 0.55 / 浅 0.68）
 };
 
 const Palette& palette();

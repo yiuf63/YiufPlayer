@@ -83,10 +83,12 @@ ViewSheet::ViewSheet(std::function<void()> on_change, std::function<void()> on_c
 void ViewSheet::draw(NVGcontext* vg, float x, float y, float width, float height,
                      brls::Style style, brls::FrameContext* ctx) {
     if (width > 0.5f && height > 0.5f) {
-        // 55% 黑。原型用的是「压暗 + 虚化」，nanoVG 没有 backdrop blur，
-        // 压暗是能保留的那一半 —— 有它，这一屏的注意力才会落在菜单上。
+        // 深色：55% 黑压暗；浅色：暖白「蒙纱」。原型用的是「压暗 + 虚化」，
+        // nanoVG 没有 backdrop blur，压暗是能保留的那一半 —— 有它，
+        // 这一屏的注意力才会落在菜单上。色值跟随主题色板。
+        const auto& pal = ui::palette();
         ui::fillRoundRect(vg, x, y, width, height, 0.0f,
-                          ui::rgba(ui::hex(0x000000), 0.55f));
+                          ui::rgba(pal.scrim, pal.scrimAlpha));
     }
     brls::Box::draw(vg, x, y, width, height, style, ctx);
 }

@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <cstdio>
+#include <fstream>
 #include <memory>
 #include <string>
 #include <thread>
@@ -30,6 +31,7 @@
 #include "view/view_sheet.hpp"
 #include "model/library_view_options.hpp"
 #include "utils/thumbnail_cache.hpp"
+#include "theme/deck_theme.hpp"
 #include "ui/icons.hpp"
 #include "activity/player_activity.hpp"
 #include <borealis/views/scrolling_frame.hpp>
@@ -278,6 +280,20 @@ brls::View* FileBrowserActivity::createContentView() {
                 if (!alive->load()) return;
                 brls::Logger::info("自检：呼出视图与排序");
                 openViewSheet();
+            });
+        }).detach();
+    }
+
+    // 自检：切到「设置」页（截图回归用：主题切换项、外观行的可读性）。
+    if (std::getenv("DECKPLAYER_OPEN_SETTINGS")) {
+        auto alive = std::make_shared<std::atomic<bool>>(true);
+        alive_flags_.push_back(alive);
+        std::thread([this, alive]() {
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            brls::sync([this, alive]() {
+                if (!alive->load() || !tab_frame_) return;
+                brls::Logger::info("自检：切到设置页");
+                tab_frame_->focusTab(3);   // 媒体库 / 文件 / 历史 / 设置
             });
         }).detach();
     }
@@ -1266,6 +1282,36 @@ brls::View* FileBrowserActivity::createSettingsView() {
         return true;
     });
     list->addView(cache);
+
+    // ── 外观 ──
+    list->addView(new SectionHeader("外观"));
+
+    {
+        const ThemeKind kind = resolveThemeKind();
+        const ThemeKind next = kind == ThemeKind::Dark  ? ThemeKind::Light
+                             : kind == ThemeKind::Light ? ThemeKind::Oled
+                                                        : ThemeKind::Dark;
+        auto* row = new MediaCell(
+            ui::Icon::Info,
+            std::string("主题：") + themeDisplayName(kind),
+            "深色 / 浅色 / OLED 真黑，重启后生效");
+        row->registerClickAction([next](brls::View*) {
+            const char* v = next == ThemeKind::Oled    ? "oled"
+                          : next == ThemeKind::Light   ? "light"
+                                                       : "dark";
+            std::ofstream f(AppPaths::configFile("theme"), std::ios::trunc);
+            if (f) {
+                f << v << "\n";
+                brls::Application::notify(
+                    std::string("已切换为") + themeDisplayName(next) +
+                    "，重启应用后生效");
+            } else {
+                brls::Application::notify("写入主题配置失败");
+            }
+            return true;
+        });
+        list->addView(row);
+    }
 
     // ── 插件 ──
     list->addView(new SectionHeader("插件"));
