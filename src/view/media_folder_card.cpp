@@ -11,8 +11,9 @@
 #include "ui/scene_tile.hpp"
 #include "view/media_thumb.hpp"
 #include "ui/icons.hpp"
+#include "utils/i18n.hpp"
 
-namespace deck_player {
+namespace muvik {
 
 namespace {
 
@@ -63,7 +64,7 @@ void MediaFolderCard::draw(NVGcontext* vg, float x, float y, float width, float 
     const float r = ui::radius::md;
 
     ui::fillRoundRect(vg, cx, cy, cw, ch, r,
-                      focused ? pal.surfaceRaised : pal.surface);
+                      focused ? ui::mix(pal.surfaceRaised, pal.accent, 0.16f) : pal.surface);
 
     const size_t n = covers_.size();
     if (n == 0) {
@@ -120,27 +121,25 @@ void MediaFolderCard::draw(NVGcontext* vg, float x, float y, float width, float 
     // 文字区
     const float tx = cx + 12.0f;
     const float maxW = cw - 24.0f;
-    ui::textClipped(vg, tx, cy + thumbH + 22.0f, ui::font::body, pal.text,
+    ui::textClipped(vg, tx, cy + thumbH + 22.0f, ui::font::body, focused ? ui::hex(0xFFFFFF) : pal.text,
                     NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, name_, maxW);
 
     std::string sub;
-    if (videos_ > 0) sub += std::to_string(videos_) + " 视频";
+    if (videos_ > 0) sub += std::to_string(videos_) + " " + i18n::tr("common.videos", "视频");
     if (audios_ > 0) {
         if (!sub.empty()) sub += " · ";
-        sub += std::to_string(audios_) + " 首音乐";
+        sub += std::to_string(audios_) + " " + i18n::tr("common.audios", "音乐");
     }
-    if (sub.empty()) sub = "空文件夹";
-    ui::textClipped(vg, tx, cy + thumbH + 44.0f, ui::font::caption, pal.textMute,
+    if (sub.empty()) sub = i18n::tr("common.empty", "空文件夹");
+    ui::textClipped(vg, tx, cy + thumbH + 44.0f, ui::font::caption, focused ? pal.text : pal.textMute,
                     NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, sub, maxW);
 
     if (focused) {
-        // 两级强调：细描边定边界，外侧一圈软光让它在电视距离下也跳出来
-        ui::strokeRoundRect(vg, cx - 2.0f, cy - 2.0f, cw + 4.0f, ch + 4.0f, r + 2.0f,
-                            ui::rgba(pal.accent, 0.20f), 3.0f);
-        ui::strokeRoundRect(vg, cx, cy, cw, ch, r, ui::rgba(pal.accent, 0.9f), 1.8f);
+        // 多层氛围光晕：细描边定边界，外侧柔光漫射赋予硬件级悬浮发光质感
+        ui::drawFocusGlow(vg, cx, cy, cw, ch, r, pal.accent);
     } else {
         ui::strokeRoundRect(vg, cx, cy, cw, ch, r, ui::rgba(pal.outline, 0.75f), 1.0f);
     }
 }
 
-} // namespace deck_player
+} // namespace muvik

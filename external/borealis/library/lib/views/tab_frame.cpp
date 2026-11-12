@@ -110,6 +110,12 @@ void TabFrame::addTab(std::string label, std::string icon, TabViewCreator creato
         last->setIcon(icon);
 }
 
+void TabFrame::setTabLabel(int position, const std::string& label)
+{
+    if (SidebarItem* item = this->sidebar->getItem(position))
+        item->setLabel(label);
+}
+
 void TabFrame::focusTab(int position)
 {
     Application::giveFocus(this->sidebar->getItem(position));
@@ -125,7 +131,7 @@ void TabFrame::selectTab(int position)
     // 所以这里需要先把焦点移过去。
     Application::giveFocus(item);
 
-    // DeckPlayer 补丁：内容加载后把焦点进一步送进内容区。
+    // Muvik 补丁：内容加载后把焦点进一步送进内容区。
     //
     // 上游只把焦点停在 SidebarItem 上，而 SidebarItem 的 A 键动作是
     // 「向右导航」（sidebar.cpp:72），于是用户按 A 只会把焦点移进列表，
@@ -147,7 +153,7 @@ void TabFrame::selectTab(int position)
         if (!this->activeTab)
             return;
         View* target = this->activeTab->getDefaultFocus();
-        if (target)
+        if (target && target->isFocusable())
             Application::giveFocus(target);
     });
 }

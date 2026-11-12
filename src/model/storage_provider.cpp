@@ -11,7 +11,7 @@
 
 namespace fs = std::filesystem;
 
-namespace deck_player {
+namespace muvik {
 
 // 内置的基础本地存储提供者
 class LocalStorageProvider : public IStorageProvider {
@@ -79,7 +79,7 @@ void StorageProviderRegistry::loadExternalPlugins(const std::string& custom_dir)
                 }
 
                 // 寻找插件统一导出符号
-                CreateProviderFunc create_fn = (CreateProviderFunc)dlsym(handle, "deck_player_create_provider");
+                CreateProviderFunc create_fn = (CreateProviderFunc)dlsym(handle, "muvik_create_provider");
                 if (create_fn) {
                     IStorageProvider* raw_p = create_fn();
                     if (raw_p) {
@@ -92,4 +92,4 @@ void StorageProviderRegistry::loadExternalPlugins(const std::string& custom_dir)
     } catch (...) {}
 }
 
-} // namespace deck_player
+} // namespace muvik

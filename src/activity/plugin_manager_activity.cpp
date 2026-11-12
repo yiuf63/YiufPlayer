@@ -18,7 +18,7 @@
 
 namespace fs = std::filesystem;
 
-namespace deck_player {
+namespace muvik {
 
 namespace {
 
@@ -66,7 +66,7 @@ void PluginManagerActivity::onContentAvailable() {
     Activity::onContentAvailable();
 
     // 自检：自动弹出插件目录对话框，验证它能正常渲染
-    if (std::getenv("DECKPLAYER_OPEN_DIALOG")) {
+    if (std::getenv("MUVIK_OPEN_DIALOG")) {
         auto alive = std::make_shared<std::atomic<bool>>(true);
         alive_flags_.push_back(alive);
         std::thread([this, alive]() {
@@ -98,11 +98,26 @@ void PluginManagerActivity::render() {
     list_->clearViews();
 
     // ---- 插件目录 ----
-    list_->addView(new SectionHeader("插件目录"));
+    list_->addView(new SectionHeader("插件目录与来源"));
 
-    list_->addView(makeRow(ui::Icon::Folder, AppPaths::pluginsDir(),
-                           "放入 .so / .dylib 插件后重新扫描",
+    list_->addView(makeRow(ui::Icon::Folder, "本地插件目录", AppPaths::pluginsDir(),
                            [this]() { revealPluginFolder(); }, true));
+
+    auto ws_paths = PluginManager::getInstance().getWorkshopSearchPaths();
+    std::string ws_desc = ws_paths.empty()
+        ? ("未检测到创意工坊目录（Steam AppID: " + PluginManager::getInstance().getSteamAppId() + "）")
+        : ("已检测到创意工坊：" + ws_paths[0]);
+    list_->addView(makeRow(ui::Icon::Plugin, "Steam 创意工坊", ws_desc,
+                           []() {
+        brls::Application::notify("Steam 创意工坊：订阅 MOD 后启动自动加载");
+    }, true));
+
+    auto dlc_paths = PluginManager::getInstance().getDlcSearchPaths();
+    std::string dlc_desc = dlc_paths.empty() ? "检测同级 dlc/ 与 Steam DLC 目录" : ("已检测到 DLC 目录：" + dlc_paths[0]);
+    list_->addView(makeRow(ui::Icon::Drive, "Steam DLC 扩展", dlc_desc,
+                           []() {
+        brls::Application::notify("Steam DLC：放入 dlc/ 或 Steam DLC 目录后自动识别");
+    }, true));
 
     list_->addView(makeRow(ui::Icon::Plus, "从 ZIP 包安装插件",
                            "输入 .zip 路径，自动解压并校验", [this]() {
@@ -127,7 +142,7 @@ void PluginManagerActivity::render() {
     }));
 
     list_->addView(makeRow(ui::Icon::Search, "重新扫描插件",
-                           "热重载：卸载全部插件后重新加载", [this]() {
+                           "热重载：扫描本地、创意工坊与 DLC 插件", [this]() {
         PluginManager::getInstance().unloadAll();
         size_t n = PluginManager::getInstance().loadAll();
         brls::Application::notify("已加载 " + std::to_string(n) + " 个插件");
@@ -142,8 +157,8 @@ void PluginManagerActivity::render() {
     if (plugins.empty()) {
         list_->addView(new EmptyState(
             ui::Icon::Plugin, "尚未加载任何插件",
-            "插件提供两类能力：视频源（Emby / Jellyfin / 自建站）\n"
-            "与刮削源（为本地媒体补齐封面与简介）"));
+            "支持三类插件来源：本地安装、Steam 创意工坊订阅与 DLC 扩展\n"
+            "提供视频源（WebDAV / Emby / Jellyfin）与刮削器能力"));
     }
 
     for (const auto& p : plugins) {
@@ -157,13 +172,15 @@ void PluginManagerActivity::render() {
         caps += "  ·  v" + p.version;
         if (!p.author.empty()) caps += "  ·  " + p.author;
 
+        std::string badge = p.source_badge.empty() ? "[本地]" : p.source_badge;
+        std::string title = badge + " " + p.name;
         std::string name = p.name;
         std::string path = p.path;
         const bool is_source = p.has_video_source;
         std::string stem = fs::path(p.path).stem().string();
 
-        list_->addView(makeRow(ui::Icon::Plugin, name, caps,
-                               [this, name, path, is_source, stem]() {
+        list_->addView(makeRow(ui::Icon::Plugin, title, caps,
+                               [this, p, name, path, is_source, stem]() {
             brls::Box* box = new brls::Box();
             box->setAxis(brls::Axis::COLUMN);
             box->setWidth(560);
@@ -172,6 +189,14 @@ void PluginManagerActivity::render() {
             // 先建对话框再建行：行的回调需要拿到 d 才能正确关闭本面板
             brls::Dialog* d = new brls::Dialog(box);
             box->addView(new SectionHeader(name));
+
+            std::string src_text = "本地插件目录";
+            if (p.source_type == PluginSourceType::Workshop) {
+                src_text = "Steam 创意工坊 (Item #" + p.workshop_item_id + ")";
+            } else if (p.source_type == PluginSourceType::DLC) {
+                src_text = "Steam DLC 扩展内容";
+            }
+            box->addView(makeRow(ui::Icon::Info, "插件来源", src_text, nullptr, false));
 
             if (is_source) {
                 // 服务器地址
@@ -286,7 +311,7 @@ void PluginManagerActivity::render() {
     list_->addView(new SectionHeader("兼容性说明"));
 
     brls::Label* note = new brls::Label();
-    note->setText("插件必须导出统一入口符号 deck_player_plugin_entry_v1，\n"
+    note->setText("插件必须导出统一入口符号 muvik_plugin_entry_v1，\n"
                   "且声明的 ABI 版本需与主程序一致，否则会被安全跳过。\n"
                   "这是为了防止跨编译器/标准库版本导致的内存布局错位崩溃。");
     note->setFontSize(14.0f);
@@ -311,4 +336,4 @@ void PluginManagerActivity::revealPluginFolder() {
     d->open();
 }
 
-} // namespace deck_player
+} // namespace muvik

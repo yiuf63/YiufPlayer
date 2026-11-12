@@ -65,6 +65,12 @@ static void glfwJoystickCallback(int jid, int event)
 {
     if (event == GLFW_CONNECTED)
     {
+        // 动态接入新手柄时，若 Steam/外部环境注入了 SDL_GAMECONTROLLERCONFIG 则重新加载映射
+        if (const char* env_mapping = std::getenv("SDL_GAMECONTROLLERCONFIG"))
+        {
+            glfwUpdateGamepadMappings(env_mapping);
+        }
+
         Logger::info("glfw: joystick {} connected", jid);
 
         if (glfwJoystickIsGamepad(jid))
@@ -190,6 +196,13 @@ GLFWInputManager::GLFWInputManager(GLFWwindow* window)
         glfwUpdateGamepadMappings(mappings.c_str());
     }
 
+    // 加载 Steam / 外部环境注入的 SDL_GAMECONTROLLERCONFIG 映射
+    if (const char* env_mapping = std::getenv("SDL_GAMECONTROLLERCONFIG"))
+    {
+        brls::Logger::info("glfw: load SDL_GAMECONTROLLERCONFIG from environment");
+        glfwUpdateGamepadMappings(env_mapping);
+    }
+
     glfwSetJoystickCallback(glfwJoystickCallback);
     glfwSetScrollCallback(window, scrollCallback);
     glfwSetCursorPosCallback(window, cursorCallback);
@@ -200,15 +213,20 @@ GLFWInputManager::GLFWInputManager(GLFWwindow* window)
         glfwSetTouchCallback(window, glfwTouchCallback);
     }
 
-    for (int i = 0; i < GAMEPADS_MAX; i++)
+    controllersCount = 0;
+    for (int i = 0; i <= GLFW_JOYSTICK_LAST; i++)
     {
-        const char* guid = glfwGetJoystickGUID(i);
-        if (guid)
-            Logger::info("glfw: joystick {} GUID {}", i, guid);
-        if (glfwJoystickIsGamepad(i))
+        if (glfwJoystickPresent(i))
         {
-            Logger::info("glfw: joystick {} connected", i);
-            Logger::info("glfw: joystick {} is gamepad: \"{}\"", i, glfwGetGamepadName(i));
+            controllersCount++;
+            const char* guid = glfwGetJoystickGUID(i);
+            if (guid)
+                Logger::info("glfw: joystick {} GUID {}", i, guid);
+            if (glfwJoystickIsGamepad(i))
+            {
+                Logger::info("glfw: joystick {} connected", i);
+                Logger::info("glfw: joystick {} is gamepad: \"{}\"", i, glfwGetGamepadName(i));
+            }
         }
     }
 
@@ -230,7 +248,13 @@ GLFWInputManager::GLFWInputManager(GLFWwindow* window)
 
 short GLFWInputManager::getControllersConnectedCount()
 {
-    return controllersCount;
+    short count = 0;
+    for (int i = 0; i <= GLFW_JOYSTICK_LAST; i++)
+    {
+        if (glfwJoystickPresent(i))
+            count++;
+    }
+    return count;
 }
 
 void GLFWInputManager::updateUnifiedControllerState(ControllerState* state)
@@ -244,10 +268,14 @@ void GLFWInputManager::updateUnifiedControllerState(ControllerState* state)
     if (!glfwGetWindowAttrib(window, GLFW_FOCUSED))
         return;
 
-    // DeckPlayer：记录是否存在真实手柄输入（在任何键盘合并之前）。
+    // Muvik：记录是否存在真实手柄输入（在任何键盘合并之前）。
+    // 遍历 GLFW 全部 16 个插槽（0..GLFW_JOYSTICK_LAST），支持外接手柄（Steam Deck 上常落在 slot 5+）
     bool hasAnyPadInput = false;
-    for (int i = 0; i < GAMEPADS_MAX; i++)
+    for (int i = 0; i <= GLFW_JOYSTICK_LAST; i++)
     {
+        if (!glfwJoystickPresent(i))
+            continue;
+
         ControllerState localState {};
         updateControllerState(&localState, i);
 
@@ -263,14 +291,14 @@ void GLFWInputManager::updateUnifiedControllerState(ControllerState* state)
                 hasAnyPadInput = true;
         }
 
-        for (size_t i = 0; i < _AXES_MAX; i++)
+        for (size_t axis = 0; axis < _AXES_MAX; axis++)
         {
-            state->axes[i] += localState.axes[i];
+            state->axes[axis] += localState.axes[axis];
 
-            if (state->axes[i] < -1)
-                state->axes[i] = -1;
-            else if (state->axes[i] > 1)
-                state->axes[i] = 1;
+            if (state->axes[axis] < -1)
+                state->axes[axis] = -1;
+            else if (state->axes[axis] > 1)
+                state->axes[axis] = 1;
         }
     }
 
@@ -298,7 +326,7 @@ void GLFWInputManager::updateUnifiedControllerState(ControllerState* state)
     state->buttons[BUTTON_NAV_DOWN] |= state->buttons[BUTTON_DOWN];
     state->buttons[BUTTON_NAV_LEFT] |= state->buttons[BUTTON_LEFT];
 
-    // DeckPlayer 补丁：判断这次输入是否有「真实手柄」参与。
+    // Muvik 补丁：判断这次输入是否有「真实手柄」参与。
     //
     // 上游把键盘按键直接 OR 进同一个 buttons 数组，之后无法区分
     // 到底是键盘还是手柄在操作，界面只能一律显示手柄图标。
@@ -322,6 +350,7 @@ void GLFWInputManager::updateUnifiedControllerState(ControllerState* state)
     static int lastSource = -1;   // 0=键盘 1=手柄 -1=未知
     if (anyInput)
     {
+        Application::setActiveEvent(true);
         int src = gamepadUsed ? 1 : 0;
         if (src != lastSource)
         {
@@ -335,29 +364,98 @@ void GLFWInputManager::updateUnifiedControllerState(ControllerState* state)
 
 void GLFWInputManager::updateControllerState(ControllerState* state, int controller)
 {
-    // Get gamepad state
+    // 优先尝试读取已注册 SDL 映射的标准 Gamepad 状态
     GLFWgamepadstate glfwState = {};
-    glfwGetGamepadState(controller, &glfwState);
-
-    for (size_t i = 0; i < GLFW_GAMEPAD_BUTTON_MAX; i++)
+    if (glfwGetGamepadState(controller, &glfwState))
     {
-        // Translate GLFW gamepad to borealis controller
-        size_t brlsButton          = GLFW_BUTTONS_MAPPING[i];
-        state->buttons[brlsButton] = (bool)glfwState.buttons[i];
+        for (size_t i = 0; i < GLFW_GAMEPAD_BUTTON_MAX; i++)
+        {
+            // Translate GLFW gamepad to borealis controller
+            size_t brlsButton          = GLFW_BUTTONS_MAPPING[i];
+            state->buttons[brlsButton] = (bool)glfwState.buttons[i];
+        }
+
+        state->buttons[BUTTON_LT] = glfwState.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] > 0.1f;
+        state->buttons[BUTTON_RT] = glfwState.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] > 0.1f;
+
+        state->buttons[BUTTON_NAV_UP]    = glfwState.axes[GLFW_GAMEPAD_AXIS_LEFT_Y] < -0.5f || glfwState.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y] < -0.5f || state->buttons[BUTTON_UP];
+        state->buttons[BUTTON_NAV_RIGHT] = glfwState.axes[GLFW_GAMEPAD_AXIS_LEFT_X] > 0.5f || glfwState.axes[GLFW_GAMEPAD_AXIS_RIGHT_X] > 0.5f || state->buttons[BUTTON_RIGHT];
+        state->buttons[BUTTON_NAV_DOWN]  = glfwState.axes[GLFW_GAMEPAD_AXIS_LEFT_Y] > 0.5f || glfwState.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y] > 0.5f || state->buttons[BUTTON_DOWN];
+        state->buttons[BUTTON_NAV_LEFT]  = glfwState.axes[GLFW_GAMEPAD_AXIS_LEFT_X] < -0.5f || glfwState.axes[GLFW_GAMEPAD_AXIS_RIGHT_X] < -0.5f || state->buttons[BUTTON_LEFT];
+
+        for (size_t i = 0; i < GLFW_GAMEPAD_AXIS_MAX; i++)
+        {
+            state->axes[GLFW_AXIS_MAPPING[i]] = glfwState.axes[i];
+        }
+        return;
     }
 
-    state->buttons[BUTTON_LT] = glfwState.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] > 0.1f;
-    state->buttons[BUTTON_RT] = glfwState.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] > 0.1f;
-
-    state->buttons[BUTTON_NAV_UP]    = glfwState.axes[GLFW_GAMEPAD_AXIS_LEFT_Y] < -0.5f || glfwState.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y] < -0.5f || state->buttons[BUTTON_UP];
-    state->buttons[BUTTON_NAV_RIGHT] = glfwState.axes[GLFW_GAMEPAD_AXIS_LEFT_X] > 0.5f || glfwState.axes[GLFW_GAMEPAD_AXIS_RIGHT_X] > 0.5f || state->buttons[BUTTON_RIGHT];
-    state->buttons[BUTTON_NAV_DOWN]  = glfwState.axes[GLFW_GAMEPAD_AXIS_LEFT_Y] > 0.5f || glfwState.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y] > 0.5f || state->buttons[BUTTON_DOWN];
-    state->buttons[BUTTON_NAV_LEFT]  = glfwState.axes[GLFW_GAMEPAD_AXIS_LEFT_X] < -0.5f || glfwState.axes[GLFW_GAMEPAD_AXIS_RIGHT_X] < -0.5f || state->buttons[BUTTON_LEFT];
-
-    for (size_t i = 0; i < GLFW_GAMEPAD_AXIS_MAX; i++)
+    // 回退机制：若此设备未注册 SDL Gamepad 映射（例如特定型号八位堂、D-Input 模式、第三方未映射摇杆），
+    // 直接读取底层原始按键、方向十字键 (Hats) 和模拟轴 (Axes)，避免手柄完全无法控制
+    int buttonCount = 0;
+    const unsigned char* rawButtons = glfwGetJoystickButtons(controller, &buttonCount);
+    if (rawButtons && buttonCount > 0)
     {
-        state->axes[GLFW_AXIS_MAPPING[i]] = glfwState.axes[i];
+        if (buttonCount > 0) state->buttons[BUTTON_A] = (rawButtons[0] == GLFW_PRESS);
+        if (buttonCount > 1) state->buttons[BUTTON_B] = (rawButtons[1] == GLFW_PRESS);
+        if (buttonCount > 2) state->buttons[BUTTON_X] = (rawButtons[2] == GLFW_PRESS);
+        if (buttonCount > 3) state->buttons[BUTTON_Y] = (rawButtons[3] == GLFW_PRESS);
+        if (buttonCount > 4) state->buttons[BUTTON_LB] = (rawButtons[4] == GLFW_PRESS);
+        if (buttonCount > 5) state->buttons[BUTTON_RB] = (rawButtons[5] == GLFW_PRESS);
+        if (buttonCount > 6) state->buttons[BUTTON_BACK] = (rawButtons[6] == GLFW_PRESS);
+        if (buttonCount > 7) state->buttons[BUTTON_START] = (rawButtons[7] == GLFW_PRESS);
+        if (buttonCount > 8) state->buttons[BUTTON_GUIDE] = (rawButtons[8] == GLFW_PRESS);
+        if (buttonCount > 9) state->buttons[BUTTON_LSB] = (rawButtons[9] == GLFW_PRESS);
+        if (buttonCount > 10) state->buttons[BUTTON_RSB] = (rawButtons[10] == GLFW_PRESS);
+        if (buttonCount > 11) state->buttons[BUTTON_UP] |= (rawButtons[11] == GLFW_PRESS);
+        if (buttonCount > 12) state->buttons[BUTTON_DOWN] |= (rawButtons[12] == GLFW_PRESS);
+        if (buttonCount > 13) state->buttons[BUTTON_LEFT] |= (rawButtons[13] == GLFW_PRESS);
+        if (buttonCount > 14) state->buttons[BUTTON_RIGHT] |= (rawButtons[14] == GLFW_PRESS);
     }
+
+    int hatCount = 0;
+    const unsigned char* rawHats = glfwGetJoystickHats(controller, &hatCount);
+    if (rawHats && hatCount > 0)
+    {
+        unsigned char hat = rawHats[0];
+        if (hat & GLFW_HAT_UP) state->buttons[BUTTON_UP] = true;
+        if (hat & GLFW_HAT_RIGHT) state->buttons[BUTTON_RIGHT] = true;
+        if (hat & GLFW_HAT_DOWN) state->buttons[BUTTON_DOWN] = true;
+        if (hat & GLFW_HAT_LEFT) state->buttons[BUTTON_LEFT] = true;
+    }
+
+    int axisCount = 0;
+    const float* rawAxes = glfwGetJoystickAxes(controller, &axisCount);
+    if (rawAxes && axisCount >= 2)
+    {
+        state->axes[LEFT_X] = rawAxes[0];
+        state->axes[LEFT_Y] = rawAxes[1];
+        if (axisCount >= 4)
+        {
+            state->axes[RIGHT_X] = rawAxes[2];
+            state->axes[RIGHT_Y] = rawAxes[3];
+        }
+        if (axisCount >= 6)
+        {
+            state->axes[LEFT_Z] = rawAxes[4];
+            state->axes[RIGHT_Z] = rawAxes[5];
+            state->buttons[BUTTON_LT] = rawAxes[4] > 0.1f;
+            state->buttons[BUTTON_RT] = rawAxes[5] > 0.1f;
+        }
+        if (axisCount >= 8)
+        {
+            // 部分手柄十字键映射在 Axis 6 / Axis 7
+            if (rawAxes[6] < -0.5f) state->buttons[BUTTON_LEFT] = true;
+            if (rawAxes[6] > 0.5f) state->buttons[BUTTON_RIGHT] = true;
+            if (rawAxes[7] < -0.5f) state->buttons[BUTTON_UP] = true;
+            if (rawAxes[7] > 0.5f) state->buttons[BUTTON_DOWN] = true;
+        }
+    }
+
+    state->buttons[BUTTON_NAV_UP]    = state->axes[LEFT_Y] < -0.5f || state->axes[RIGHT_Y] < -0.5f || state->buttons[BUTTON_UP];
+    state->buttons[BUTTON_NAV_RIGHT] = state->axes[LEFT_X] > 0.5f || state->axes[RIGHT_X] > 0.5f || state->buttons[BUTTON_RIGHT];
+    state->buttons[BUTTON_NAV_DOWN]  = state->axes[LEFT_Y] > 0.5f || state->axes[RIGHT_Y] > 0.5f || state->buttons[BUTTON_DOWN];
+    state->buttons[BUTTON_NAV_LEFT]  = state->axes[LEFT_X] < -0.5f || state->axes[RIGHT_X] < -0.5f || state->buttons[BUTTON_LEFT];
 }
 
 bool GLFWInputManager::getKeyboardKeyState(BrlsKeyboardScancode key)

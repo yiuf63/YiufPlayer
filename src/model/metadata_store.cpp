@@ -15,7 +15,7 @@
 
 namespace fs = std::filesystem;
 
-namespace deck_player {
+namespace muvik {
 
 namespace {
 
@@ -180,7 +180,7 @@ void MetadataStore::save() const {
         std::lock_guard<std::recursive_mutex> lock(mutex_);
         std::ofstream out(tmp, std::ios::trunc);
         if (!out.is_open()) return;
-        out << "# DeckPlayer metadata v1 (fields separated by 0x1f)\n";
+        out << "# Muvik metadata v1 (fields separated by 0x1f)\n";
         for (const auto& kv : records_) {
             const MediaMetadata& m = kv.second;
             std::ostringstream rating;
@@ -204,4 +204,4 @@ void MetadataStore::save() const {
     }
 }
 
-} // namespace deck_player
+} // namespace muvik

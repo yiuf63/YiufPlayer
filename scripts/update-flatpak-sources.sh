@@ -14,7 +14,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.." || exit 1
 
-MANIFEST="flatpak/org.deckplayer.DeckPlayer.yaml"
+MANIFEST="flatpak/org.muvik.Muvik.yaml"
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 

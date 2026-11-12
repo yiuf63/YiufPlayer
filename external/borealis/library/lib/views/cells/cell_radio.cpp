@@ -33,6 +33,7 @@ const std::string radioCellXML = R"xml(
             width="auto"
             height="auto"
             grow="1"
+            singleLine="true"
             fontSize="@style/brls/sidebar/item_font_size"
             marginLeft="@style/brls/listitem/descriptionIndent"
             marginRight="@style/brls/listitem/descriptionIndent" />

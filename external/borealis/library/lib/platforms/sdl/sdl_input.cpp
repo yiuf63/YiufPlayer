@@ -403,7 +403,7 @@ SDLInputManager::SDLInputManager(SDL_Window* window)
     : window(window)
 {
 
-    // DeckPlayer 补丁：必须显式初始化 EVENTS 子系统（触摸依赖它）。
+    // Muvik 补丁：必须显式初始化 EVENTS 子系统（触摸依赖它）。
     //
     // 上游只初始化 JOYSTICK|GAMECONTROLLER|HAPTIC。SDL 虽然会在
     // SDL_Init(SUBSYSTEM) 时把 EVENTS 作为依赖一并启动，
@@ -500,7 +500,7 @@ void SDLInputManager::updateUnifiedControllerState(ControllerState* state)
         state->buttons[BUTTON_A] |= getKeyboardKeys(SDL_SCANCODE_KP_ENTER);
         state->buttons[BUTTON_A] |= getKeyboardKeys(SDL_SCANCODE_RETURN);
         state->buttons[BUTTON_B] |= getKeyboardKeys(SDL_SCANCODE_ESCAPE);
-        // DeckPlayer 补丁：Android 的「返回」键（物理返回键/手势返回）在 SDL 里
+        // Muvik 补丁：Android 的「返回」键（物理返回键/手势返回）在 SDL 里
         // 是 SDL_SCANCODE_AC_BACK。上游只把它映射到 BUTTON_B，
         // 于是：
         //   · 播放器里注册在 BUTTON_BACK 的动作（全屏切换）按不出来

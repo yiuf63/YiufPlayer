@@ -23,7 +23,7 @@ TapGestureRecognizer::TapGestureRecognizer(View* view, TapGestureConfig config)
 {
     this->tapEvent.subscribe([view, config](TapGestureStatus status, Sound* soundToPlay)
         {
-        // DeckPlayer 补丁：视图可能已在界面切换时销毁。
+        // Muvik 补丁：视图可能已在界面切换时销毁。
         // 这里必须先查登记表再解引用，否则后续 getActions() /
         // playClickAnimation() 仍会访问已释放内存。
         if (Application::isViewDead(view))
@@ -64,7 +64,7 @@ TapGestureRecognizer::TapGestureRecognizer(View* view, std::function<void()> res
 {
     this->tapEvent.subscribe([view, respond, config](TapGestureStatus status, Sound* soundToPlay)
         {
-        // DeckPlayer 补丁：同上，视图已销毁则整体跳过。
+        // Muvik 补丁：同上，视图已销毁则整体跳过。
         if (Application::isViewDead(view))
             return;
         if (status.state != GestureState::INTERRUPTED && status.state != GestureState::FAILED)

@@ -14,7 +14,7 @@
 
 #include <borealis/extern/nanovg/nanovg.h>
 
-namespace deck_player::ui {
+namespace muvik::ui {
 
 struct SceneSpec {
     // 已抽出的帧（PNG 绝对路径）。空或读不到时退回占位画面。
@@ -34,4 +34,4 @@ uint32_t hashString(const std::string& s);
 // 缩略图缓存是否已经有这张图（抽帧完成后用于判断要不要重画占位）
 bool sceneImageReady(const std::string& path);
 
-} // namespace deck_player::ui
+} // namespace muvik::ui

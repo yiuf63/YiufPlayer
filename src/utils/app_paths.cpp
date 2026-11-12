@@ -1,50 +1,79 @@
 #include <cstdlib>
 #include <string>
+#include <algorithm>
 #include "utils/app_paths.hpp"
 
 #if defined(ANDROID)
 #include <SDL2/SDL_system.h>
 #endif
 
-#include <cstdlib>
 #include <filesystem>
 
 namespace fs = std::filesystem;
 
-namespace deck_player {
+namespace muvik {
+
+std::string AppPaths::homeDir() {
+    const char* home = std::getenv("HOME");
+    if (home && *home) return home;
+    return "";
+}
 
 std::string AppPaths::configDir() {
 #if defined(ANDROID)
-    // Android 上没有 XDG 规范，也没有 $HOME。
-    // 应用私有目录（/data/data/<pkg>/files）可读写且无需任何权限，
-    // 是存放配置与缓存的标准位置。
-    // SDL 已封装好取该路径的逻辑，直接用它：
-    //   SDL_AndroidGetInternalStoragePath() → /data/user/0/<pkg>/files
-    // 若 SDL 尚未初始化，退回 TMPDIR。
     if (const char* internal = SDL_AndroidGetInternalStoragePath();
         internal && *internal) {
-        return std::string(internal) + "/deck-player";
+        return std::string(internal) + "/muvik";
     }
     if (const char* tmp = std::getenv("TMPDIR"); tmp && *tmp) {
-        return std::string(tmp) + "/deck-player";
+        return std::string(tmp) + "/muvik";
     }
-    return "/data/local/tmp/deck-player";
+    return "/data/local/tmp/muvik";
 #else
     const char* xdg = std::getenv("XDG_CONFIG_HOME");
     if (xdg && *xdg) {
-        return std::string(xdg) + "/deck-player";
+        return std::string(xdg) + "/muvik";
     }
     const char* home = std::getenv("HOME");
     if (home && *home) {
-        return std::string(home) + "/.config/deck-player";
+        return std::string(home) + "/.config/muvik";
     }
-    // 无 HOME 时退化为当前目录下的相对路径，保证程序仍可使用
-    return "./deck-player";
+    return "./muvik";
 #endif
 }
 
 std::string AppPaths::pluginsDir() {
     return configDir() + "/plugins";
+}
+
+std::string AppPaths::themesDir() {
+    std::string d = configDir() + "/themes";
+    ensureDir(d);
+    return d;
+}
+
+std::vector<std::string> AppPaths::workshopSearchPaths(const std::string& app_id) {
+    std::vector<std::string> paths;
+    const char* env_ws = std::getenv("STEAM_WORKSHOP_PATH");
+    if (!env_ws || !*env_ws) env_ws = std::getenv("MUVIK_WORKSHOP_DIR");
+    if (env_ws && *env_ws) {
+        if (fs::exists(env_ws)) paths.push_back(env_ws);
+    }
+
+    std::string home = homeDir();
+    std::vector<std::string> candidates = {
+        home + "/.local/share/Steam/steamapps/workshop/content/" + app_id,
+        home + "/.steam/steam/steamapps/workshop/content/" + app_id,
+        home + "/.steam/root/steamapps/workshop/content/" + app_id,
+        home + "/Library/Application Support/Steam/steamapps/workshop/content/" + app_id,
+    };
+
+    for (const auto& c : candidates) {
+        if (fs::exists(c) && std::find(paths.begin(), paths.end(), c) == paths.end()) {
+            paths.push_back(c);
+        }
+    }
+    return paths;
 }
 
 std::string AppPaths::configFile(const std::string& filename) {
@@ -58,4 +87,4 @@ bool AppPaths::ensureDir(const std::string& dir) {
     return fs::create_directories(dir, ec) && !ec;
 }
 
-} // namespace deck_player
+} // namespace muvik

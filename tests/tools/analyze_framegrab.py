@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""分析 DeckPlayer 抓取的帧缓冲（PPM），验证界面是否真的渲染出来。
+"""分析 Muvik 抓取的帧缓冲（PPM），验证界面是否真的渲染出来。
 
 配合程序内的 FrameGrabber 使用：
 
-    DECKPLAYER_FRAMEGRAB=/tmp/grab.ppm ./build/deck-player
+    MUVIK_FRAMEGRAB=/tmp/grab.ppm ./build/muvik
     python3 tests/tools/analyze_framegrab.py /tmp/grab.ppm
 
 为什么需要这个工具：

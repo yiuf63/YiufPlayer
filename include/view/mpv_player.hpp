@@ -12,7 +12,7 @@
 #include <functional>
 #include "model/media_item.hpp"
 
-namespace deck_player {
+namespace muvik {
 
 enum class GestureMode {
     None,
@@ -79,6 +79,10 @@ public:
     void cycleAspectRatio();
     void setAspectRatio(AspectRatioMode mode);
 
+    // OSD 控制栏显隐切换
+    void toggleOSD();
+    void showOSD(bool show = true);
+
     // 锁屏防误触
     void toggleTouchLock();
     bool isTouchLocked() const { return touch_locked_; }
@@ -91,7 +95,7 @@ public:
 
     // 音视频与字幕轨道控制
     std::vector<TrackInfo> getTracks(const std::string& type);
-    void selectTrack(const std::string& type, int track_id);
+    void selectTrack(const std::string& type, int track_id, bool show_hud = true);
     void setSubtitleDelay(float seconds);
     float getSubtitleDelay() const { return subtitle_delay_; }
 
@@ -116,6 +120,28 @@ private:
     void blitVideoTexture(int dst_x, int dst_y, int dst_w, int dst_h);
     void drawOverlay();
     void drawHud(NVGcontext* vg, float x, float y, float width, float height);
+
+    // 手柄 OSD 导航焦点项
+    enum class OsdFocusItem {
+        None = 0,
+        ProgressBar,
+        Prev,
+        SeekBack,
+        PlayPause,
+        SeekForward,
+        Next,
+        SubtitleTrack,
+        AudioTrack,
+        Speed,
+        Aspect,
+        Playlist,
+        Lock,
+        Back
+    };
+    OsdFocusItem osd_focus_ = OsdFocusItem::PlayPause;
+    bool isOsdActive() const;
+    void navigateOsdFocus(brls::FocusDirection direction);
+    void activateOsdFocus();
 
     // 触摸控件：触屏用户无法用 A/X/Y 键，必须有一排可点按钮。
     enum class TouchAction {
@@ -205,6 +231,8 @@ private:
     bool is_playing_ = false;
     int64_t current_position_ = 0; // 秒
     int64_t total_duration_ = 0;   // 秒
+    int64_t pending_resume_position_ = 0; // 断点续播等待 FILE_LOADED 确认加载
+    int64_t last_saved_position_ = 0;     // 上次已持久化到历史的秒数（节流落盘）
     int volume_ = 100;
     float brightness_ = 1.0f;
     // 平台有没有真正的背光接口（Steam Deck / 安卓 / Switch 有，桌面没有）。
@@ -213,14 +241,21 @@ private:
     double playback_speed_ = 1.0;
     AspectRatioMode aspect_mode_ = AspectRatioMode::Auto;
     bool touch_locked_ = false;
+    std::chrono::steady_clock::time_point last_a_press_time_{}; // 用于手柄双击 A 快速解锁
     float subtitle_delay_ = 0.0f;
     int selected_sid_ = 1;  // 用户选择的字幕轨（<=0 表示关闭）
     bool subtitle_chosen_ = false;  // 本次加载是否已自动选过字幕
     int selected_aid_ = 1;  // 用户选择的音轨
-    int sub_pos_applied_ = 80;  // 已下发的字幕垂直位置（OSD 联动：显示时抬到控制栏上方）
 
-    // 用于 OSD 顶部信息行（分辨率 / 硬解状态）。
+    // 用于 OSD 顶部信息行（分辨率 / 硬解状态 / 格式徽标）。
     // 在 FILE_LOADED 时向 mpv 查询一次即可，不必每帧读属性。
+    struct FormatBadge {
+        std::string text;
+        bool is_accent = false;
+    };
+    std::vector<FormatBadge> format_badges_;
+    void updateFormatBadges();
+
     int video_w_ = 0;
     int video_h_ = 0;
     bool hwdec_active_ = false;
@@ -263,4 +298,4 @@ private:
     std::function<void()> on_show_playlist_cb_;
 };
 
-} // namespace deck_player
+} // namespace muvik

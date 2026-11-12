@@ -85,17 +85,17 @@ jobs:
 
       - name: 验证产物
         run: |
-          file build-linux/deck-player
+          file build-linux/muvik
           echo "--- 检查未定义符号 ---"
-          ldd -r build-linux/deck-player 2>&1 | grep "undefined symbol" && exit 1 || true
+          ldd -r build-linux/muvik 2>&1 | grep "undefined symbol" && exit 1 || true
           echo "--- 检查关键依赖 ---"
-          ldd build-linux/deck-player | grep -E "mpv|avutil|glfw|GL" || exit 1
+          ldd build-linux/muvik | grep -E "mpv|avutil|glfw|GL" || exit 1
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
-          name: deck-player-linux-x86_64
-          path: build-linux/deck-player
+          name: muvik-linux-x86_64
+          path: build-linux/muvik
           retention-days: 14
 
   # ── 3. Android 构建（触屏交互的主要验证平台）──
@@ -148,6 +148,6 @@ jobs:
       - name: 上传 APK
         uses: actions/upload-artifact@v4
         with:
-          name: deck-player-android
+          name: muvik-android
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14

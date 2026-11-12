@@ -20,7 +20,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace deck_player {
+namespace muvik {
 
 class ThumbnailCache {
 public:
@@ -52,4 +52,4 @@ private:
     ThumbnailCache() = default;
 };
 
-} // namespace deck_player
+} // namespace muvik

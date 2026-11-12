@@ -23,18 +23,26 @@ class EditTextDialog : public Box
     Event<>* getCancelEvent();
     Event<>* getSubmitEvent();
     Event<std::string>* getClipboardEvent();
+    Event<std::string>* getInsertTextEvent();
+    Event<>* getClearEvent();
+    Event<int>* getCursorMoveEvent();
     void updateUI();
   private:
     std::string content;
     std::string hint;
     Event<Point> layoutEvent;
-    Event<> backspaceEvent, cancelEvent, summitEvent;
-    Event<std::string> clipboardEvent;
+    Event<> backspaceEvent, cancelEvent, summitEvent, clearEvent;
+    Event<std::string> clipboardEvent, insertTextEvent;
+    Event<int> cursorMoveEvent;
+    int keyboardMode = 0;
     bool init = false;
+
+    void buildKeyboard();
 
     BRLS_BIND(brls::Label, header, "brls/dialog/header");
     BRLS_BIND(brls::Label, label, "brls/dialog/label");
     BRLS_BIND(brls::Label, count, "brls/dialog/count");
+    BRLS_BIND(brls::Box, keyboardBox, "brls/dialog/keyboard");
     BRLS_BIND(brls::Box, container, "brls/container");
 };
 }

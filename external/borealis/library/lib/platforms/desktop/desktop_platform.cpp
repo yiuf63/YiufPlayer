@@ -228,7 +228,7 @@ static INHIBIT_TYPE systemType = NONE;
 
 static inline void probeInhibitor(DBusConnection* conn)
 {
-    // DeckPlayer 补丁：连接可能为空。
+    // Muvik 补丁：连接可能为空。
     // 无 D-Bus 会话的环境（容器、某些 SteamOS 精简会话）里
     // dbus_bus_get_private 会失败并返回 nullptr，而 dbus_bus_name_has_owner
     // 对空连接不是返回错误，而是直接 **abort 整个进程**：

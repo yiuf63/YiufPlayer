@@ -13,7 +13,7 @@
 
 #include <borealis/extern/nanovg/nanovg.h>
 
-namespace deck_player::ui {
+namespace muvik::ui {
 
 enum class Icon {
     None,         // 占位：只画文字、不画图标
@@ -64,4 +64,4 @@ void drawIconButton(NVGcontext* vg, Icon icon, float cx, float cy, float diamete
                     float iconSize, NVGcolor bg, NVGcolor fg, NVGcolor border,
                     float borderWidth = 1.0f);
 
-} // namespace deck_player::ui
+} // namespace muvik::ui

@@ -65,13 +65,15 @@ def check_keybindings(src_text, verbose):
     # 播放器里应注册的按键（与文档表格逐项对应）
     expected = {
         "BUTTON_A": "播放/暂停",
+        "BUTTON_B": "返回",
         "BUTTON_LEFT": "快退",
         "BUTTON_RIGHT": "快进",
         "BUTTON_LT": "音量减",
         "BUTTON_RT": "音量加",
-        "BUTTON_LB": "上一集",
-        "BUTTON_RB": "下一集",
+        "BUTTON_LB": "快退",
+        "BUTTON_RB": "快进",
         "BUTTON_UP": "播放列表",
+        "BUTTON_DOWN": "控制栏",
         "BUTTON_X": "音轨选择",
         "BUTTON_Y": "字幕设置",
         "BUTTON_RSB": "倍速切换",
@@ -86,7 +88,7 @@ def check_keybindings(src_text, verbose):
     }
     for btn, action in expected.items():
         pat = re.compile(
-            r'registerAction\("' + re.escape(action) + r'"\s*,\s*'
+            r'registerAction\((?:i18n::tr\([^,]+,\s*)?"' + re.escape(action) + r'"\)?\s*,\s*'
             r'brls::ControllerButton::' + btn)
         m = pat.search(src_text)
         check(f"按键 {btn.replace('BUTTON_', ''):6s} → {action}", bool(m),
@@ -181,40 +183,38 @@ def check_readme_numbers(src_text):
     而代码是 {1.0, 1.25, 1.5, 2.0, 0.75}（0.75x ~ 2.0x）。
     check_docs.py 此前只读 docs/使用指南.md，完全没看 README。
     """
-    readme = ROOT / "README.md"
-    if not readme.exists():
-        check("README 存在", False, "")
-        return
-    text = readme.read_text(encoding="utf-8")
+    readmes = [ROOT / "README.md", ROOT / "README_zh.md"]
+    for readme in readmes:
+        if not readme.exists():
+            check(f"{readme.name} 存在", False, "")
+            continue
+        text = readme.read_text(encoding="utf-8")
 
-    # 倍速范围
-    m = re.search(r"speeds\[\]\s*=\s*\{([^}]+)\}", src_text)
-    if m:
-        vals = [float(x.strip()) for x in m.group(1).split(",")]
-        lo, hi = min(vals), max(vals)
-        # README 里若出现 "0.5x ~ 3.0x" 这类范围，必须与代码一致
-        rng = re.search(r"([0-9.]+)x\s*[~～-]\s*([0-9.]+)x", text)
-        if rng:
-            r_lo, r_hi = float(rng.group(1)), float(rng.group(2))
-            check("README 倍速范围与代码一致",
-                  abs(r_lo - lo) < 1e-6 and abs(r_hi - hi) < 1e-6,
-                  f"README {r_lo}~{r_hi}x / 代码 {lo}~{hi}x")
-        else:
-            # README 若改用「显式序列」写法，则逐处核对。
-            # 同一份 README 里可能多处提到倍速（特性列表 + 按键表），
-            # 每一处都必须与代码一致——不能只看第一处。
-            seqs = re.findall(r"([0-9.]+x(?:\s*(?:→|->)\s*[0-9.]+x)+)", text)
-            ok = True
-            detail = ""
-            for one in seqs:
-                got = [float(x) for x in re.findall(r"([0-9.]+)x", one)]
-                if got != vals:
-                    ok = False
-                    detail = f"README {got} / 代码 {vals}"
-                    break
-            if seqs:
-                check(f"README 倍速序列与代码一致（{len(seqs)} 处）", ok,
-                      detail or f"{len(seqs)} 处全部一致")
+        # 倍速范围
+        m = re.search(r"speeds\[\]\s*=\s*\{([^}]+)\}", src_text)
+        if m:
+            vals = [float(x.strip()) for x in m.group(1).split(",")]
+            lo, hi = min(vals), max(vals)
+            # README 里若出现 "0.5x ~ 3.0x" 这类范围，必须与代码一致
+            rng = re.search(r"([0-9.]+)x\s*[~～-]\s*([0-9.]+)x", text)
+            if rng:
+                r_lo, r_hi = float(rng.group(1)), float(rng.group(2))
+                check(f"{readme.name} 倍速范围与代码一致",
+                      abs(r_lo - lo) < 1e-6 and abs(r_hi - hi) < 1e-6,
+                      f"{readme.name} {r_lo}~{r_hi}x / 代码 {lo}~{hi}x")
+            else:
+                seqs = re.findall(r"([0-9.]+x(?:\s*(?:→|->)\s*[0-9.]+x)+)", text)
+                ok = True
+                detail = ""
+                for one in seqs:
+                    got = [float(x) for x in re.findall(r"([0-9.]+)x", one)]
+                    if got != vals:
+                        ok = False
+                        detail = f"{readme.name} {got} / 代码 {vals}"
+                        break
+                if seqs:
+                    check(f"{readme.name} 倍速序列与代码一致（{len(seqs)} 处）", ok,
+                          detail or f"{len(seqs)} 处全部一致")
 
     # 数值化的功能条数声明（如「18 个按键」）不做强校验，
     # 因为 README 常用概述性语言。
@@ -236,26 +236,26 @@ def check_doc_scripts(doc_text):
 
 
 def check_env_vars(doc_text, src_text):
-    """文档提到的每个 DECKPLAYER_* 环境变量都必须被代码读取。"""
-    doc_vars = set(re.findall(r"DECKPLAYER_[A-Z_]+", doc_text))
+    """文档提到的每个 MUVIK_* 环境变量都必须被代码读取。"""
+    doc_vars = set(re.findall(r"MUVIK_[A-Z_]+", doc_text))
     for v in sorted(doc_vars):
         # 排除纯测试用途的
-        if v in ("DECKPLAYER_RESOURCES", "DECKPLAYER_WINDOW", "DECKPLAYER_FPS"):
+        if v in ("MUVIK_RESOURCES", "MUVIK_WINDOW", "MUVIK_FPS"):
             check(f"环境变量 {v} 被代码读取", v in src_text, "")
         else:
             check(f"环境变量 {v} 被代码读取", v in src_text, "")
 
 
 def check_resources_var(doc_text):
-    """文档提到的 DECKPLAYER_RESOURCES 必须被代码支持。"""
-    ok = "DECKPLAYER_RESOURCES" in doc_text
+    """文档提到的 MUVIK_RESOURCES 必须被代码支持。"""
+    ok = "MUVIK_RESOURCES" in doc_text
     if not ok:
-        check("文档提到 DECKPLAYER_RESOURCES", False, "")
+        check("文档提到 MUVIK_RESOURCES", False, "")
         return
     src = (ROOT / "src" / "utils" / "resource_locator.cpp").read_text(
         encoding="utf-8", errors="replace")
-    check("DECKPLAYER_RESOURCES 被代码读取",
-          "DECKPLAYER_RESOURCES" in src, "")
+    check("MUVIK_RESOURCES 被代码读取",
+          "MUVIK_RESOURCES" in src, "")
 
 
 def main():

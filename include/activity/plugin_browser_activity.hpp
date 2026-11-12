@@ -9,7 +9,7 @@
 #include <vector>
 #include "model/media_item.hpp"
 
-namespace deck_player {
+namespace muvik {
 
 // 插件视频源的目录浏览界面。
 //
@@ -50,4 +50,4 @@ private:
     bool loading_ = false;
 };
 
-} // namespace deck_player
+} // namespace muvik

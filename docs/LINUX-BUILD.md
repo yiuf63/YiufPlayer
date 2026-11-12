@@ -7,13 +7,13 @@
 
 ```bash
 # 1. 构建镜像（只需一次，约 10 分钟，取决于网速）
-docker build --platform linux/amd64 -f Dockerfile.linux -t deckplayer-linux .
+docker build --platform linux/amd64 -f Dockerfile.linux -t muvik-linux .
 
 # 2. 编译（源码挂载进去，产物落在 build-linux/）
-docker run --rm -v "$PWD:/src" -w /src deckplayer-linux
+docker run --rm -v "$PWD:/src" -w /src muvik-linux
 ```
 
-产物：`build-linux/deck-player`
+产物：`build-linux/muvik`
 
 ## 方式二：在 Linux 主机上直接构建
 
@@ -84,7 +84,7 @@ Steam Deck 是 **1280×800（16:10）**。项目不假设屏幕尺寸，
 调试时可用环境变量指定：
 
 ```bash
-DECKPLAYER_WINDOW=1280x800 ./build-linux/deck-player
+MUVIK_WINDOW=1280x800 ./build-linux/muvik
 ```
 
 ### 4. 验证方法
@@ -93,8 +93,8 @@ DECKPLAYER_WINDOW=1280x800 ./build-linux/deck-player
 
 ```bash
 # 检查二进制是否正确链接了 libmpv
-docker run --rm -v "$PWD:/src" -w /src deckplayer-linux \
-  bash -c 'ldd build-linux/deck-player | grep -E "mpv|avutil|glfw"'
+docker run --rm -v "$PWD:/src" -w /src muvik-linux \
+  bash -c 'ldd build-linux/muvik | grep -E "mpv|avutil|glfw"'
 ```
 
 有窗口的完整验证需要真实显示环境（Steam Deck 或带 X 的 Linux）。

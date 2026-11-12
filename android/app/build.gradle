@@ -3,11 +3,11 @@ plugins {
 }
 
 android {
-    namespace 'org.deckplayer.android'
+    namespace 'org.muvik.android'
     compileSdk 34
 
     defaultConfig {
-        applicationId 'org.deckplayer.android'
+        applicationId 'org.muvik.android'
         minSdk 24
         targetSdk 34
         versionCode 1
@@ -56,6 +56,8 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
                           'proguard-rules.pro'
+            // 默认带 debug 签名，便于社区用户直接侧载安装 Release APK
+            signingConfig signingConfigs.debug
         }
         debug {
             // 用 debug 签名即可安装到自己的设备

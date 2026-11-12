@@ -9,7 +9,7 @@
 #include <memory>
 #include <functional>
 
-namespace deck_player {
+namespace muvik {
 
 // 存储扩展接口（所有本地存储、网络源 MOD 均实现此统一接口）
 class IStorageProvider {
@@ -52,7 +52,7 @@ public:
     // 根据 ID 获取存储源
     std::shared_ptr<IStorageProvider> getProvider(const std::string& id) const;
 
-    // 动态扫描并加载外部 MOD 插件 (~/.config/deck-player/plugins/*.so)
+    // 动态扫描并加载外部 MOD 插件 (~/.config/muvik/plugins/*.so)
     void loadExternalPlugins(const std::string& plugins_dir = "");
 
 private:
@@ -60,4 +60,4 @@ private:
     std::vector<std::shared_ptr<IStorageProvider>> providers_;
 };
 
-} // namespace deck_player
+} // namespace muvik

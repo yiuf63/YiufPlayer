@@ -10,7 +10,7 @@
 #include "ui/scene_tile.hpp"
 #include "utils/thumbnail_cache.hpp"
 
-namespace deck_player {
+namespace muvik {
 
 inline ui::SceneSpec sceneSpecFor(const MediaItem& item) {
     ui::SceneSpec spec;
@@ -20,4 +20,4 @@ inline ui::SceneSpec sceneSpecFor(const MediaItem& item) {
     return spec;
 }
 
-} // namespace deck_player
+} // namespace muvik

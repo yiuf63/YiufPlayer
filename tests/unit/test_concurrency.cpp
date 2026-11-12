@@ -14,7 +14,7 @@
 #include <atomic>
 #include <vector>
 
-using namespace deck_player;
+using namespace muvik;
 namespace fs = std::filesystem;
 
 namespace {
@@ -25,10 +25,10 @@ void writeFile(const std::string& p) {
 }
 
 int main() {
-    setenv("XDG_CONFIG_HOME", "/tmp/deckplayer_test_concurrency", 1);
-    std::system("rm -rf /tmp/deckplayer_test_concurrency /tmp/deckplayer_test_conc_media");
+    setenv("XDG_CONFIG_HOME", "/tmp/muvik_test_concurrency", 1);
+    std::system("rm -rf /tmp/muvik_test_concurrency /tmp/muvik_test_conc_media");
 
-    const std::string root = "/tmp/deckplayer_test_conc_media";
+    const std::string root = "/tmp/muvik_test_conc_media";
     for (int i = 0; i < 40; ++i) {
         writeFile(root + "/v/movie" + std::to_string(i) + ".mp4");
     }
@@ -163,7 +163,7 @@ int main() {
     }
 
     TEST_END();
-    std::system("rm -rf /tmp/deckplayer_test_conc_media "
-                "/tmp/deckplayer_test_concurrency");
+    std::system("rm -rf /tmp/muvik_test_conc_media "
+                "/tmp/muvik_test_concurrency");
     return TEST_SUMMARY();
 }

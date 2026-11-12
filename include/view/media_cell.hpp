@@ -25,7 +25,7 @@
 
 namespace brls { class ScrollingFrame; }
 
-namespace deck_player {
+namespace muvik {
 
 // 列表行。高度固定 76：手掌机触屏上小于 64 的点击区容易误触，
 // 大于 88 一屏又放不下几项。
@@ -33,7 +33,7 @@ class MediaCell : public brls::Box {
 public:
     static constexpr float HEIGHT = 76.0f;
 
-    MediaCell(ui::Icon icon, std::string title, std::string subtitle);
+    MediaCell(ui::Icon icon, std::string title, std::string subtitle = "");
 
     void setTitle(std::string title);
     void setSubtitle(std::string subtitle);
@@ -95,4 +95,4 @@ private:
     std::string hint_;
 };
 
-} // namespace deck_player
+} // namespace muvik

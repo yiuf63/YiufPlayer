@@ -1,0 +1,25 @@
+{
+  "id": "org.muvik.plugin.tmdb-scraper",
+  "name": "TMDB 影视刮削插件模板",
+  "version": "1.0.0",
+  "description": "基于 TheMovieDb API 的影视元数据与海报在线刮削器，支持电影/剧集海报、剧情简介与评分获取",
+  "author": "Muvik Community",
+  "capabilities": ["scraper"],
+  "main": "main.js",
+  "configSchema": [
+    {
+      "key": "api_key",
+      "title": "TMDB API Key",
+      "type": "string",
+      "default": "",
+      "description": "填写您在 themoviedb.org 申请的 API Key（留空则返回演示数据）"
+    },
+    {
+      "key": "language",
+      "title": "元数据语言",
+      "type": "string",
+      "default": "zh-CN",
+      "description": "语言代码，如 zh-CN（中文简体）、en-US（英文）"
+    }
+  ]
+}

@@ -222,6 +222,39 @@ namespace brls
             return true;
         });
 
+        // insert text from on-screen keyboard
+        dialog->getInsertTextEvent()->subscribe([this, updateText, updateTextCursor, maxStringLength](const std::string& str) {
+            for (char ch : str) {
+                if (inputBuffer.size() < (size_t)maxStringLength) {
+                    if (cursor < 0 || cursor > (int)inputBuffer.size()) cursor = inputBuffer.size();
+                    inputBuffer.insert(inputBuffer.begin() + cursor, ch);
+                    cursor++;
+                }
+            }
+            updateText();
+            updateTextCursor();
+            return true;
+        });
+
+        // clear text
+        dialog->getClearEvent()->subscribe([this, updateText, updateTextCursor]() {
+            inputBuffer.clear();
+            cursor = 0;
+            updateText();
+            updateTextCursor();
+            return true;
+        });
+
+        // cursor move
+        dialog->getCursorMoveEvent()->subscribe([this, updateTextCursor](int delta) {
+            if (cursor < 0) cursor = inputBuffer.size();
+            cursor += delta;
+            if (cursor < 0) cursor = 0;
+            if (cursor > (int)inputBuffer.size()) cursor = inputBuffer.size();
+            updateTextCursor();
+            return true;
+        });
+
         // cancel
         dialog->getCancelEvent()->subscribe([this, eventID1]() {
             SDL_StopTextInput();

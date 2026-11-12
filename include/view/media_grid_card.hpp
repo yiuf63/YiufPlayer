@@ -15,7 +15,7 @@
 #include "model/media_item.hpp"
 #include "ui/icons.hpp"
 
-namespace deck_player {
+namespace muvik {
 
 class MediaGridCard : public brls::Box {
 public:
@@ -41,4 +41,4 @@ private:
     float progress_ = -1.0f;
 };
 
-} // namespace deck_player
+} // namespace muvik

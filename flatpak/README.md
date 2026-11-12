@@ -28,17 +28,17 @@ manifest 里的 `sha256` 是**占位符**，不是真实值。请先执行：
 
 ```bash
 flatpak-builder --user --install --force-clean \
-    build-flatpak flatpak/org.deckplayer.DeckPlayer.yaml
+    build-flatpak flatpak/org.muvik.Muvik.yaml
 ```
 
 ## 运行
 
 ```bash
-flatpak run org.deckplayer.DeckPlayer
+flatpak run org.muvik.Muvik
 ```
 
 在 Steam Deck 的 Gaming Mode 中，通过 Steam 的「添加非 Steam 游戏」添加
-`org.deckplayer.DeckPlayer`，即可用手柄直接启动。
+`org.muvik.Muvik`，即可用手柄直接启动。
 
 ## 许可证合规（重要）
 
@@ -57,7 +57,7 @@ flatpak run org.deckplayer.DeckPlayer
 保留这些选项的理由是让产物依赖更轻、分发义务更简单：
 LGPL 配置的 FFmpeg 只需提供 FFmpeg 自身的源码，不需要按 GPL §6 处理整个依赖链。
 
-DeckPlayer 构建时会调用 `avutil_license()` 打印实际许可证（见
+Muvik 构建时会调用 `avutil_license()` 打印实际许可证（见
 `cmake/license_probe.cpp`）。它现在**只记录、不中止构建**；
 manifest 里不再需要 `-DALLOW_GPL_LINKAGE=OFF`（该开关已随闭源约束一并移除）。
 
@@ -65,7 +65,7 @@ manifest 里不再需要 `-DALLOW_GPL_LINKAGE=OFF`（该开关已随闭源约束
 
 ```bash
 # 容器内检查 FFmpeg 许可证字符串
-flatpak run --command=sh org.deckplayer.DeckPlayer -c \
+flatpak run --command=sh org.muvik.Muvik -c \
   'strings /app/lib/libavutil.so.* | grep -m1 "GPL" || echo "未发现 GPL 标记"'
 ```
 
@@ -78,5 +78,5 @@ flatpak run --command=sh org.deckplayer.DeckPlayer -c \
   `/run/media` 等。这减少了沙箱暴露面，但用户若把媒体放在非常规路径，
   需要自行用 Flatseal 等工具授权。
 - 首次启动若字体缺失，检查资源目录是否正确安装到
-  `/app/share/deck-player/resources`。程序会在启动日志打印
+  `/app/share/muvik/resources`。程序会在启动日志打印
   `资源目录: <path>`，可据此排查。

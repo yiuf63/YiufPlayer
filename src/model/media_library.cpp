@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <ctime>
@@ -20,7 +21,7 @@
 
 namespace fs = std::filesystem;
 
-namespace deck_player {
+namespace muvik {
 
 namespace {
 
@@ -219,8 +220,10 @@ void MediaLibrary::scanFolder(const MediaLibraryFolder& folder,
                               const ProgressCallback& on_progress,
                               int done, int total) {
     std::error_code ec;
-    if (!fs::exists(folder.path, ec) || !fs::is_directory(folder.path, ec)) {
-        if (on_progress) on_progress(done + 1, total, folder.path);
+    if (!fs::exists(folder.path, ec) || ec || !fs::is_directory(folder.path, ec) || ec) {
+        if (on_progress) {
+            try { on_progress(done + 1, total, folder.path); } catch (...) {}
+        }
         return;
     }
 
@@ -228,40 +231,57 @@ void MediaLibrary::scanFolder(const MediaLibraryFolder& folder,
     std::function<void(const fs::path&, int)> collect =
         [&](const fs::path& dir, int depth) {
         if (depth > 12) return; // 防御性深度上限，避免异常目录树
-        fs::directory_iterator it(dir, fs::directory_options::skip_permission_denied, ec);
-        if (ec) return;
-        for (const auto& entry : it) {
-            const std::string name = entry.path().filename().string();
-            if (!name.empty() && name[0] == '.') continue; // 跳过隐藏文件
+        std::error_code it_ec;
+        fs::directory_iterator it(dir, fs::directory_options::skip_permission_denied, it_ec);
+        if (it_ec) return;
+        fs::directory_iterator end;
+        while (!it_ec && it != end) {
+            try {
+                const auto& entry = *it;
+                const std::string name = entry.path().filename().string();
+                if (!name.empty() && name[0] == '.') {
+                    it.increment(it_ec);
+                    continue; // 跳过隐藏文件
+                }
 
-            std::error_code entry_ec;
-            if (entry.is_directory(entry_ec)) {
-                if (folder.recursive) collect(entry.path(), depth + 1);
-                continue;
+                std::error_code entry_ec;
+                if (entry.is_directory(entry_ec)) {
+                    if (folder.recursive) collect(entry.path(), depth + 1);
+                    it.increment(it_ec);
+                    continue;
+                }
+                if (!entry.is_regular_file(entry_ec)) {
+                    it.increment(it_ec);
+                    continue;
+                }
+
+                const std::string ext = entry.path().extension().string();
+                const bool is_video = MediaScanner::isSupportedVideoFormat(ext);
+                const bool is_audio = MediaScanner::isSupportedAudioFormat(ext);
+                if (is_video || is_audio) {
+                    MediaItem item;
+                    item.name = name;
+                    item.path = entry.path().string();
+                    item.type = is_video ? MediaType::Video : MediaType::Audio;
+                    item.extension = ext;
+                    std::error_code size_ec;
+                    item.size = static_cast<int64_t>(entry.file_size(size_ec));
+                    if (size_ec) item.size = 0;
+                    if (is_video) {
+                        item.matched_subtitles = MediaScanner::findMatchingSubtitles(item.path);
+                    }
+                    found.push_back(std::move(item));
+                }
+            } catch (...) {
+                // 防御任何单项读取异常
             }
-            if (!entry.is_regular_file(entry_ec)) continue;
-
-            const std::string ext = entry.path().extension().string();
-            const bool is_video = MediaScanner::isSupportedVideoFormat(ext);
-            const bool is_audio = MediaScanner::isSupportedAudioFormat(ext);
-            if (!is_video && !is_audio) continue;
-
-            MediaItem item;
-            item.name = name;
-            item.path = entry.path().string();
-            item.type = is_video ? MediaType::Video : MediaType::Audio;
-            item.extension = ext;
-            std::error_code size_ec;
-            item.size = static_cast<int64_t>(entry.file_size(size_ec));
-            if (size_ec) item.size = 0;
-            if (is_video) {
-                item.matched_subtitles = MediaScanner::findMatchingSubtitles(item.path);
-            }
-            found.push_back(std::move(item));
+            it.increment(it_ec);
         }
     };
 
-    collect(fs::path(folder.path), 0);
+    try {
+        collect(fs::path(folder.path), 0);
+    } catch (...) {}
 
     {
         // 增量判定：只把新增或发生变化的条目并入结果
@@ -271,9 +291,13 @@ void MediaLibrary::scanFolder(const MediaLibraryFolder& folder,
             std::error_code tec;
             auto ft = fs::last_write_time(item.path, tec);
             if (!tec) {
-                auto sctp = std::chrono::time_point_cast<std::chrono::seconds>(
-                    ft - fs::file_time_type::clock::now() + std::chrono::system_clock::now());
-                mtime = sctp.time_since_epoch().count();
+                try {
+                    auto sctp = std::chrono::time_point_cast<std::chrono::seconds>(
+                        ft - fs::file_time_type::clock::now() + std::chrono::system_clock::now());
+                    mtime = sctp.time_since_epoch().count();
+                } catch (...) {
+                    mtime = 0;
+                }
             }
             signatures_[item.path] = {item.size, mtime};
             // 修改时间同时记进条目本身：「最近添加」要用它排序。
@@ -283,7 +307,11 @@ void MediaLibrary::scanFolder(const MediaLibraryFolder& folder,
         }
     }
 
-    if (on_progress) on_progress(done + 1, total, folder.path);
+    if (on_progress) {
+        try {
+            on_progress(done + 1, total, folder.path);
+        } catch (...) {}
+    }
 }
 
 void MediaLibrary::rebuild(const ProgressCallback& on_progress) {
@@ -291,6 +319,11 @@ void MediaLibrary::rebuild(const ProgressCallback& on_progress) {
     if (!scanning_.compare_exchange_strong(expected, true)) {
         return; // 已有扫描在进行
     }
+
+    struct ScanGuard {
+        std::atomic<bool>& flag;
+        ~ScanGuard() { flag.store(false); }
+    } guard{scanning_};
 
     std::vector<MediaLibraryFolder> folders_snapshot;
     {
@@ -301,21 +334,26 @@ void MediaLibrary::rebuild(const ProgressCallback& on_progress) {
     std::vector<MediaItem> collected;
     const int total = static_cast<int>(folders_snapshot.size());
     int done = 0;
-    for (const auto& folder : folders_snapshot) {
-        scanFolder(folder, collected, on_progress, done, total);
-        ++done;
+    try {
+        for (const auto& folder : folders_snapshot) {
+            scanFolder(folder, collected, on_progress, done, total);
+            ++done;
+        }
+
+        // 按名称排序，媒体库展示更稳定
+        std::sort(collected.begin(), collected.end(),
+            [](const MediaItem& a, const MediaItem& b) { return a.name < b.name; });
+
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            items_ = std::move(collected);
+        }
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "[media] scan rebuild exception: %s\n", e.what());
+    } catch (...) {
+        std::fprintf(stderr, "[media] scan rebuild unknown exception\n");
     }
 
-    // 按名称排序，媒体库展示更稳定
-    std::sort(collected.begin(), collected.end(),
-        [](const MediaItem& a, const MediaItem& b) { return a.name < b.name; });
-
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        items_ = std::move(collected);
-    }
-
-    scanning_.store(false);
     save();
 }
 
@@ -349,7 +387,7 @@ void MediaLibrary::load() {
     //
     // 注意：这些路径在 Android 10+ 上受分区存储限制，
     // 能否真正读到取决于是否授予了 READ_MEDIA_* 权限
-    // （见 DeckPlayerActivity.requestMediaPermissions）。
+    // （见 MuvikActivity.requestMediaPermissions）。
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (folders_.empty()) {
@@ -414,7 +452,7 @@ void MediaLibrary::save() const {
         std::lock_guard<std::mutex> lock(mutex_);
         std::ofstream out(librariesFilePath(), std::ios::trunc);
         if (out.is_open()) {
-            out << "# DeckPlayer media libraries v1\n";
+            out << "# Muvik media libraries v1\n";
             out << "# path|display_name|recursive|added_at\n";
             for (const auto& f : folders_) {
                 writePipeLine(out, {f.path, f.display_name,
@@ -426,7 +464,7 @@ void MediaLibrary::save() const {
         // 2) 媒体缓存
         std::ofstream cache(cacheFilePath(), std::ios::trunc);
         if (cache.is_open()) {
-            cache << "# DeckPlayer library cache v2\n";
+            cache << "# Muvik library cache v2\n";
             cache << "# path|name|type|size|ext|mtime\n";
             for (const auto& item : items_) {
                 const char* t = item.is_video() ? "v" : (item.is_audio() ? "a" : "u");
@@ -438,4 +476,4 @@ void MediaLibrary::save() const {
     }
 }
 
-} // namespace deck_player
+} // namespace muvik

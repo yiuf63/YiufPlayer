@@ -15,7 +15,7 @@
 #include <mutex>
 #include <atomic>
 
-namespace deck_player {
+namespace muvik {
 
 // 媒体库中用户显式添加的一个文件夹（MX Player 式「添加媒体文件夹」）
 struct MediaLibraryFolder {
@@ -104,4 +104,4 @@ private:
     std::atomic<bool> scanning_{false};
 };
 
-} // namespace deck_player
+} // namespace muvik

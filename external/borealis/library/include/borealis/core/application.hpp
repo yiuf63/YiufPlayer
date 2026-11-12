@@ -51,7 +51,7 @@ namespace brls
 // Input types for entire app
 enum class InputType
 {
-    // DeckPlayer 补丁：把「手柄」与「键盘」区隔开。
+    // Muvik 补丁：把「手柄」与「键盘」区隔开。
     //
     // 上游只有 GAMEPAD / TOUCH 两种，注释写明 "Gamepad or keyboard"，
     // 于是键盘操作也会被当作手柄：界面底部始终显示 A/B/X/Y 的手柄图标，
@@ -373,7 +373,7 @@ class Application
         hintsLiteMode = value;
     }
 
-    // DeckPlayer 补丁：已销毁视图的地址登记表。
+    // Muvik 补丁：已销毁视图的地址登记表。
     //
     // 问题：TapGestureRecognizer 的回调按值捕获了 View*，手势结束时无条件
     // 调用 giveFocus(view)。如果这次点击触发了界面切换（点列表项 push
@@ -384,7 +384,7 @@ class Application
     // 因此判断「还活着吗」不能靠问这个对象，只能靠外部登记：
     //   View 析构时把自己的地址放进 deadViews，giveFocus 先查这张表。
     //
-    // DeckPlayer 补丁：「地址复用误判」不是极低概率，而是重建列表的必经之路。
+    // Muvik 补丁：「地址复用误判」不是极低概率，而是重建列表的必经之路。
     // clearViews 销毁一排卡片后，新卡片立刻 malloc 到同一个地址 ——
     // 旧的死亡登记还在表里，isViewDead(新对象) 返回 true，
     // giveFocus 对着活对象静默返回，焦点留在旧位置上
@@ -406,7 +406,7 @@ class Application
         deadViews.erase(p);
     }
 
-    // DeckPlayer 补丁：供自动化冒烟测试注入按键。
+    // Muvik 补丁：供自动化冒烟测试注入按键。
     //
     // 直接暴露 handleAction 而不是让测试自己调 lambda：
     // 只有走完整按键路径，才能验证「动作是否真的挂在焦点链上」。
@@ -414,10 +414,13 @@ class Application
     // 而所有「像素/进程」类检查依然全绿。
     static bool injectButton(ControllerButton button, bool repeating = false)
     {
-        return handleAction(ACTION_GAMEPAD, button, repeating);
+        if (handleAction(ACTION_GAMEPAD, button, repeating))
+            return true;
+        onControllerButtonPressed(button, repeating);
+        return true;
     }
 
-    // DeckPlayer 补丁：由输入层回报「这次操作来自键盘还是手柄」。
+    // Muvik 补丁：由输入层回报「这次操作来自键盘还是手柄」。
     // 设置 actualInputType 是 setInputType 的 public 包装，
     // 供平台输入管理器（GLFW/SDL）调用，用于让提示栏显示正确的按键图标。
     static void reportInputSource(bool fromKeyboard)
@@ -425,7 +428,7 @@ class Application
         setInputType(fromKeyboard ? InputType::KEYBOARD : InputType::GAMEPAD);
     }
 
-    // DeckPlayer 补丁：返回当前栈顶 Activity。
+    // Muvik 补丁：返回当前栈顶 Activity。
     //
     // 用途：视频渲染发生在 postDrawHook（nvgEndFrame 之后），而 Dialog 是
     // 「压栈的新 Activity」。被对话框覆盖时，播放器视图仍在栈中、渲染钩子
@@ -434,6 +437,11 @@ class Application
     static Activity* getTopActivity()
     {
         return activitiesStack.empty() ? nullptr : activitiesStack.back();
+    }
+
+    static FontStash* getFontStash()
+    {
+        return &fontStash;
     }
 
     static void tryDeinitFirstResponder(View* view);
@@ -456,7 +464,7 @@ class Application
     inline static FontStash fontStash;
 
     inline static std::vector<Activity*> activitiesStack;
-    inline static std::unordered_set<const void*> deadViews;  // DeckPlayer：已销毁视图地址（构造时摘除，见 isViewDead 注释）
+    inline static std::unordered_set<const void*> deadViews;  // Muvik：已销毁视图地址（构造时摘除，见 isViewDead 注释）
     inline static std::vector<View*> focusStack;
     inline static std::deque<View*> deletionPool;
 

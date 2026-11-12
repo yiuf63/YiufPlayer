@@ -25,7 +25,7 @@
 
 #include "model/media_item.hpp"
 
-namespace deck_player {
+namespace muvik {
 
 class MediaFolderCard : public brls::Box {
 public:
@@ -52,4 +52,4 @@ private:
     int audios_ = 0;
 };
 
-} // namespace deck_player
+} // namespace muvik

@@ -7,7 +7,7 @@
 
 ## 0. 项目速览
 
-**DeckPlayer**：面向 Steam Deck / 通用掌机 / 桌面的音视频播放器，
+**Muvik**：面向 Steam Deck / 通用掌机 / 桌面的音视频播放器，
 C++17 + [Borealis](https://github.com/xfangfang/borealis) + libmpv。
 GPL-3.0 开源（2026-10-29 起，此前闭源商业），**最终目标是发布**。
 
@@ -32,7 +32,7 @@ MX Player 式媒体文件夹扫描；创意工坊式插件（视频源 + 刮削�
 | `web/ui-review/` | 浏览器里的可交互 UI 原型（1:1 逻辑像素），产品方向的来源 | 讨论新界面时 |
 | `docs/HANDOVER.md` | 本文档 | 你正在读 |
 
-**历史会话**：更早的开发记录在 `~/.dsh/sessions/--Users-yiuf-code-deck-player--/`
+**历史会话**：更早的开发记录在 `~/.dsh/sessions/--Users-yiuf-code-muvik--/`
 （DeepSeek harness，`session.v4.jsonl.zstd`，`zstd -d` 解开）。云端 conversation_search 查不到这部分。
 
 ---
@@ -61,7 +61,7 @@ MX Player 式媒体文件夹扫描；创意工坊式插件（视频源 + 刮削�
 1. **视图菜单**（分组/内容/排序/筛选 + 升降序，持久化到 `library_view.conf`）—— 页内浮层 `ViewSheet`，不是 Activity
 2. **平铺网格**（`LibraryGroup::Flat`，绕过文件夹层直接渲染全部媒体）
 3. **搜索**（媒体库页顶搜索框，实时过滤）
-4. **抽帧缩略图**（可选链接 FFmpeg → avformat seek 至时长 1/10（上限 120s）→ decode → swscale → RGBA 缓存；编译宏 `DECKPLAYER_HAVE_FFMPEG`）
+4. **抽帧缩略图**（可选链接 FFmpeg → avformat seek 至时长 1/10（上限 120s）→ decode → swscale → RGBA 缓存；编译宏 `MUVIK_HAVE_FFMPEG`）
 5. **OSD 两行布局**（主控块一行 + 进度条一行，`toolCY = h-124`、`barCY = h-58`，底栏高度 238 → 168）
 6. **浅色主题**（kLight 色板 + `ThemeKind::Light` + 设置页「外观 → 主题」切换；OSD 恒暗）
 
@@ -77,9 +77,9 @@ borealis 的 Activity 栈**只渲染栈顶**，pushActivity 做浮层会得到�
 
 ### 主题解析链
 
-`DECKPLAYER_THEME` 环境变量 > `<configDir>/theme` 文件（设置页写入，重启生效）> 默认 Dark。
+`MUVIK_THEME` 环境变量 > `<configDir>/theme` 文件（设置页写入，重启生效）> 默认 Dark。
 `ui::palette()` **只跟 `resolveThemeKind()` 走**，不读 borealis 的 ThemeVariant；
-`applyDeckTheme()` 把选中的色板**同时写进 borealis 深色和浅色两个主题**，
+`applyMuvikTheme()` 把选中的色板**同时写进 borealis 深色和浅色两个主题**，
 防止系统浅色模式把界面染回 Switch 青绿。三套色板：kDark / kOled / kLight（在 `src/ui/design.cpp`）。
 
 ### 自绘 vs borealis 组件的分界
@@ -103,7 +103,7 @@ borealis 的 Activity 栈**只渲染栈顶**，pushActivity 做浮层会得到�
 5. **ScrollingFrame 抢焦点**：未布局视图（0×0）被判出界；borealis 已加 `focusUnlaidOut`（陷阱 23）
 6. **自绘按钮宽度粗估**：中文胶囊全截成「按文…」；必须 `ui::textWidth` 实测（陷阱 24）
 7. **回调里 hide() 自己 = UAF**：`removeView(this, false)`（陷阱 25）
-8. **抓帧时序**：`DECKPLAYER_FRAMEGRAB_AT_MS` 控制抓帧时刻，产物是 PPM 要转 PNG（陷阱 26）
+8. **抓帧时序**：`MUVIK_FRAMEGRAB_AT_MS` 控制抓帧时刻，产物是 PPM 要转 PNG（陷阱 26）
 
 borealis 的对应修改（unmarkViewDead / focusUnlaidOut / ViewSheet 相关）都在
 `external/borealis/PATCHES.md` 有记录，**升级 borealis 时别丢**。
@@ -128,15 +128,15 @@ python3 tests/tools/check_docs.py
 python3 tests/tools/release_check.py --dev
 
 # 5. 视觉改动：抓帧目检（产物是 PPM，先转 PNG 再看）
-DECKPLAYER_THEME=light DECKPLAYER_OPEN_SHEET=1 \
-DECKPLAYER_FRAMEGRAB=/tmp/x.ppm DECKPLAYER_FRAMEGRAB_AT_MS=2500 ./build/deck-player
+MUVIK_THEME=light MUVIK_OPEN_SHEET=1 \
+MUVIK_FRAMEGRAB=/tmp/x.ppm MUVIK_FRAMEGRAB_AT_MS=2500 ./build/muvik
 ffmpeg -y -i /tmp/x.ppm /tmp/x.png
 ```
 
-常用自检环境变量（全集 `grep -rhoE 'DECKPLAYER_[A-Z_]+' src include | sort -u`）：
-`DECKPLAYER_OPEN_SHEET`（呼出视图菜单）、`DECKPLAYER_OPEN_SETTINGS`（切设置页）、
-`DECKPLAYER_CLICK_FIRST_VIDEO`（注入点击第一项）、`DECKPLAYER_SEARCH=关键词`、
-`DECKPLAYER_THEME=dark|oled|light`、`DECKPLAYER_OSD_OFF=1`（像素检查时关 OSD）。
+常用自检环境变量（全集 `grep -rhoE 'MUVIK_[A-Z_]+' src include | sort -u`）：
+`MUVIK_OPEN_SHEET`（呼出视图菜单）、`MUVIK_OPEN_SETTINGS`（切设置页）、
+`MUVIK_CLICK_FIRST_VIDEO`（注入点击第一项）、`MUVIK_SEARCH=关键词`、
+`MUVIK_THEME=dark|oled|light`、`MUVIK_OSD_OFF=1`（像素检查时关 OSD）。
 
 **验证纪律**（AGENTS.md 陷阱 10 的展开）：「功能正常」不能只看退出码和像素统计，
 要抓帧目检 + 走真实输入路径（手柄按键/触摸手势），构造出来的捷径测不到真问题。
@@ -155,7 +155,7 @@ ffmpeg -y -i /tmp/x.ppm /tmp/x.png
 
 ### P1 — 真正的发布阻断项（RELEASE-BLOCKERS.md，需要外部条件）
 
-- [ ] **源码公开**（GPL-3.0 §6）：仓库 `github.com/yiuf63/deck-player` 还是私有
+- [ ] **源码公开**（GPL-3.0 §6）：仓库 `github.com/yiuf63/muvik` 还是私有
 - [ ] **Flatpak 构建**：需要 flatpak-builder + 网络（`flatpak/` 目录已有骨架）
 - [ ] **Steam Deck 实机验证**：无实机，所有 SteamOS 结论是静态推导
 - [ ] **人工验收**：发布前整体过一遍

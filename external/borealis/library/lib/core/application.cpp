@@ -313,7 +313,7 @@ void Application::processInput()
 
     for (auto& i : touchState)
     {
-        // DeckPlayer 补丁：复用上一帧保存的 View* 前必须确认它还活着。
+        // Muvik 补丁：复用上一帧保存的 View* 前必须确认它还活着。
         //
         // 崩溃机制（ASan 已实证 heap-use-after-free）：
         // START 时 hitTest 得到列表项 View 并存入 i.view；
@@ -406,6 +406,14 @@ void Application::processInput()
     {
         if (controllerState.buttons[i])
         {
+            // Muvik 修复：防止 D-Pad 与合成的 BUTTON_NAV_* 在同一帧内双重派发
+            // 输入层中 D-Pad 被 OR 进 BUTTON_NAV_*，当 D-Pad 方向键已被按下时，
+            // 严禁再次触发对应的 BUTTON_NAV_*，确保一次方向操作绝对只执行一次。
+            if (i == BUTTON_NAV_UP && controllerState.buttons[BUTTON_UP]) continue;
+            if (i == BUTTON_NAV_DOWN && controllerState.buttons[BUTTON_DOWN]) continue;
+            if (i == BUTTON_NAV_LEFT && controllerState.buttons[BUTTON_LEFT]) continue;
+            if (i == BUTTON_NAV_RIGHT && controllerState.buttons[BUTTON_RIGHT]) continue;
+
             repeating = controllerState.repeatingButtonStop[i] > 0 && cpuTime > controllerState.repeatingButtonStop[i];
 
             if (repeating)
@@ -544,22 +552,33 @@ void Application::navigate(FocusDirection direction, bool repeating)
 
     // Dismiss navigation if input type was changed.
     //
-    // DeckPlayer 补丁：不再无条件把输入类型改回 GAMEPAD。
-    // 原来这里每帧导航都会强制 GAMEPAD，使得键盘操作永远无法
-    // 停留在 KEYBOARD 状态，提示栏也就一直显示手柄图标。
-    // 现在只有「从触摸切回按键」时才视为类型变化（并吞掉这一次导航），
-    // 键盘与手柄之间的区别由输入层（reportInputSource）负责。
+    // Muvik 补丁：从触摸切回手柄导航时恢复 GAMEPAD 状态，
+    // 不再丢弃本次导航指令，防止手柄在触摸交互后出现「第一次按键无效/吞键」现象。
     if (Application::getInputType() == InputType::TOUCH)
     {
         Application::setInputType(InputType::GAMEPAD);
-        return;
     }
 
     View* currentFocus = Application::currentFocus;
 
-    // Do nothing if there is no current focus
-    if (!currentFocus)
+    // Muvik 补丁：焦点自愈（Focus Self-Healing）。
+    // 若当前无焦点（例如由于视图销毁、标签切换、初始加载或异步列表更新），
+    // 任何方向键或摇杆移动均自动从栈顶 Activity 获取默认焦点接管，
+    // 彻底根绝「焦点丢失后手柄方向键变砖、卡死在无焦点死角」的问题。
+    if (!currentFocus || Application::isViewDead(currentFocus))
+    {
+        Activity* topActivity = Application::getTopActivity();
+        if (topActivity)
+        {
+            View* defaultFocus = topActivity->getDefaultFocus();
+            if (defaultFocus && !Application::isViewDead(defaultFocus))
+            {
+                Application::giveFocus(defaultFocus);
+                return;
+            }
+        }
         return;
+    }
 
     View* nextFocus = nullptr;
 
@@ -622,15 +641,19 @@ void Application::onControllerButtonPressed(enum ControllerButton button, bool r
     // (allows overriding DPAD buttons using actions)
     switch (button)
     {
+        case BUTTON_DOWN:
         case BUTTON_NAV_DOWN:
             Application::navigate(FocusDirection::DOWN, repeating);
             return;
+        case BUTTON_UP:
         case BUTTON_NAV_UP:
             Application::navigate(FocusDirection::UP, repeating);
             return;
+        case BUTTON_LEFT:
         case BUTTON_NAV_LEFT:
             Application::navigate(FocusDirection::LEFT, repeating);
             return;
+        case BUTTON_RIGHT:
         case BUTTON_NAV_RIGHT:
             Application::navigate(FocusDirection::RIGHT, repeating);
             return;
@@ -658,7 +681,7 @@ bool Application::setInputType(InputType type)
     if (type == InputType::GAMEPAD)
     {
         Application::setDrawCoursor(false);
-        // DeckPlayer 补丁：currentFocus 可能为空。
+        // Muvik 补丁：currentFocus 可能为空。
         // 原实现直接解引用，在某些时序下（例如导航过程中焦点被清空）
         // 会触发空指针崩溃。判空后行为与原来一致。
         if (Application::currentFocus)
@@ -728,14 +751,11 @@ double Application::getDeactivatedFrameTime()
 
 bool Application::handleAction(const ActionType type, const int button, const bool repeating)
 {
-    // Dismiss if input type was changed.
-    // DeckPlayer 补丁：仅当从触摸切回按键时才算「类型变化」，
-    // 否则键盘按 Enter（映射为 BUTTON_A）会把 KEYBOARD 状态冲掉。
-    if (type == ACTION_GAMEPAD && button == BUTTON_A &&
-        Application::getInputType() == InputType::TOUCH)
+    // Muvik 补丁：从触摸切回按键时立即恢复 GAMEPAD 状态，
+    // 不再吞掉按键，确保手柄与遥控器操作 100% 灵敏即时响应。
+    if (type == ACTION_GAMEPAD && Application::getInputType() == InputType::TOUCH)
     {
         Application::setInputType(InputType::GAMEPAD);
-        return false;
     }
 
     if (Application::activitiesStack.empty())
@@ -764,7 +784,7 @@ bool Application::handleAction(const ActionType type, const int button, const bo
             {
                 if (action->getActionListener()(hintParent))
                 {
-                    // DeckPlayer 补丁：同上，只在触摸切换时改类型。
+                    // Muvik 补丁：同上，只在触摸切换时改类型。
                     if (getInputType() == InputType::TOUCH)
                         setInputType(InputType::GAMEPAD);
                     if (type == ACTION_GAMEPAD && button == BUTTON_A)
@@ -825,7 +845,7 @@ void Application::frame()
         view->frame(&frameContext);
     }
 
-    // DeckPlayer 补丁：currentFocus 可能指向已移除/已销毁的视图，
+    // Muvik 补丁：currentFocus 可能指向已移除/已销毁的视图，
     // 直接 frameHighlight 会崩。这一帧跳过高亮即可。
     if (currentFocus && !Application::isViewDead(currentFocus) &&
         Application::getInputType() != InputType::TOUCH)
@@ -930,7 +950,7 @@ void Application::notify(const std::string& text)
 
 void Application::giveFocus(View* view)
 {
-    // DeckPlayer 补丁：防御已销毁 / 已移除的视图。
+    // Muvik 补丁：防御已销毁 / 已移除的视图。
     //
     // 背景：TapGestureRecognizer 的回调捕获 View 裸指针，并在手势结束时
     // 调用 giveFocus(view)。若这次点击触发了界面切换（例如点击列表项
@@ -945,7 +965,7 @@ void Application::giveFocus(View* view)
     if (Application::isViewDead(view))
         return;
 
-    // DeckPlayer 补丁：修复 currentFocus 悬垂（点视频库闪退的真正根因）。
+    // Muvik 补丁：修复 currentFocus 悬垂（点视频库闪退的真正根因）。
     //
     // 上游实现有两个叠加的缺陷：
     //
@@ -965,7 +985,17 @@ void Application::giveFocus(View* view)
     if (Application::isViewDead(view))
         return;
 
-    View* newFocus = view ? view->getDefaultFocus() : nullptr;
+    View* newFocus = nullptr;
+    if (view)
+    {
+        newFocus = view->getDefaultFocus();
+        if (!newFocus)
+        {
+            // Muvik 补丁：所传视图不可聚焦且其子树无可用焦点（如 SectionHeader、EmptyState），
+            // 此时绝不可把 currentFocus 置空摧毁焦点系统，保持当前已有焦点。
+            return;
+        }
+    }
 
     // oldFocus 可能已经悬垂，解引用前必须查
     const bool oldFocusAlive = oldFocus != nullptr && !Application::isViewDead(oldFocus);
@@ -1013,31 +1043,34 @@ bool Application::popActivity(TransitionAnimation animation, std::function<void(
     }
 
     // Focus
-    if (!Application::focusStack.empty())
+    View* newFocus = nullptr;
+    while (!Application::focusStack.empty())
     {
-        View* newFocus = Application::focusStack[Application::focusStack.size() - 1];
-
-        // DeckPlayer 补丁：焦点栈里可能残留已销毁的视图
-        // （例如它所属的 Tab 在切标签页时被 delete）。
-        // 直接解引用会崩，这里丢弃这一条，继续用下面的 contentView 兜底。
-        if (Application::isViewDead(newFocus))
-        {
-            brls::Logger::debug("丢弃失效焦点栈项 {}", (void*)newFocus);
-            Application::focusStack.pop_back();
-            newFocus = nullptr;
-        }
-
-        if (newFocus && (!toShow || newFocus->getParentActivity() == toShow))
-        {
-            Logger::debug("Giving focus to {}, and removing it from the focus stack", newFocus->describe());
-            Application::giveFocus(newFocus);
-        }
-        else if (toShow)
-        {
-            Application::giveFocus(toShow->getContentView());
-        }
-
+        View* candidate = Application::focusStack.back();
         Application::focusStack.pop_back();
+        if (candidate && !Application::isViewDead(candidate))
+        {
+            newFocus = candidate;
+            break;
+        }
+        else
+        {
+            brls::Logger::debug("丢弃失效焦点栈项 {}", (void*)candidate);
+        }
+    }
+
+    if (newFocus && (!toShow || newFocus->getParentActivity() == toShow))
+    {
+        Logger::debug("Giving focus to {}, and removing it from the focus stack", newFocus->describe());
+        Application::giveFocus(newFocus);
+    }
+    else if (toShow)
+    {
+        View* fallback = toShow->getDefaultFocus();
+        if (!fallback || Application::isViewDead(fallback) || !fallback->isFocusable())
+            fallback = toShow->getContentView();
+        if (fallback)
+            Application::giveFocus(fallback);
     }
 
     // Hide animation (and show previous activity, if any)

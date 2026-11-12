@@ -16,7 +16,7 @@
 本脚本顺着动态库依赖链走到底，逐个调 `avutil_license()` 判定。
 
 用法：
-    python3 tests/tools/license_audit.py                     # 审计 build/deck-player
+    python3 tests/tools/license_audit.py                     # 审计 build/muvik
     python3 tests/tools/license_audit.py --binary /path/to/x
     python3 tests/tools/license_audit.py --strict            # GPL 视为失败（发布模式）
 """
@@ -100,8 +100,9 @@ def avutil_license(lib):
 
 
 def main():
+    default_bin = str(ROOT / "build" / "muvik" if (ROOT / "build" / "muvik").exists() else ROOT / "build" / "muvik")
     ap = argparse.ArgumentParser(description="产物级许可证审计")
-    ap.add_argument("--binary", default=str(ROOT / "build" / "deck-player"))
+    ap.add_argument("--binary", default=default_bin)
     ap.add_argument("--strict", action="store_true",
                     help="GPL 视为失败（发布模式）；默认仅警告")
     args = ap.parse_args()

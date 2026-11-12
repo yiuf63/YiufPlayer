@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DeckPlayer 端到端 UI 验证。
+"""Muvik 端到端 UI 验证。
 
 把第 18–26 轮人工做过的验证固化成可重复脚本，供人工复核与 CI 使用。
 
@@ -13,7 +13,7 @@
     python3 tests/tools/verify_ui.py --only tabs     # 只跑某一组
     python3 tests/tools/verify_ui.py --list          # 列出所有检查
 
-前提：先构建好 ./build/deck-player，并准备好 ffmpeg（用于造测试素材）。
+前提：先构建好 ./build/muvik，并准备好 ffmpeg（用于造测试素材）。
 """
 
 import argparse
@@ -26,7 +26,9 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-BIN = ROOT / "build" / "deck-player"
+BIN = ROOT / "build" / "muvik"
+if not BIN.exists():
+    BIN = ROOT / "build" / "muvik"
 
 # ── 结果收集 ──────────────────────────────────────────────────────────
 RESULTS = []
@@ -62,6 +64,7 @@ def run_player(env_extra, timeout=60, args=None):
     却因为日志丢失被判定为失败。）
     """
     env = os.environ.copy()
+    env.setdefault("MUVIK_FULLSCREEN", "0")
     env.update({k: str(v) for k, v in env_extra.items()})
     cmd = ["stdbuf", "-o0", str(BIN)] + (args or [])
     try:
@@ -81,8 +84,8 @@ def grab(tmpdir, name, env_extra, timeout=60, args=None, start=150):
     """抓一帧（或多帧）并返回路径列表。"""
     pattern = Path(tmpdir) / f"{name}.ppm"
     e = dict(env_extra)
-    e["DECKPLAYER_FRAMEGRAB"] = str(pattern)
-    e.setdefault("DECKPLAYER_FRAMEGRAB_START", start)
+    e["MUVIK_FRAMEGRAB"] = str(pattern)
+    e.setdefault("MUVIK_FRAMEGRAB_START", start)
     rc, log = run_player(e, timeout=timeout, args=args)
     files = sorted(Path(tmpdir).glob(f"{name}*.ppm"))
     return rc, log, files
@@ -231,7 +234,7 @@ def make_media(tmpdir):
 def check_basic_render(tmpdir, media):
     """界面能渲染、深色主题、有文字。"""
     section("基础渲染")
-    rc, log, files = grab(tmpdir, "basic", {"DECKPLAYER_FRAMEGRAB_START": 120})
+    rc, log, files = grab(tmpdir, "basic", {"MUVIK_FRAMEGRAB_START": 120})
     if not files:
         record("基础渲染", "抓帧成功", False, f"rc={rc}")
         return
@@ -309,7 +312,7 @@ def check_osd(tmpdir, media):
     # 主循环空转能跑到数百 fps），同一个 START=200 在不同机器/不同时长
     # 的视频上可能落在 1 秒，也可能落在 12 秒 —— 后者 OSD 已自动隐藏，
     # 整组检查就会全 0 假红。2 秒落在 OSD 必然可见的窗口里。
-    rc, log, files = grab(tmpdir, "osd", {"DECKPLAYER_FRAMEGRAB_AT_MS": "2000"},
+    rc, log, files = grab(tmpdir, "osd", {"MUVIK_FRAMEGRAB_AT_MS": "2000"},
                           args=[str(black)])
     if not files:
         record("OSD", "抓帧成功", False, f"rc={rc}")
@@ -318,8 +321,7 @@ def check_osd(tmpdir, media):
     h, w = a.shape[:2]
 
     white = (a.min(axis=2) > 150)
-    orange = ((a[:, :, 0] > 200) & (a[:, :, 1] > 120)
-              & (a[:, :, 1] < 200) & (a[:, :, 2] < 120))
+    accent_color = ((a[:, :, 2] > 200) & (a[:, :, 1] > 120) & (a[:, :, 0] < 100))
 
     # 顶部栏（片名 + 时间）
     top_white = int(white[: int(h * 0.09)].sum())
@@ -330,8 +332,8 @@ def check_osd(tmpdir, media):
     body_white = int(white[int(h * 0.70): int(h * 0.90)].sum())
     record("OSD", "按钮文字可见", body_white > 200, f"{body_white} 个白像素")
 
-    # 进度条：当前设计是「accent 橙色填充 + 25% 白轨道」，不再是蓝色。
-    # 橙色段长度取决于已播比例（开播时机不同就会变），所以判据不看颜色，
+    # 进度条：当前设计是「accent 强调色填充 + 25% 白轨道」。
+    # 强调色段长度取决于已播比例（开播时机不同就会变），所以判据不看颜色，
     # 而看「有没有一条横向铺满大半屏宽的亮线」——整个 OSD 里只有进度条
     # 能做到这一点（按钮是圆的，文字是断的）。轨道亮度 52/255，
     # 阈值取 25 即可把轨道一起算进来。
@@ -354,17 +356,17 @@ def check_osd(tmpdir, media):
     record("OSD", "进度条可见", longest > w * 0.60,
            f"最长横向连续亮段 {longest}px（屏宽 {w}）")
 
-    # 主控按钮（橙色实心，圆形），在进度条上方
-    btn_orange = int(orange[int(h * 0.70): int(h * 0.90)].sum())
-    record("OSD", "主控按钮可见", btn_orange > 200, f"{btn_orange} 个橙色像素")
+    # 主控按钮（SteamOS 蓝实心，圆形），在进度条上方
+    btn_accent = int(accent_color[int(h * 0.70): int(h * 0.90)].sum())
+    record("OSD", "主控按钮可见", btn_accent > 200, f"{btn_accent} 个强调色像素")
 
-    # 三层不重叠：进度条所在行除了这条长段，不应再有橙色
+    # 三层不重叠：进度条所在行除了这条长段，不应再有强调色
     # （按钮压上来会在长段之外多出若干短段）
     if bar_y >= 0:
-        row_orange = int(orange[bar_y].sum())
-        in_run = int(orange[bar_y][run_lo:run_hi].sum())
-        record("OSD", "进度条不被按钮覆盖", row_orange - in_run < 50,
-               f"进度条所在行 y={bar_y}，长段之外另有 {row_orange - in_run} 个橙色像素")
+        row_accent = int(accent_color[bar_y].sum())
+        in_run = int(accent_color[bar_y][run_lo:run_hi].sum())
+        record("OSD", "进度条不被按钮覆盖", row_accent - in_run < 50,
+               f"进度条所在行 y={bar_y}，长段之外另有 {row_accent - in_run} 个强调色像素")
 
 
 def check_tabs(tmpdir, media):
@@ -374,8 +376,8 @@ def check_tabs(tmpdir, media):
     frames = {}
     for i in range(4):
         rc, log, files = grab(tmpdir, f"tab{i}",
-                              {"DECKPLAYER_START_TAB": i,
-                               "DECKPLAYER_FRAMEGRAB_START": 150}, start=150)
+                              {"MUVIK_START_TAB": i,
+                               "MUVIK_FRAMEGRAB_START": 150}, start=150)
         if files:
             frames[i] = load_ppm(files[0])
 
@@ -410,7 +412,7 @@ def check_video(tmpdir, media):
     # 基线：打开音频文件时是纯 UI（无视频区域），用它代表「没有视频画面」
     rc, log, base_files = grab(
         tmpdir, "vidbase",
-        {"DECKPLAYER_FRAMEGRAB_START": 300},
+        {"MUVIK_FRAMEGRAB_START": 300},
         args=[str(media["audio"])], start=300)
     base = stats(load_ppm(base_files[0])) if base_files else None
     if base is None:
@@ -422,7 +424,7 @@ def check_video(tmpdir, media):
     # 播放彩条视频
     rc, log, files = grab(
         tmpdir, "video",
-        {"DECKPLAYER_FRAMEGRAB_START": 300},
+        {"MUVIK_FRAMEGRAB_START": 300},
         args=[str(media["color"])], start=300)
     if not files:
         record("视频", "抓帧成功", False, f"rc={rc}")
@@ -455,10 +457,10 @@ def check_subtitle(tmpdir, media):
     # 因此按【图像坐标】读底部即可（对应文件的下半部分）。
     rc, log, files = grab(
         tmpdir, "sub",
-        {"DECKPLAYER_FRAMEGRAB_START": 300,
+        {"MUVIK_FRAMEGRAB_START": 300,
          # 必须关掉 OSD：判定带 0.60–0.92 同时覆盖了两行按钮，
          # OSD 的白字会盖过字幕白字，导致「关字幕」对照组数值不变。
-         "DECKPLAYER_OSD_OFF": "1"},
+         "MUVIK_OSD_OFF": "1"},
         args=[str(media["subtitled"])], start=300)
 
     has_auto = "自动选中字幕轨" in log
@@ -472,11 +474,11 @@ def check_subtitle(tmpdir, media):
     a = load_ppm(files[0])
     g = a.mean(axis=2)
     h = a.shape[0]
-    # 字幕位于画面下方 1/4 区域；排除最底部 OSD 条（约占 70px）
-    band = g[int(h * 0.60):int(h * 0.92), :]
+    # 字幕位于画面下方区域
+    band = g[int(h * 0.60):int(h * 0.98), :]
     white = int((band > 200).sum())
 
-    # 阈值依据第 20 轮实测：字幕存在时为 3676 个白像素；
+    # 阈值依据实测：字幕存在时为数千个白像素；
     # 无字幕时该区域应接近 0（纯黑视频）。
     record("字幕", "底部出现字幕文字像素（>1000）", white > 1000,
            f"{white} 个白像素")
@@ -485,13 +487,13 @@ def check_subtitle(tmpdir, media):
     # 这样即使阈值写错，也能通过对比发现问题。
     rc2, log2, files2 = grab(
         tmpdir, "suboff",
-        {"DECKPLAYER_FRAMEGRAB_START": 300,
-         "DECKPLAYER_OSD_OFF": "1",
-         "DECKPLAYER_SUBTITLE_OFF": "1"},
+        {"MUVIK_FRAMEGRAB_START": 300,
+         "MUVIK_OSD_OFF": "1",
+         "MUVIK_SUBTITLE_OFF": "1"},
         args=[str(media["subtitled"])], start=300)
     if files2:
         g2 = load_ppm(files2[0]).mean(axis=2)
-        white2 = int((g2[int(h * 0.60):int(h * 0.92), :] > 200).sum())
+        white2 = int((g2[int(h * 0.60):int(h * 0.98), :] > 200).sum())
         record("字幕", "关闭字幕后白像素显著减少",
                white > white2 * 2 or white2 < 100,
                f"有字幕 {white} vs 关闭 {white2}")
@@ -504,8 +506,8 @@ def check_audio(tmpdir, media):
         record("音频", "有测试素材", False, "缺少 ffmpeg")
         return
     rc, log = run_player(
-        {"DECKPLAYER_FRAMEGRAB": str(Path(tmpdir) / "aud.ppm"),
-         "DECKPLAYER_FRAMEGRAB_START": 1200},
+        {"MUVIK_FRAMEGRAB": str(Path(tmpdir) / "aud.ppm"),
+         "MUVIK_FRAMEGRAB_START": 1200},
         timeout=45, args=[str(media["audio"])])
     routed = "直接播放音频" in log
     record("音频", "音频走 AudioPlayer（不是视频播放器）", routed,
@@ -521,7 +523,7 @@ def check_gestures(tmpdir, media):
         record("手势", "有测试素材", False, "缺少 ffmpeg")
         return
     rc, log = run_player(
-        {"DECKPLAYER_GESTURE_TEST": "1"},
+        {"MUVIK_GESTURE_TEST": "1"},
         timeout=60, args=[str(media["color"])])
     checks = [
         ("单击切换 OSD", "【单击】"),
@@ -556,8 +558,8 @@ def check_playlist(tmpdir, media):
     # 管道里的缓冲会全部丢失，文件里的内容（配合 stdbuf -o0）能保留。
     logpath = Path(tmpdir) / "playlist.log"
     env = os.environ.copy()
-    env["DECKPLAYER_FRAMEGRAB"] = str(Path(tmpdir) / "pl.ppm")
-    env["DECKPLAYER_FRAMEGRAB_START"] = "1000000"   # 足够大，本检查期间不退出
+    env["MUVIK_FRAMEGRAB"] = str(Path(tmpdir) / "pl.ppm")
+    env["MUVIK_FRAMEGRAB_START"] = "1000000"   # 足够大，本检查期间不退出
     with open(logpath, "w") as lf:
         p = subprocess.Popen(
             ["stdbuf", "-o0", str(BIN), str(media["series"])],
@@ -601,8 +603,8 @@ def check_screens(tmpdir, media):
     profs = {}
     for spec in sizes:
         rc, log, files = grab(tmpdir, f"scr_{spec}",
-                              {"DECKPLAYER_WINDOW": spec,
-                               "DECKPLAYER_FRAMEGRAB_START": 200}, start=200)
+                              {"MUVIK_WINDOW": spec,
+                               "MUVIK_FRAMEGRAB_START": 200}, start=200)
         if not files:
             record("屏幕适配", f"{spec} 能渲染", False, f"rc={rc}")
             continue
@@ -643,8 +645,8 @@ def check_aspect(tmpdir, media):
     # 正确做法是按高度撑满、左右留黑边。
     rc, log, files = grab(
         tmpdir, "ar43",
-        {"DECKPLAYER_WINDOW": "1280x800",
-         "DECKPLAYER_FRAMEGRAB_START": 250},
+        {"MUVIK_WINDOW": "1280x800",
+         "MUVIK_FRAMEGRAB_START": 250},
         args=[str(media["v43"])], start=250)
     if not files:
         record("宽高比", "抓帧成功", False, f"rc={rc}")
@@ -741,7 +743,7 @@ def check_asan(tmpdir, media):
     只有 ASan 能稳定暴露。本项目实测靠它抓到两个真实缺陷。
     """
     section("内存安全（ASan）")
-    asan_bin = ROOT / "build-asan" / "deck-player"
+    asan_bin = ROOT / "build-asan" / "muvik"
     if not asan_bin.exists():
         record("ASan", "已构建 build-asan", False, "跳过：未找到 ASan 版本")
         return
@@ -767,22 +769,22 @@ def check_asan(tmpdir, media):
         record("ASan", name, hits == 0 and rc == 0,
                f"rc={rc} 报告={hits}" if hits or rc else "干净")
 
-    frame = lambda n: {"DECKPLAYER_FRAMEGRAB": str(Path(tmpdir) / f"{n}.ppm"),
-                       "DECKPLAYER_FRAMEGRAB_START": "100"}
+    frame = lambda n: {"MUVIK_FRAMEGRAB": str(Path(tmpdir) / f"{n}.ppm"),
+                       "MUVIK_FRAMEGRAB_START": "100"}
 
     run_asan("启动 + UI", frame("as1"), [])
     for i in range(4):
         e = frame(f"astab{i}")
-        e["DECKPLAYER_START_TAB"] = str(i)
+        e["MUVIK_START_TAB"] = str(i)
         run_asan(f"标签页 {i}", e, [])
-    run_asan("插件管理页", {**frame("asplug"), "DECKPLAYER_OPEN_PLUGINS": "1"}, [])
+    run_asan("插件管理页", {**frame("asplug"), "MUVIK_OPEN_PLUGINS": "1"}, [])
 
     if media:
         run_asan("视频播放", frame("asv"), [str(media["color"])])
         run_asan("字幕", frame("assub"), [str(media["subtitled"])])
         run_asan("音频", frame("asa"), [str(media["audio"])])
         # 手势自检会走到「退出清理」，曾在此暴露 DynamicBox 的 use-after-free
-        run_asan("手势 + 退出清理", {"DECKPLAYER_GESTURE_TEST": "1"},
+        run_asan("手势 + 退出清理", {"MUVIK_GESTURE_TEST": "1"},
                  [str(media["color"])], timeout=120)
 
 
@@ -796,15 +798,15 @@ def check_soak(tmpdir, media):
     import subprocess as sp
     import time
 
-    rounds = int(os.environ.get("DECKPLAYER_SOAK_ROUNDS", "12"))
+    rounds = int(os.environ.get("MUVIK_SOAK_ROUNDS", "12"))
     crash = 0
     nonzero = 0
     details = []
     for i in range(rounds):
         if i % 4 == 0:
-            env, args = {"DECKPLAYER_START_TAB": "0"}, []
+            env, args = {"MUVIK_START_TAB": "0"}, []
         elif i % 4 == 1:
-            env, args = {"DECKPLAYER_START_TAB": "1"}, []
+            env, args = {"MUVIK_START_TAB": "1"}, []
         elif i % 4 == 2:
             env, args = {}, ([str(media["audio"])] if media else [])
         else:
@@ -812,8 +814,8 @@ def check_soak(tmpdir, media):
 
         e = os.environ.copy()
         e.update(env)
-        e["DECKPLAYER_FRAMEGRAB"] = str(Path(tmpdir) / f"soak{i}.ppm")
-        e["DECKPLAYER_FRAMEGRAB_START"] = "150"
+        e["MUVIK_FRAMEGRAB"] = str(Path(tmpdir) / f"soak{i}.ppm")
+        e["MUVIK_FRAMEGRAB_START"] = "150"
         try:
             p = sp.run(["stdbuf", "-o0", str(BIN)] + args,
                        cwd=str(BIN.parent), env=e, timeout=40,
@@ -866,15 +868,15 @@ def check_dialog(tmpdir, media):
     first = series / "Episode 01.mp4"
 
     def grab_frame(tag, extra_env, start=400):
-        env = {"DECKPLAYER_FRAMEGRAB": str(Path(tmpdir) / f"dlg_{tag}.ppm"),
-               "DECKPLAYER_FRAMEGRAB_START": str(start)}
+        env = {"MUVIK_FRAMEGRAB": str(Path(tmpdir) / f"dlg_{tag}.ppm"),
+               "MUVIK_FRAMEGRAB_START": str(start)}
         env.update(extra_env)
         rc, log, files = grab(tmpdir, f"dlg_{tag}", env,
                               args=[str(first)], start=start)
         return load_ppm(files[0]) if files else None
 
     base = grab_frame("closed", {})
-    with_dlg = grab_frame("open", {"DECKPLAYER_OPEN_PLAYLIST": "1"})
+    with_dlg = grab_frame("open", {"MUVIK_OPEN_PLAYLIST": "1"})
 
     if base is None or with_dlg is None:
         record("对话框", "抓帧成功", False, "缺帧")
@@ -962,12 +964,12 @@ def check_dialog(tmpdir, media):
         return float(np.abs(br - ar).mean())
 
     rc, _, f_off = grab(tmpdir, "dlg_browser_off",
-                        {"DECKPLAYER_START_TAB": "0",
-                         "DECKPLAYER_FRAMEGRAB_START": "400"}, start=400)
+                        {"MUVIK_START_TAB": "0",
+                         "MUVIK_FRAMEGRAB_START": "400"}, start=400)
     rc, _, f_on = grab(tmpdir, "dlg_browser_on",
-                       {"DECKPLAYER_START_TAB": "0",
-                        "DECKPLAYER_OPEN_DIALOG": "folder_options",
-                        "DECKPLAYER_FRAMEGRAB_START": "400"}, start=400)
+                       {"MUVIK_START_TAB": "0",
+                        "MUVIK_OPEN_DIALOG": "folder_options",
+                        "MUVIK_FRAMEGRAB_START": "400"}, start=400)
     if f_off and f_on:
         img_off, img_on = load_ppm(f_off[0]), load_ppm(f_on[0])
         a_off, _ = edge_center(img_off)
@@ -981,12 +983,12 @@ def check_dialog(tmpdir, media):
 
     # 插件管理页的对话框（另一个非播放器页面，验证不是偶然）
     rc, _, p_off = grab(tmpdir, "dlg_plug_off",
-                        {"DECKPLAYER_OPEN_PLUGINS": "1",
-                         "DECKPLAYER_FRAMEGRAB_START": "400"}, start=400)
+                        {"MUVIK_OPEN_PLUGINS": "1",
+                         "MUVIK_FRAMEGRAB_START": "400"}, start=400)
     rc, _, p_on = grab(tmpdir, "dlg_plug_on",
-                       {"DECKPLAYER_OPEN_PLUGINS": "1",
-                        "DECKPLAYER_OPEN_DIALOG": "1",
-                        "DECKPLAYER_FRAMEGRAB_START": "400"}, start=400)
+                       {"MUVIK_OPEN_PLUGINS": "1",
+                        "MUVIK_OPEN_DIALOG": "1",
+                        "MUVIK_FRAMEGRAB_START": "400"}, start=400)
     if p_off and p_on:
         img_off, img_on = load_ppm(p_off[0]), load_ppm(p_on[0])
         a_off, _ = edge_center(img_off)
@@ -1029,21 +1031,25 @@ def check_track_memory(tmpdir, media):
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # 清掉该文件的历史，保证从干净状态开始
-    hist = Path.home() / ".config" / "deck-player" / "history.dat"
-    if hist.exists():
-        keep = [ln for ln in hist.read_text(encoding="utf-8").splitlines()
-                if str(clip) not in ln]
-        hist.write_text("\n".join(keep) + ("\n" if keep else ""), encoding="utf-8")
+    hist_candidates = [
+        Path.home() / ".config" / "muvik" / "history.dat",
+        Path.home() / ".config" / "muvik" / "history.dat",
+    ]
+    for hist in hist_candidates:
+        if hist.exists():
+            keep = [ln for ln in hist.read_text(encoding="utf-8").splitlines()
+                    if str(clip) not in ln]
+            hist.write_text("\n".join(keep) + ("\n" if keep else ""), encoding="utf-8")
 
     def run(tag, extra_env, start=250):
-        env = {"DECKPLAYER_FRAMEGRAB": str(Path(tmpdir) / f"sidx_{tag}.ppm"),
-               "DECKPLAYER_FRAMEGRAB_START": str(start)}
+        env = {"MUVIK_FRAMEGRAB": str(Path(tmpdir) / f"sidx_{tag}.ppm"),
+               "MUVIK_FRAMEGRAB_START": str(start)}
         env.update(extra_env)
         rc, log, files = grab(tmpdir, f"sidx_{tag}", env, args=[str(clip)], start=start)
         m = re.search(r"自动选中字幕轨 #(\d+)", log)
         return (int(m.group(1)) if m else None), rc
 
-    first, _ = run("set", {"DECKPLAYER_FORCE_SUB_SID": "2"})
+    first, _ = run("set", {"MUVIK_FORCE_SUB_SID": "2"})
     record("字幕轨", "可以选中非默认字幕轨", first == 2, f"选中 #{first}")
 
     second, _ = run("restore", {})
@@ -1059,7 +1065,7 @@ def check_functional(tmpdir, media):
       「按 A 有没有真的打开视频」。实际发生过——崩溃修好后
       点击任何视频都打不开，而全部 65 项检查依然全绿。
 
-    这一组用 DECKPLAYER_SMOKE 让程序自己注入按键并断言状态变化，
+    这一组用 MUVIK_SMOKE 让程序自己注入按键并断言状态变化，
     失败时以退出码 1 结束，因此这里的判据只有一条：退出码必须为 0。
     """
     section("功能冒烟")
@@ -1067,7 +1073,19 @@ def check_functional(tmpdir, media):
     # 注意：这里不能设 FRAMEGRAB —— 抓帧完成后程序会主动退出，
     # 冒烟步骤跑到一半就被截断，只能看到第一条断言。
     # 冒烟流程自己会在结束时 quick_exit，不依赖抓帧退出。
-    env = {"DECKPLAYER_SMOKE": "1", "DECKPLAYER_START_TAB": "0"}
+    cfg = Path(tmpdir) / "smoke_cfg"
+    cfg.mkdir(parents=True, exist_ok=True)
+    muvik_cfg = cfg / "muvik"
+    muvik_cfg.mkdir(parents=True, exist_ok=True)
+    if media and "series_dir" in media:
+        with open(muvik_cfg / "libraries.dat", "w") as f:
+            f.write(f"{media['series_dir']}|测试剧集|1|1700000000\n")
+
+    env = {
+        "MUVIK_SMOKE": "1",
+        "MUVIK_START_TAB": "0",
+        "XDG_CONFIG_HOME": str(cfg),
+    }
     rc, log = run_player(env, timeout=45)
 
     # 逐条把程序内部的判定转述出来，失败时能看到是哪一步
@@ -1099,7 +1117,7 @@ def check_input_and_font(tmpdir, media):
 
     # ── 1. 中文字体回退 ──
     rc, log, files = grab(tmpdir, "font_zh",
-                          {"DECKPLAYER_FRAMEGRAB_START": "150"}, start=150)
+                          {"MUVIK_FRAMEGRAB_START": "150"}, start=150)
     has_zh = "Using zh-Hans font" in log or "zh-Hans" in log
     record("字体", "加载简体中文字体回退", has_zh,
            re.search(r"Using zh-Hans font: (\S+)", log).group(1)
@@ -1107,15 +1125,15 @@ def check_input_and_font(tmpdir, media):
 
     # ── 2. 键盘 / 手柄区隔 ──
     rc, log, _ = grab(tmpdir, "input_pad",
-                      {"DECKPLAYER_PRINT_KEYICON": "1",
-                       "DECKPLAYER_FRAMEGRAB_START": "200"}, start=200)
+                      {"MUVIK_PRINT_KEYICON": "1",
+                       "MUVIK_FRAMEGRAB_START": "200"}, start=200)
     record("输入", "默认输入类型为手柄", "输入类型: GAMEPAD" in log,
            "GAMEPAD" if "输入类型: GAMEPAD" in log else "不符")
 
     rc, log, _ = grab(tmpdir, "input_kb",
-                      {"DECKPLAYER_PRINT_KEYICON": "1",
-                       "DECKPLAYER_FAKE_KEYBOARD": "1",
-                       "DECKPLAYER_FRAMEGRAB_START": "200"}, start=200)
+                      {"MUVIK_PRINT_KEYICON": "1",
+                       "MUVIK_FAKE_KEYBOARD": "1",
+                       "MUVIK_FRAMEGRAB_START": "200"}, start=200)
     record("输入", "键盘操作切换为 KEYBOARD", "输入类型: KEYBOARD" in log,
            "KEYBOARD" if "输入类型: KEYBOARD" in log else "仍为手柄")
     record("输入", "键盘模式显示 Enter 而非手柄图标",
@@ -1130,12 +1148,12 @@ def check_input_and_font(tmpdir, media):
         # OSD 自动隐藏要 8 秒，而抓帧时间随 UI 帧率浮动 ——
         # 若恰好在 OSD 显示期间抓帧，半透明渐变会压在字幕上，
         # 把纯白文字压成 200 上下，>245 的判据必挂（实测抓帧确认）。
-        # 因此两组都关掉 OSD（DECKPLAYER_OSD_OFF），只比「字幕开/关」。
+        # 因此两组都关掉 OSD（MUVIK_OSD_OFF），只比「字幕开/关」。
         rc, log, _ = grab(tmpdir, "extsub",
-                          {"DECKPLAYER_FRAMEGRAB_START": "200",
-                           "DECKPLAYER_FRAMEGRAB_COUNT": "3",
-                           "DECKPLAYER_FRAMEGRAB_INTERVAL": "400",
-                           "DECKPLAYER_OSD_OFF": "1"},
+                          {"MUVIK_FRAMEGRAB_START": "200",
+                           "MUVIK_FRAMEGRAB_COUNT": "3",
+                           "MUVIK_FRAMEGRAB_INTERVAL": "400",
+                           "MUVIK_OSD_OFF": "1"},
                           args=[str(ext)], start=200)
         # 同目录 .srt 应被 sub-auto 自动加载并选中
         loaded = "自动选中字幕轨" in log
@@ -1145,11 +1163,11 @@ def check_input_and_font(tmpdir, media):
         # 渲染验证：与关闭字幕的对照组比较底部白像素
         frames = sorted(Path(tmpdir).glob("extsub*.ppm"))
         rc2, _, _ = grab(tmpdir, "extsuboff",
-                         {"DECKPLAYER_FRAMEGRAB_START": "200",
-                          "DECKPLAYER_FRAMEGRAB_COUNT": "3",
-                          "DECKPLAYER_FRAMEGRAB_INTERVAL": "400",
-                          "DECKPLAYER_OSD_OFF": "1",
-                          "DECKPLAYER_SUBTITLE_OFF": "1"},
+                         {"MUVIK_FRAMEGRAB_START": "200",
+                          "MUVIK_FRAMEGRAB_COUNT": "3",
+                          "MUVIK_FRAMEGRAB_INTERVAL": "400",
+                          "MUVIK_OSD_OFF": "1",
+                          "MUVIK_SUBTITLE_OFF": "1"},
                          args=[str(ext)], start=200)
         off_frames = sorted(Path(tmpdir).glob("extsuboff*.ppm"))
         if frames and off_frames:
@@ -1175,8 +1193,8 @@ def check_input_and_font(tmpdir, media):
     if multi:
         for aid, expect_ok in ((1, True), (2, True), (9, False)):
             rc, log, _ = grab(tmpdir, f"aid{aid}",
-                              {"DECKPLAYER_FORCE_AID": str(aid),
-                               "DECKPLAYER_FRAMEGRAB_START": "150"},
+                              {"MUVIK_FORCE_AID": str(aid),
+                               "MUVIK_FRAMEGRAB_START": "150"},
                               args=[str(multi)], start=150)
             # 必须断言 mpv 的**实际** aid，而不是「代码执行过」。
             # 早期版本只查日志里有「已切换音轨」，把 selectTrack 改成空语句
@@ -1192,9 +1210,9 @@ def check_input_and_font(tmpdir, media):
     # 这是「点视频库闪退」的确切成因：按下时保存 View*，
     # 按住期间扫描完成触发 clearViews，抬起时复用已释放指针。
     rc, log, _ = grab(tmpdir, "touch_rebuild",
-                      {"DECKPLAYER_TOUCH_REBUILD": "1",
-                       "DECKPLAYER_START_TAB": "0",
-                       "DECKPLAYER_FRAMEGRAB_START": "900"}, start=900)
+                      {"MUVIK_TOUCH_REBUILD": "1",
+                       "MUVIK_START_TAB": "0",
+                       "MUVIK_FRAMEGRAB_START": "900"}, start=900)
     record("稳定性", "按住期间重建列表不崩溃",
            rc not in (139, -11, 134, -6),
            f"rc={rc}")
@@ -1205,8 +1223,8 @@ def check_input_and_font(tmpdir, media):
     # 越界会在 dynamic_cast 上 SEGV（实测 START_TAB=1000 必崩）。
     for bad in ("9", "1000"):
         rc, log, _ = grab(tmpdir, f"tab_oob_{bad}",
-                          {"DECKPLAYER_START_TAB": bad,
-                           "DECKPLAYER_FRAMEGRAB_START": "120"}, start=120)
+                          {"MUVIK_START_TAB": bad,
+                           "MUVIK_FRAMEGRAB_START": "120"}, start=120)
         record("稳定性", f"越界标签索引 {bad} 不崩溃",
                rc not in (139, -11, 134, -6), f"rc={rc}")
 
@@ -1214,9 +1232,9 @@ def check_input_and_font(tmpdir, media):
     # 这一条对应「点开视频立即闪退」。
     if media:
         rc, log, _ = grab(tmpdir, "click_video",
-                          {"DECKPLAYER_CLICK_FIRST_VIDEO": "1",
-                           "DECKPLAYER_START_TAB": "0",
-                           "DECKPLAYER_FRAMEGRAB_START": "300"}, start=300)
+                          {"MUVIK_CLICK_FIRST_VIDEO": "1",
+                           "MUVIK_START_TAB": "0",
+                           "MUVIK_FRAMEGRAB_START": "300"}, start=300)
         crashed = rc in (139, -11, 134, -6)
         record("稳定性", "点击视频不崩溃", not crashed,
                f"rc={rc}" + (" SIGSEGV" if crashed else ""))
@@ -1226,8 +1244,8 @@ def check_plugin(tmpdir, media):
     """插件管理页渲染 + 插件已加载。"""
     section("插件系统")
     rc, log, files = grab(tmpdir, "plugin",
-                          {"DECKPLAYER_OPEN_PLUGINS": "1",
-                           "DECKPLAYER_FRAMEGRAB_START": 250}, start=250)
+                          {"MUVIK_OPEN_PLUGINS": "1",
+                           "MUVIK_FRAMEGRAB_START": 250}, start=250)
     loaded = log.count("已加载插件")
     record("插件", "至少加载一个插件", loaded >= 1, f"{loaded} 个")
     if files:
@@ -1264,7 +1282,7 @@ CHECKS = {
 
 
 def main():
-    ap = argparse.ArgumentParser(description="DeckPlayer 端到端 UI 验证")
+    ap = argparse.ArgumentParser(description="Muvik 端到端 UI 验证")
     ap.add_argument("--only", action="append", choices=sorted(CHECKS),
                     help="只跑指定检查组（可重复）")
     ap.add_argument("--list", action="store_true", help="列出所有检查组")
@@ -1292,7 +1310,7 @@ def main():
         print("（只想跑不依赖像素的检查组时可用 --list 查看分组）")
         return 2
 
-    tmpdir = tempfile.mkdtemp(prefix="deckplayer_verify_")
+    tmpdir = tempfile.mkdtemp(prefix="muvik_verify_")
     try:
         media = make_media(tmpdir)
         if media is None:

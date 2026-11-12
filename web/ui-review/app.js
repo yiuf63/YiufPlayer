@@ -1,5 +1,5 @@
 /* ============================================================
-   DeckPlayer · UI 评审台（原型交互）
+   Muvik · UI 评审台（原型交互）
    所有布局数值取自 src/view/mpv_player.cpp 的 namespace osd
    与 ui/design.hpp，缩放只发生在最外层 .screen 的 transform 上。
    ============================================================ */
@@ -274,7 +274,7 @@ const RISKS = [
   { tag: '输入', name: '亮度仍只有手势',
     text: 'LT/RT 已经接管音量，但亮度在没有触摸屏的设备上无法调节。要不要把亮度也放进 OSD，或做成「LT/RT + 长按」？' },
   { tag: '缩略图', name: '首帧多半是黑场',
-    text: '抽「第一帧」会得到片头黑场或淡入前的纯黑，整面网格会有一半是黑的。实机按 min(时长×0.1, 30s) 抽帧，缓存到 ~/.cache/deck-player/thumbs。' },
+    text: '抽「第一帧」会得到片头黑场或淡入前的纯黑，整面网格会有一半是黑的。实机按 min(时长×0.1, 30s) 抽帧，缓存到 ~/.cache/muvik/thumbs。' },
   { tag: '主题', name: '浅色只管浏览页',
     text: '浅色主题不作用于播放页 OSD：亮底控件压在亮画面上会直接消失。切浅色时播放器仍然是暗的，这是有意为之，不是漏做。' },
   { tag: '视图', name: '视图设置不记忆',
@@ -285,7 +285,7 @@ const RISKS = [
     text: '未播放段是 20% 白，压在雪景、天空这类高亮画面上几乎消失（切到「亮场」就能看到）。是否改成「深色槽 + 亮色细边」？' },
 ];
 
-const STORE_KEY = 'deckplayer.ui-review.v1';
+const STORE_KEY = 'muvik.ui-review.v1';
 
 /* ── 状态 ─────────────────────────────────────────────────── */
 
@@ -726,7 +726,7 @@ function settingsHTML() {
     section('播放') +
     cell({ icon: 'clock', title: '记住播放进度', toggle: true, action: 'toggle-resume', name: '设置项' }) +
     cell({ icon: 'play', title: '硬件解码', value: '自动', chevron: true, action: 'set-hw', name: '设置项' }) +
-    cell({ icon: 'info', title: '关于 DeckPlayer', value: 'GPL-3.0', chevron: true,
+    cell({ icon: 'info', title: '关于 Muvik', value: 'GPL-3.0', chevron: true,
       action: 'about', name: '设置项' });
 }
 
@@ -938,7 +938,7 @@ function renderApp() {
   app.innerHTML =
     '<header class="app-header" data-name="应用顶栏" data-spec="高 92 · 左右内边距 48 · 标题 29px">' +
       '<span class="mark">' + ic('video', 24, 1.8) + '</span>' +
-      '<h1>DeckPlayer</h1>' +
+      '<h1>Muvik</h1>' +
       (state.tab === 'media' || state.tab === 'history' ? layoutSeg : '') +
       '<span class="ver"><i></i>GPL-3.0</span>' +
     '</header>' +
@@ -1135,7 +1135,7 @@ function activateCell(el) {
     return;
   }
   if (a.indexOf('set-') === 0) { toast('这一项在原型里只占位，等实机功能定了再做面板'); return; }
-  if (a === 'about') { toast('DeckPlayer · GPL-3.0 · 基于 borealis + libmpv'); return; }
+  if (a === 'about') { toast('Muvik · GPL-3.0 · 基于 borealis + libmpv'); return; }
   if (a === 'browse') {
     state.browse = el.dataset.id;
     state.focus = { zone: 'main', i: 0 };
@@ -1982,7 +1982,7 @@ function openPlugins() {
         cell({ icon: 'plugin', title: 'TMDB 刮削', sub: 'v0.4.1 · 刮削器 · 已启用', badge: '配置', chevron: true, action: 'plug-cfg' }) +
         section('操作') +
         cell({ icon: 'plus', title: '从 ZIP 安装', sub: '选择本地插件包，校验后解压到插件目录', action: 'plug-zip' }) +
-        cell({ icon: 'folder', title: '打开插件目录', sub: '~/.local/share/deck-player/plugins', chevron: true, action: 'plug-dir' }) +
+        cell({ icon: 'folder', title: '打开插件目录', sub: '~/.local/share/muvik/plugins', chevron: true, action: 'plug-dir' }) +
         section('兼容性') +
         cell({ icon: 'info', title: '插件 API 版本', sub: 'v1 · 支持 2026.10 之后构建的插件', action: 'plug-info' }) +
       '</div></section>' +
@@ -1998,7 +1998,7 @@ function openPlugins() {
     const c = e.target.closest('.cell');
     if (!c) return;
     if (c.dataset.action === 'plug-zip') toast('选择插件 ZIP（原型未接入文件选择器）');
-    else if (c.dataset.action === 'plug-dir') toast('打开 ~/.local/share/deck-player/plugins');
+    else if (c.dataset.action === 'plug-dir') toast('打开 ~/.local/share/muvik/plugins');
     else if (c.dataset.action === 'plug-cfg') toast('打开插件配置对话框');
     else toast('插件 API v1 · 与 v1.0 以上兼容');
   };
@@ -2163,7 +2163,7 @@ function addComment() {
 function exportMd() {
   const d = DEVICES[state.device];
   const lines = [
-    '# DeckPlayer UI 评审',
+    '# Muvik UI 评审',
     '',
     '- 设备：' + d.name + '（逻辑 1280×' + d.h + ' · windowScale ' + (d.pw / 1280).toFixed(2) + '）',
     '- 主题：' + THEME_LABEL[state.theme],
@@ -2191,7 +2191,7 @@ function exportMd() {
       const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = 'deckplayer-ui-review.md';
+      a.download = 'muvik-ui-review.md';
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 1000);
       toast('已复制并下载 Markdown');

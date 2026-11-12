@@ -4,7 +4,7 @@
 #include "utils/media_name_parser.hpp"
 #include "test_framework.hpp"
 
-using namespace deck_player;
+using namespace muvik;
 
 namespace {
 

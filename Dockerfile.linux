@@ -5,8 +5,8 @@
 #   这些在容器里天然就有，比搭交叉工具链省事。
 #
 # 构建（amd64，对齐 Steam Deck）：
-#   docker build --platform linux/amd64 -f Dockerfile.linux -t deckplayer-linux .
-#   docker run --rm -v "$PWD:/src" -w /src deckplayer-linux
+#   docker build --platform linux/amd64 -f Dockerfile.linux -t muvik-linux .
+#   docker run --rm -v "$PWD:/src" -w /src muvik-linux
 #
 # 注意：首次构建要下载约 300MB 依赖，慢网络下可能 20-40 分钟。
 #   分两层缓存：工具链单独一层，装好后重跑只需装业务依赖。

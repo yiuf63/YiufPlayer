@@ -12,7 +12,7 @@
 #include <atomic>
 #include <memory>
 
-namespace deck_player {
+namespace muvik {
 
 class MediaCell;
 class ToolButton;
@@ -63,6 +63,14 @@ private:
     void promptSearch();
     void openViewSheet();
 
+    // 交互对话框
+    void showExitDialog();
+    void showAboutDialog();
+    void showLanguageDialog(MediaCell* lang_row);
+    void showThemeDialog(MediaCell* theme_row);
+    void showFpsLimitDialog(MediaCell* fps_row);
+    void showKeymapDialog(MediaCell* keymap_row);
+
     // 条目卡片。三处共用同一套外观，差别只在传入的播放列表。
     MediaCell* makeVideoCell(const MediaItem& item, std::vector<MediaItem> playlist,
                              size_t idx);
@@ -97,10 +105,13 @@ private:
     brls::Box* library_list_ = nullptr;
     std::shared_ptr<brls::Box*> library_slot_;
 
+    // 历史视图重建入口
+    void renderRecentContent();
+    brls::Box* recent_list_ = nullptr;
+    std::shared_ptr<brls::Box*> recent_slot_;
+
     // 媒体库整页（工具行 + 列表），createLibraryView 返回的就是它
     brls::Box* library_root_ = nullptr;
-    brls::Box* library_toolbar_ = nullptr;
-    brls::Label* library_summary_ = nullptr;
     ToolButton* library_view_btn_ = nullptr;
     ToolButton* library_search_btn_ = nullptr;
     // 「视图与排序」浮层：懒创建，开着就挂在 library_root_ 上
@@ -122,4 +133,4 @@ private:
     std::vector<std::shared_ptr<std::atomic<bool>>> alive_flags_;
 };
 
-} // namespace deck_player
+} // namespace muvik

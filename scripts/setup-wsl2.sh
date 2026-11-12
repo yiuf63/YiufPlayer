@@ -1,5 +1,5 @@
 #!/bin/bash
-# 在 Windows 的 WSL2 里准备 DeckPlayer 的构建环境。
+# 在 Windows 的 WSL2 里准备 Muvik 的构建环境。
 #
 # 为什么用 WSL2：
 #   它是真实 Linux 内核 + 原生 x86_64，和 Steam Deck 同架构。
@@ -68,7 +68,7 @@ fi
 echo
 echo "=== 完成 ==="
 echo "构建：./scripts/build-linux.sh"
-echo "运行：./build-linux/deck-player"
+echo "运行：./build-linux/muvik"
 echo
 echo "注意：WSLg 的 GL 走 D3D12 翻译（Mesa d3d12 驱动），"
 echo "      与 Steam Deck 的 AMD Mesa 不同。它能验证"

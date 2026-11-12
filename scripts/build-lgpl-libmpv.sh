@@ -2,21 +2,21 @@
 # ============================================================================
 # 构建 LGPL 版 libmpv（含 LGPL 版 FFmpeg）
 #
-# 用途：为 DeckPlayer 的闭源发布形态提供一个许可干净的 libmpv。
+# 用途：为 Muvik 的闭源发布形态提供一个许可干净的 libmpv。
 #       GPL 版 libmpv/FFmpeg 会使链接产物受 GPL 约束，不能闭源分发。
 #
 # 产出：$PREFIX 下的一套动态库，CMake 通过 -DMPV_ROOT=$PREFIX 使用。
 #
 # 用法：
 #   ./scripts/build-lgpl-libmpv.sh [安装前缀]
-#   PREFIX=/opt/deckplayer-lgpl ./scripts/build-lgpl-libmpv.sh
+#   PREFIX=/opt/muvik-lgpl ./scripts/build-lgpl-libmpv.sh
 #
 # 依赖：meson ninja pkg-config C 编译器 nasm(可选，提升 x86 性能)
 # ============================================================================
 
 set -euo pipefail
 
-PREFIX="${1:-${PREFIX:-$HOME/.local/deckplayer-lgpl}}"
+PREFIX="${1:-${PREFIX:-$HOME/.local/muvik-lgpl}}"
 WORK="${WORK:-$(pwd)/.build-lgpl}"
 JOBS="${JOBS:-$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)}"
 
@@ -209,7 +209,7 @@ echo
 echo "============================================================"
 echo " 完成。LGPL 版 libmpv 已安装到：$PREFIX"
 echo "------------------------------------------------------------"
-echo " 在 DeckPlayer 中使用："
+echo " 在 Muvik 中使用："
 echo "   cmake -B build -DMPV_ROOT=$PREFIX -DCMAKE_PREFIX_PATH=$PREFIX"
 echo "   cmake --build build"
 echo "============================================================"

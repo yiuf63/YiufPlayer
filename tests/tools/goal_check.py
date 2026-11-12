@@ -54,9 +54,9 @@ r = run("grep -c 'addFolder' src/activity/file_browser_activity.cpp")
 checks.append(("添加文件夹", int(r.stdout.strip() or 0) >= 1, "已实现"))
 
 # 6. 创意工坊（视频源 + 刮削源）
-r = run("grep -c 'create_video_source' include/plugin/deck_plugin_abi.h")
+r = run("grep -c 'create_video_source' include/plugin/muvik_plugin_abi.h")
 checks.append(("插件：视频源", int(r.stdout.strip() or 0) >= 1, "ABI 已定义"))
-r = run("grep -c 'create_scraper' include/plugin/deck_plugin_abi.h")
+r = run("grep -c 'create_scraper' include/plugin/muvik_plugin_abi.h")
 checks.append(("插件：刮削源", int(r.stdout.strip() or 0) >= 1, "ABI 已定义"))
 # 防护实现是「拒绝绝对路径 + 拒绝含 .. 的条目」，代码里没有字面量 "../"，
 # 因此这里必须按实际写法匹配，否则会得到假阴性（实测：判据曾写成 '../'，
@@ -68,11 +68,11 @@ r = run("grep -cE 'Zip Slip|路径穿越|entry\\.find\\(\"\\.\\.\"\\)' "
 checks.append(("ZIP 安装防护", int(r.stdout.strip() or 0) >= 1, "已实现"))
 
 # 7. 不假定屏幕尺寸
-r = run("grep -c 'DECKPLAYER_WINDOW' src/main.cpp")
+r = run("grep -c 'MUVIK_WINDOW' src/main.cpp")
 checks.append(("窗口尺寸可覆盖", int(r.stdout.strip() or 0) >= 1, "已实现"))
 
 # 8. macOS 构建测试
-checks.append(("macOS 可构建", os.path.exists("build/deck-player"), "产物存在"))
+checks.append(("macOS 可构建", os.path.exists("build/muvik") or os.path.exists("build/muvik"), "产物存在"))
 
 # 9. 许可证
 r = run("test -f cmake/license_probe.cpp && echo ok")

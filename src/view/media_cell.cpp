@@ -9,7 +9,7 @@
 
 #include "ui/design.hpp"
 
-namespace deck_player {
+namespace muvik {
 
 MediaCell::MediaCell(ui::Icon icon, std::string title, std::string subtitle)
     : icon_(icon), title_(std::move(title)), subtitle_(std::move(subtitle)) {
@@ -51,18 +51,19 @@ void MediaCell::draw(NVGcontext* vg, float x, float y, float width, float height
     const float card_w = width - 28.0f;
     const float card_h = height - 12.0f;
 
+    // 选中态背景：提亮并融入适量主题色，形成清晰可辨的选中光晕
     ui::fillRoundRect(vg, card_x, card_y, card_w, card_h, ui::radius::md,
-                      focused ? pal.surfaceRaised : pal.surface);
-    ui::strokeRoundRect(vg, card_x, card_y, card_w, card_h, ui::radius::md,
-                        focused ? ui::rgba(pal.accent, 0.65f)
-                                : ui::rgba(pal.outline, 0.75f),
-                        focused ? 1.6f : 1.0f);
+                      focused ? ui::mix(pal.surfaceRaised, pal.accent, 0.16f) : pal.surface);
 
-    // 选中态左侧短竖条：与描边一起构成「双层强调」，
-    // 电视观看距离下只靠描边仍然容易看不清焦点。
     if (focused) {
-        ui::fillRoundRect(vg, card_x + 5.0f, y + height * 0.5f - 13.0f, 3.0f, 26.0f,
-                          1.5f, pal.accent);
+        // 选中态多层氛围光晕：柔光漫射 + 内层实线描边，电视/掌机距离下极为醒目
+        ui::drawFocusGlow(vg, card_x, card_y, card_w, card_h, ui::radius::md, pal.accent);
+        // 选中态左侧短竖条：锚定视觉焦点
+        ui::fillRoundRect(vg, card_x + 5.0f, y + height * 0.5f - 16.0f, 4.5f, 32.0f,
+                          2.25f, pal.accent);
+    } else {
+        ui::strokeRoundRect(vg, card_x, card_y, card_w, card_h, ui::radius::md,
+                            ui::rgba(pal.outline, 0.75f), 1.0f);
     }
 
     // 左侧：16:9 缩略图或类型图标块。
@@ -76,7 +77,7 @@ void MediaCell::draw(NVGcontext* vg, float x, float y, float width, float height
         const float ty = y + height * 0.5f - th * 0.5f;
         ui::drawScene(vg, tx, ty, tw, th, 8.0f, 8.0f, 8.0f, 8.0f, thumb_);
         if (focused) {
-            ui::strokeRoundRect(vg, tx, ty, tw, th, 8.0f, ui::rgba(pal.accent, 0.9f), 1.6f);
+            ui::strokeRoundRect(vg, tx, ty, tw, th, 8.0f, pal.accent, 2.0f);
         }
         content_x = tx + tw + 14.0f;
     } else {
@@ -85,12 +86,12 @@ void MediaCell::draw(NVGcontext* vg, float x, float y, float width, float height
         const float tile_x = card_x + 22.0f;
         const float tile_y = y + height * 0.5f - tile * 0.5f;
         ui::fillRoundRect(vg, tile_x, tile_y, tile, tile, 13.0f,
-                          focused ? pal.surfaceSunken
+                          focused ? ui::rgba(pal.accent, 0.22f)
                                   : ui::rgba(pal.surfaceSunken, 0.55f));
         // 图标只在选中时用强调色。以前整列都是橙色，一屏十几个橙色图标，
         // 焦点反而看不出来 —— 强调色必须稀缺才有意义。
         ui::drawIcon(vg, icon_, tile_x + tile * 0.5f, tile_y + tile * 0.5f, tile * 0.5f,
-                     focused ? pal.accent : ui::rgba(pal.textDim, 0.85f), 1.9f);
+                     focused ? pal.accent : ui::rgba(pal.textDim, 0.85f), focused ? 2.2f : 1.9f);
         content_x = tile_x + tile + 16.0f;
     }
 
@@ -102,12 +103,12 @@ void MediaCell::draw(NVGcontext* vg, float x, float y, float width, float height
                               : ui::textWidth(vg, ui::font::detail, badge_);
     if (!badge_.empty()) {
         ui::text(vg, badge_right, y + height * 0.5f, ui::font::detail,
-                 focused ? ui::rgba(pal.textDim, 1.0f) : pal.textMute,
+                 focused ? pal.accent : pal.textMute,
                  NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE, badge_);
     }
     if (chevron_) {
         ui::drawIcon(vg, ui::Icon::ChevronRight, right - 7.0f, y + height * 0.5f, 16.0f,
-                     focused ? pal.textDim : ui::rgba(pal.textMute, 0.8f), 1.8f);
+                     focused ? pal.accent : ui::rgba(pal.textMute, 0.8f), 1.8f);
     }
 
     // 文字区
@@ -116,13 +117,21 @@ void MediaCell::draw(NVGcontext* vg, float x, float y, float width, float height
                                             : badge_right - badge_w - 20.0f;
     const float text_max = std::max(40.0f, text_right - text_x);
     const bool has_progress = progress_ >= 0.0f;
+    const bool has_subtitle = !subtitle_.empty();
 
-    ui::textClipped(vg, text_x, y + height * 0.5f - (has_progress ? 12.0f : 9.0f),
-                    ui::font::body, pal.text, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE,
-                    title_, text_max);
-    if (!subtitle_.empty()) {
+    const float title_y = has_subtitle
+        ? (y + height * 0.5f - (has_progress ? 12.0f : 9.0f))
+        : (y + height * 0.5f);
+
+    if (!title_.empty()) {
+        ui::textClipped(vg, text_x, title_y,
+                        ui::font::body, focused ? ui::hex(0xFFFFFF) : pal.text,
+                        NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE,
+                        title_, text_max);
+    }
+    if (has_subtitle) {
         ui::textClipped(vg, text_x, y + height * 0.5f + (has_progress ? 12.0f : 14.0f),
-                        ui::font::caption, pal.textDim,
+                        ui::font::caption, focused ? pal.text : pal.textDim,
                         NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, subtitle_, text_max);
     }
 
@@ -160,7 +169,6 @@ void SectionHeader::draw(NVGcontext* vg, float x, float y, float width, float he
                          brls::Style style, brls::FrameContext* ctx) {
     (void)style;
     (void)ctx;
-    (void)width;
     const auto& pal = ui::palette();
     // 基线贴近底部：分组标题与它下面的第一张卡片之间留 8px，
     // 与上面的内容之间留 38px，形成「段间距 > 行间距」的层级。
@@ -169,8 +177,9 @@ void SectionHeader::draw(NVGcontext* vg, float x, float y, float width, float he
                       ui::rgba(pal.accent, 0.85f));
     nvgFontFaceId(vg, brls::Application::getDefaultFont());
     nvgTextLetterSpacing(vg, 0.6f);
-    ui::text(vg, x + 27.0f, baseline, 13.0f, pal.textMute,
-             NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, title_);
+    ui::textClipped(vg, x + 27.0f, baseline, 13.0f, pal.textMute,
+                    NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, title_,
+                    std::max(40.0f, width - 40.0f));
     nvgTextLetterSpacing(vg, 0.0f);
 }
 
@@ -196,8 +205,9 @@ void EmptyState::draw(NVGcontext* vg, float x, float y, float width, float heigh
     ui::strokeCircle(vg, cx, cy - 34.0f, 38.0f, ui::rgba(pal.outline, 0.9f), 1.0f);
     ui::drawIcon(vg, icon_, cx, cy - 34.0f, 32.0f, ui::rgba(pal.accent, 0.9f), 1.8f);
 
-    ui::text(vg, cx, cy + 22.0f, ui::font::body, pal.text,
-             NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, title_);
+    ui::textClipped(vg, cx, cy + 22.0f, ui::font::body, pal.text,
+                    NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, title_,
+                    std::max(60.0f, width - 40.0f));
 
     // 说明文字允许用 \n 手动断行：中文没有空格，自动折行容易断在
     // 半个词上；这里由调用方控制断点更可靠。
@@ -218,4 +228,4 @@ void EmptyState::draw(NVGcontext* vg, float x, float y, float width, float heigh
     }
 }
 
-} // namespace deck_player
+} // namespace muvik

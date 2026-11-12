@@ -25,7 +25,7 @@
 set -euo pipefail
 
 DECK_HOST="${DECK_HOST:-deck@steamdeck.local}"
-REMOTE_DIR="${REMOTE_DIR:-~/deck-player}"
+REMOTE_DIR="${REMOTE_DIR:-~/muvik}"
 RUN_AFTER=0
 [ "${1:-}" = "--run" ] && RUN_AFTER=1
 
@@ -62,9 +62,9 @@ echo "=== 完成 ==="
 
 if [ "$RUN_AFTER" = "1" ]; then
     echo "=== 启动（按 Ctrl+C 停止）==="
-    ssh -t "$DECK_HOST" "cd $REMOTE_DIR && ./build-linux/deck-player"
+    ssh -t "$DECK_HOST" "cd $REMOTE_DIR && ./build-linux/muvik"
 else
-    echo "运行：ssh -t $DECK_HOST 'cd $REMOTE_DIR && ./build-linux/deck-player'"
+    echo "运行：ssh -t $DECK_HOST 'cd $REMOTE_DIR && ./build-linux/muvik'"
 fi
 
 echo

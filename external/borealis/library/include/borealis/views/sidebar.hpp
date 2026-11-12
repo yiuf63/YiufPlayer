@@ -60,7 +60,7 @@ class SidebarItem : public Box
 
     void setLabel(std::string label);
 
-    // DeckPlayer 补丁：条目左侧图标（PNG 路径）。空字符串 = 不显示。
+    // Muvik 补丁：条目左侧图标（PNG 路径）。空字符串 = 不显示。
     void setIcon(std::string path);
 
     void setActive(bool active);

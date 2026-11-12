@@ -13,7 +13,7 @@
 
 namespace fs = std::filesystem;
 
-namespace deck_player {
+namespace muvik {
 
 namespace {
 
@@ -77,13 +77,14 @@ bool PluginInstaller::validateZipEntries(const std::string& zip_path, std::strin
             err = "压缩包内含有路径穿越条目，已拒绝安装：" + entry;
             return false;
         }
-        if (endsWith(entry, ".so") || endsWith(entry, ".dylib") || endsWith(entry, ".dll")) {
+        if (endsWith(entry, ".so") || endsWith(entry, ".dylib") || endsWith(entry, ".dll") ||
+            endsWith(entry, "manifest.json") || endsWith(entry, "main.js")) {
             has_library = true;
         }
     }
 
     if (!has_library) {
-        err = "压缩包内未找到插件动态库（.so / .dylib / .dll）";
+        err = "压缩包内未找到有效插件（需包含 main.js、manifest.json 或动态库）";
         return false;
     }
     return true;
@@ -151,14 +152,18 @@ PluginInstaller::Result PluginInstaller::installFromZip(const std::string& zip_p
         for (const auto& e : fs::recursive_directory_iterator(target)) {
             if (!e.is_regular_file()) continue;
             std::string ext = e.path().extension().string();
-            if (ext == ".so" || ext == ".dylib" || ext == ".dll") { found = true; break; }
+            std::string fname = e.path().filename().string();
+            if (ext == ".so" || ext == ".dylib" || ext == ".dll" || fname == "manifest.json" || fname == "main.js") {
+                found = true;
+                break;
+            }
         }
     } catch (...) {}
 
     if (!found) {
         std::error_code rc2;
         fs::remove_all(target, rc2);
-        r.message = "解压后未找到插件动态库，已回滚";
+        r.message = "解压后未找到有效插件内容，已回滚";
         return r;
     }
 
@@ -199,4 +204,4 @@ bool PluginInstaller::uninstall(const std::string& install_dir) {
     return !rc;
 }
 
-} // namespace deck_player
+} // namespace muvik

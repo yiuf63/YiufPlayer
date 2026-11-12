@@ -6,7 +6,7 @@
 #include <vector>
 #include <chrono>
 
-namespace deck_player {
+namespace muvik {
 
 enum class MediaType {
     Directory,
@@ -48,4 +48,4 @@ struct StorageSource {
     bool is_available = false; // 当前路径是否存在
 };
 
-} // namespace deck_player
+} // namespace muvik

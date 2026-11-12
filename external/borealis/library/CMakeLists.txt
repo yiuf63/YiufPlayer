@@ -197,7 +197,7 @@ elseif(PLATFORM_PS4)
         set(BRLS_PLATFORM_RESOURCES_PATH "\"/app0/resources/\"")
     endif ()
 elseif(PLATFORM_ANDROID)
-    # DeckPlayer 补丁：允许用预编译的 libSDL2.so 而不是从源码构建。
+    # Muvik 补丁：允许用预编译的 libSDL2.so 而不是从源码构建。
     #
     # 上游这里无条件 add_subdirectory(lib/extern/SDL)，而该目录是 git
     # submodule，未初始化时会直接失败。实际发布常用别人已编好的

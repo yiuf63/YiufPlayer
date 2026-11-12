@@ -245,6 +245,45 @@ void GLFWImeManager::openInputDialog(std::function<void(std::string)> cb, std::s
             }
             return true; });
 
+    // insert text from on-screen keyboard
+    dialog->getInsertTextEvent()->subscribe([this, dialog, maxStringLength](const std::string& str)
+        {
+            if (cursor < 0 || cursor > (int)textBuffer.size()) cursor = textBuffer.size();
+            auto wstr = std::wstring_convert<std::codecvt_utf8<wchar_t>>().from_bytes(str);
+            for (wchar_t ch : wstr) {
+                if (textBuffer.size() < maxStringLength) {
+                    textBuffer.insert(textBuffer.begin() + cursor, ch);
+                    cursor++;
+                }
+            }
+            dialog->setText(getInputText());
+            dialog->setCursor(cursor);
+            dialog->setCountText(std::to_string(textBuffer.size()) + "/" + std::to_string(maxStringLength));
+            return true;
+        });
+
+    // clear text
+    dialog->getClearEvent()->subscribe([this, dialog, maxStringLength]()
+        {
+            textBuffer.clear();
+            cursor = 0;
+            dialog->setText("");
+            dialog->setCursor(0);
+            dialog->setCountText("0/" + std::to_string(maxStringLength));
+            return true;
+        });
+
+    // cursor move
+    dialog->getCursorMoveEvent()->subscribe([dialog](int delta)
+        {
+            if (cursor < 0) cursor = textBuffer.size();
+            cursor += delta;
+            if (cursor < 0) cursor = 0;
+            if (cursor > (int)textBuffer.size()) cursor = textBuffer.size();
+            dialog->setCursor(cursor);
+            return true;
+        });
+
     dialog->registerAction(
         "hints/left"_i18n, BUTTON_LEFT, [dialog](...)
         {

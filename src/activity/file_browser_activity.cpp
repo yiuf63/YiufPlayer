@@ -4,7 +4,9 @@
 #include <cstdlib>
 #include <cstdio>
 #include <fstream>
+#include <functional>
 #include <memory>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -23,6 +25,7 @@
 #include "activity/plugin_browser_activity.hpp"
 #include "model/metadata_store.hpp"
 #include "view/now_playing_bar.hpp"
+#include "activity/now_playing_activity.hpp"
 #include "view/media_cell.hpp"
 #include "view/media_folder_card.hpp"
 #include "view/media_grid_card.hpp"
@@ -31,8 +34,12 @@
 #include "view/view_sheet.hpp"
 #include "model/library_view_options.hpp"
 #include "utils/thumbnail_cache.hpp"
-#include "theme/deck_theme.hpp"
+#include "utils/display_mode.hpp"
+#include "utils/input_settings.hpp"
+#include "utils/keymap.hpp"
+#include "theme/muvik_theme.hpp"
 #include "ui/icons.hpp"
+#include "utils/i18n.hpp"
 #include "activity/player_activity.hpp"
 #include <borealis/views/scrolling_frame.hpp>
 #include <borealis/views/header.hpp>
@@ -44,7 +51,7 @@
 
 namespace fs = std::filesystem;
 
-namespace deck_player {
+namespace muvik {
 
 // 自检用：模拟 processInput 保存的触摸起点视图
 brls::View* g_touch_held_view = nullptr;
@@ -56,6 +63,74 @@ brls::View* g_touch_held_view = nullptr;
 // 1279 上，看起来像被裁切，掌机上还会被机身圆角吃掉。电视端 UI 一律留
 // overscan 安全区，这里统一给 28px。
 constexpr float CONTENT_SAFE_MARGIN = 28.0f;
+
+// 首次启动时自动探测本地常见媒体位置（Steam Deck 存储卡、系统视频/音乐目录）
+static std::vector<std::pair<std::string, std::string>> detectLocalMediaSources() {
+    std::vector<std::pair<std::string, std::string>> res;
+    std::set<std::string> seen;
+
+    auto checkAndAdd = [&](const std::string& path, const std::string& label) {
+        if (path.empty() || seen.count(path)) return;
+        std::error_code ec;
+        if (fs::is_directory(path, ec)) {
+            seen.insert(path);
+            res.emplace_back(path, label);
+        }
+    };
+
+    // 1. Steam Deck MicroSD 存储卡
+    checkAndAdd("/run/media/mmcblk0p1", i18n::tr("files.steam_deck_microsd", "Steam Deck 存储卡 (MicroSD)"));
+
+    // 2. Steam Deck / Linux 挂载的外部存储
+    std::error_code ec;
+    if (fs::exists("/run/media/deck", ec) && !ec) {
+        try {
+            fs::directory_iterator it("/run/media/deck", fs::directory_options::skip_permission_denied, ec);
+            fs::directory_iterator end;
+            while (!ec && it != end) {
+                std::error_code e2;
+                if (it->is_directory(e2)) {
+                    checkAndAdd(it->path().string(), i18n::tr("files.external_storage", "外部存储") + " (" + it->path().filename().string() + ")");
+                }
+                it.increment(ec);
+            }
+        } catch (...) {}
+    }
+
+    // 3. 用户主目录下的标准影音目录
+    const char* home_env = std::getenv("HOME");
+    std::string home = home_env ? home_env : "";
+    if (!home.empty()) {
+        checkAndAdd(home + "/Videos", i18n::tr("files.videos_dir", "视频目录") + " (" + home + "/Videos)");
+        checkAndAdd(home + "/Movies", i18n::tr("files.movies_dir", "电影目录") + " (" + home + "/Movies)");
+        checkAndAdd(home + "/Music", i18n::tr("files.music_dir", "音乐目录") + " (" + home + "/Music)");
+    }
+
+    // 4. Steam Deck 默认 deck 用户路径
+    checkAndAdd("/home/deck/Videos", i18n::tr("files.deck_videos", "Steam Deck 视频目录"));
+    checkAndAdd("/home/deck/Music", i18n::tr("files.deck_music", "Steam Deck 音乐目录"));
+
+    // 5. macOS 外接卷
+    ec.clear();
+    if (fs::exists("/Volumes", ec) && !ec) {
+        try {
+            fs::directory_iterator it("/Volumes", fs::directory_options::skip_permission_denied, ec);
+            fs::directory_iterator end;
+            while (!ec && it != end) {
+                std::error_code e2;
+                if (it->is_directory(e2)) {
+                    const std::string fn = it->path().filename().string();
+                    if (fn != "Macintosh HD" && fn != "Recovery" && fn != "Preboot") {
+                        checkAndAdd(it->path().string(), i18n::tr("files.external_volume", "外接卷") + " (" + fn + ")");
+                    }
+                }
+                it.increment(ec);
+            }
+        } catch (...) {}
+    }
+
+    return res;
+}
 
 
 // RAII 容器：TabFrame 切换标签时会 delete 旧 Tab 视图，
@@ -82,27 +157,12 @@ private:
     Slot slot_;
 };
 
-// 媒体库整页：默认焦点给内容区，不给工具行。
-// 工具行在 DOM 序里排在前面，框架的 getDefaultFocus 会把首焦点给搜索框
-// —— 手柄用户切到媒体库按 A，弹出来的是输入法而不是进文件夹。
-// 内容优先：搜索是低频操作，方向键向上一步就能到。
-class LibraryRootBox : public brls::Box {
-public:
-    brls::View* getDefaultFocus() override {
-        if (content_) {
-            if (brls::View* v = content_->getDefaultFocus()) return v;
-        }
-        return brls::Box::getDefaultFocus();
-    }
-    brls::Box* content_ = nullptr;
-};
-
 // 收集容器里的可聚焦控件（卡片装在行 Box 里，所以要下探两层）。
 // 列表重建后必须有人把焦点接过来：焦点一旦落在被删掉的子项上，
 // View 析构会把它置空，手柄按 A 就没有反应，ScrollingFrame 还会
 // 对着空焦点取 frame（见 scrolling_frame.cpp 里的补丁）。
 void collectFocusables(brls::Box* root, std::vector<brls::View*>& out, int depth = 0) {
-    if (!root || depth > 2) return;
+    if (!root || depth > 6) return;
     if (root->isFocusable()) {
         out.push_back(root);
         return;
@@ -111,6 +171,23 @@ void collectFocusables(brls::Box* root, std::vector<brls::View*>& out, int depth
         collectFocusables(dynamic_cast<brls::Box*>(child), out, depth + 1);
     }
 }
+
+// 媒体库整页：默认焦点给内容区，不给工具行。
+// 工具行在 DOM 序里排在前面，框架的 getDefaultFocus 会把首焦点给搜索框
+// —— 手柄用户切到媒体库按 A，弹出来的是输入法而不是进文件夹。
+// 内容优先：搜索是低频操作，方向键向上一步就能到。
+class LibraryRootBox : public brls::Box {
+public:
+    brls::View* getDefaultFocus() override {
+        if (content_) {
+            std::vector<brls::View*> items;
+            collectFocusables(content_, items);
+            if (!items.empty()) return items[0];
+        }
+        return brls::Box::getDefaultFocus();
+    }
+    brls::Box* content_ = nullptr;
+};
 
 // 一条视频在列表和网格里要显示的三行信息。
 // 抽出来是因为两种卡片形态必须显示同一份数据 —— 各自算一遍的结果是
@@ -182,18 +259,26 @@ brls::View* FileBrowserActivity::createContentView() {
     // 顺序与命名对齐原型（web/ui-review）：媒体库 / 文件 / 历史 / 设置。
     // 每一页回答一个问题 ——「我要看什么」「文件在哪」「上次看哪」「怎么改」，
     // 而不是「数据从哪来」。配置项全部撤出内容页，集中到设置。
-    tab_frame_->addTab("媒体库", BRLS_ASSET("icon/nav/media.png"),
+    tab_frame_->addTab(i18n::tr("tabs.library", "媒体库"), BRLS_ASSET("icon/nav/media.png"),
                        [this]() -> brls::View* { return createLibraryView(); });
-    tab_frame_->addTab("文件", BRLS_ASSET("icon/nav/files.png"),
+    tab_frame_->addTab(i18n::tr("tabs.files", "文件"), BRLS_ASSET("icon/nav/files.png"),
                        [this]() -> brls::View* { return createSourcesView(); });
-    tab_frame_->addTab("历史", BRLS_ASSET("icon/nav/history.png"),
+    tab_frame_->addTab(i18n::tr("tabs.history", "历史"), BRLS_ASSET("icon/nav/history.png"),
                        [this]() -> brls::View* { return createRecentView(); });
-    tab_frame_->addTab("设置", BRLS_ASSET("icon/nav/settings.png"),
+    tab_frame_->addTab(i18n::tr("tabs.settings", "设置"), BRLS_ASSET("icon/nav/settings.png"),
                        [this]() -> brls::View* { return createSettingsView(); });
 
     frame_ = new brls::AppletFrame(tab_frame_);
-    frame_->setTitle("DeckPlayer");
+    frame_->setTitle("Muvik");
     frame_->setIcon(BRLS_ASSET("icon/icon.png"));
+
+    // 手柄设置/菜单键 (BUTTON_START / ☰)：直接切换到「设置」标签页，而不是闪退
+    frame_->registerAction("设置", brls::ControllerButton::BUTTON_START, [this](brls::View*) {
+        if (tab_frame_) {
+            tab_frame_->selectTab(3); // 3 为「设置」标签页
+        }
+        return true;
+    });
 
     // 安装「正在播放」条，并在状态变化时刷新
     NowPlayingBar::install(frame_);
@@ -207,7 +292,7 @@ brls::View* FileBrowserActivity::createContentView() {
     });
 
     // 自检：自动对第一个视频触发刮削，验证「界面 → 插件 → 元数据 → 落盘」链路
-    if (const char* target = std::getenv("DECKPLAYER_AUTO_SCRAPE")) {
+    if (const char* target = std::getenv("MUVIK_AUTO_SCRAPE")) {
         std::string path = target;
         auto alive = std::make_shared<std::atomic<bool>>(true);
         alive_flags_.push_back(alive);
@@ -228,13 +313,13 @@ brls::View* FileBrowserActivity::createContentView() {
     // 自检：模拟「在视频库里点击第一个视频」这一完整用户操作。
     // 第 40 轮用户实测报「点开视频立即闪退」，崩在
     // TapGestureRecognizer -> Application::giveFocus 的野指针访问。
-    if (std::getenv("DECKPLAYER_CLICK_FIRST_VIDEO")) {
+    if (std::getenv("MUVIK_CLICK_FIRST_VIDEO")) {
         auto alive = std::make_shared<std::atomic<bool>>(true);
         alive_flags_.push_back(alive);
         std::thread([this, alive]() {
             std::this_thread::sleep_for(std::chrono::milliseconds(
-                std::getenv("DECKPLAYER_CLICK_DELAY")
-                    ? std::atoi(std::getenv("DECKPLAYER_CLICK_DELAY")) : 120));
+                std::getenv("MUVIK_CLICK_DELAY")
+                    ? std::atoi(std::getenv("MUVIK_CLICK_DELAY")) : 120));
             brls::sync([this, alive]() {
                 if (!alive->load()) return;
                 auto videos = MediaLibrary::getInstance().getVideos();
@@ -271,7 +356,7 @@ brls::View* FileBrowserActivity::createContentView() {
 
     // 自检：呼出「视图与排序」。等价于手柄按 BACK（registerAction 走的
     // 就是 openViewSheet），但不依赖按键映射与焦点位置。
-    if (std::getenv("DECKPLAYER_OPEN_SHEET")) {
+    if (std::getenv("MUVIK_OPEN_SHEET")) {
         auto alive = std::make_shared<std::atomic<bool>>(true);
         alive_flags_.push_back(alive);
         std::thread([this, alive]() {
@@ -285,7 +370,7 @@ brls::View* FileBrowserActivity::createContentView() {
     }
 
     // 自检：切到「设置」页（截图回归用：主题切换项、外观行的可读性）。
-    if (std::getenv("DECKPLAYER_OPEN_SETTINGS")) {
+    if (std::getenv("MUVIK_OPEN_SETTINGS")) {
         auto alive = std::make_shared<std::atomic<bool>>(true);
         alive_flags_.push_back(alive);
         std::thread([this, alive]() {
@@ -305,7 +390,7 @@ brls::View* FileBrowserActivity::createContentView() {
     // 若这两帧之间列表被 clearViews()（例如扫描完成触发 refresh），
     // 该 View 会进 deletionPool 并在下一帧被 delete，
     // 抬起时就是对着已释放内存调用 gestureRecognizerRequest。
-    if (std::getenv("DECKPLAYER_TOUCH_REBUILD")) {
+    if (std::getenv("MUVIK_TOUCH_REBUILD")) {
         auto alive = std::make_shared<std::atomic<bool>>(true);
         alive_flags_.push_back(alive);
         std::thread([this, alive]() {
@@ -365,7 +450,7 @@ brls::View* FileBrowserActivity::createContentView() {
     }
 
     // 允许通过环境变量指定启动时打开的标签，便于自动化验证各页面渲染
-    if (const char* env = std::getenv("DECKPLAYER_START_TAB")) {
+    if (const char* env = std::getenv("MUVIK_START_TAB")) {
         int idx = atoi(env);
         brls::Logger::info("启动标签: {}", idx);
         auto alive = std::make_shared<std::atomic<bool>>(true);
@@ -379,7 +464,7 @@ brls::View* FileBrowserActivity::createContentView() {
     // 自检：启动后自动打开某个对话框，验证它真的能渲染出来。
     // 这类「点了有没有反应」的问题单元测试发现不了：
     // 第 35 轮就出现过对话框 open() 成功但被视频整屏盖掉的情况。
-    if (const char* which = std::getenv("DECKPLAYER_OPEN_DIALOG")) {
+    if (const char* which = std::getenv("MUVIK_OPEN_DIALOG")) {
         const std::string kind = which;
         auto alive = std::make_shared<std::atomic<bool>>(true);
         alive_flags_.push_back(alive);
@@ -397,7 +482,7 @@ brls::View* FileBrowserActivity::createContentView() {
                         brls::Logger::warning("media_info: 库里没有视频");
                     }
                 } else {
-                    brls::Logger::warning("未知的 DECKPLAYER_OPEN_DIALOG: {}", kind);
+                    brls::Logger::warning("未知的 MUVIK_OPEN_DIALOG: {}", kind);
                 }
             });
         }).detach();
@@ -410,17 +495,26 @@ brls::View* FileBrowserActivity::createContentView() {
 void FileBrowserActivity::onContentAvailable() {
     Activity::onContentAvailable();
 
-    // 绑定返回键 B
-    this->registerAction("返回上一级", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
+    // 绑定返回键 B：在子目录/子文件夹时返回上一级；在最外层时弹出退出应用确认对话框
+    this->registerAction(i18n::tr("common.exit", "退出"), brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
         (void)view;
-        if (!path_history_.empty() || !current_path_.empty()) {
-            navigateUp();
-            return true;
+        const int activeTab = tab_frame_ ? tab_frame_->getActiveIndex() : -1;
+        if (activeTab == 0) { // 媒体库标签页
+            if (!open_folder_.empty()) {
+                openFolder(std::string());
+                return true;
+            }
+        } else if (activeTab == 1) { // 文件标签页
+            if (!path_history_.empty() || !current_path_.empty()) {
+                navigateUp();
+                return true;
+            }
         }
-        return false;
+        showExitDialog();
+        return true;
     });
 
-    // 自动扫描外部 MOD 插件
+    // 自动扫描外部 MOD 插件（本地、Steam 创意工坊与 DLC）
     // 加载新 ABI 插件（视频源 / 刮削源）。
     // 旧版 C++ ABI 插件已不再加载：跨库传递 std::string 等类型在
     // 编译器或标准库版本不一致时会崩溃，实测可复现。
@@ -445,6 +539,19 @@ void FileBrowserActivity::renderSourcesContent() {
     // refresh() 可能在容器已销毁后继续访问它（实测 SIGSEGV）。
     if (sources_slot_) sources_container_ = *sources_slot_;
     if (!sources_container_) return;
+
+    // 侧栏聚焦检测：记录重绘前焦点是否位于侧边栏内部
+    bool focus_in_sidebar = false;
+    brls::View* cur = brls::Application::getCurrentFocus();
+    if (cur && !brls::Application::isViewDead(cur)) {
+        for (brls::View* v = cur; v != nullptr; v = v->getParent()) {
+            if (dynamic_cast<brls::SidebarItem*>(v) || dynamic_cast<brls::Sidebar*>(v)) {
+                focus_in_sidebar = true;
+                break;
+            }
+        }
+    }
+
     sources_container_->clearViews();
 
     brls::ScrollingFrame* scroller = new brls::ScrollingFrame();
@@ -460,7 +567,7 @@ void FileBrowserActivity::renderSourcesContent() {
 
     if (current_path_.empty()) {
         // 1. 本地存储挂载点
-        list->addView(new SectionHeader("本地存储设备"));
+        list->addView(new SectionHeader(i18n::tr("files.storage_devices", "本地存储设备")));
 
         auto sources = MediaScanner::getInstance().getAvailableSources();
         for (const auto& src : sources) {
@@ -476,19 +583,17 @@ void FileBrowserActivity::renderSourcesContent() {
         }
 
         // 2. 网络存储与扩展 MOD 分区
-        list->addView(new SectionHeader("插件视频源"));
+        list->addView(new SectionHeader(i18n::tr("files.plugin_sources", "插件视频源")));
 
         auto plugins = PluginManager::getInstance().getPlugins();
-        bool has_source_plugin = false;
         for (const auto& plug : plugins) {
             if (!plug.has_video_source) continue;
-            has_source_plugin = true;
 
-            std::string sub = "视频源插件 v" + plug.version +
-                              (plug.has_scraper ? " · 含刮削器" : "");
+            std::string sub = i18n::tr("files.plugin_ver", "视频源插件 v") + plug.version +
+                              (plug.has_scraper ? i18n::tr("files.plugin_with_scraper", " · 含刮削器") : "");
             if (!PluginConfigStore::getInstance().hasConfig(
                     fs::path(plug.path).stem().string())) {
-                sub += " · 尚未配置";
+                sub += i18n::tr("files.plugin_not_configured", " · 尚未配置");
             }
             auto* cell = new MediaCell(ui::Icon::Plugin, plug.name, sub);
             cell->setChevron(true);
@@ -504,9 +609,8 @@ void FileBrowserActivity::renderSourcesContent() {
 
         // 插件管理入口：始终显示，未装插件时也作为安装引导
         auto* manage = new MediaCell(
-            ui::Icon::Plus, "添加 / 管理插件",
-            has_source_plugin ? "查看已装插件、重新扫描、打开插件目录"
-                              : "从 ZIP 或目录安装视频源 / 刮削源插件");
+            ui::Icon::Plus, i18n::tr("files.manage_plugins", "添加 / 管理插件"),
+            i18n::tr("files.manage_plugins_desc", "从 ZIP 安装插件或启用第三方源"));
         manage->setChevron(true);
         manage->registerClickAction([](brls::View*) {
             brls::Application::pushActivity(new PluginManagerActivity());
@@ -515,7 +619,7 @@ void FileBrowserActivity::renderSourcesContent() {
         list->addView(manage);
     } else {
         // 返回上级
-        auto* up = new MediaCell(ui::Icon::Back, "返回上一级", current_path_);
+        auto* up = new MediaCell(ui::Icon::Back, "..");
         up->setChevron(true);
         up->registerClickAction([this](brls::View*) {
             navigateUp();
@@ -526,8 +630,8 @@ void FileBrowserActivity::renderSourcesContent() {
         current_items_ = MediaScanner::getInstance().listDirectory(current_path_);
 
         if (current_items_.empty()) {
-            list->addView(new EmptyState(ui::Icon::Folder, "这个文件夹是空的",
-                                         "支持常见的视频 / 音频格式与同名字幕文件"));
+            list->addView(new EmptyState(ui::Icon::Folder, i18n::tr("files.empty_dir", "空目录"),
+                                         i18n::tr("files.empty_dir_desc", "支持常见的视频 / 音频格式与同名字幕文件")));
         } else {
             std::vector<MediaItem> playable_playlist;
             for (const auto& item : current_items_) {
@@ -538,7 +642,7 @@ void FileBrowserActivity::renderSourcesContent() {
 
             for (const auto& item : current_items_) {
                 if (item.is_directory()) {
-                    auto* cell = new MediaCell(ui::Icon::Folder, item.name, "文件夹");
+                    auto* cell = new MediaCell(ui::Icon::Folder, item.name, i18n::tr("files.open_folder", "文件夹"));
                     cell->setChevron(true);
                     std::string target_dir = item.path;
                     cell->registerClickAction([this, target_dir](brls::View*) {
@@ -548,14 +652,14 @@ void FileBrowserActivity::renderSourcesContent() {
                     list->addView(cell);
                 } else if (item.is_video()) {
                     std::string sub = MediaScanner::formatFileSize(item.size);
-                    if (!item.matched_subtitles.empty()) sub += " · 含外挂字幕";
+                    if (!item.matched_subtitles.empty()) sub += " · " + i18n::tr("common.has_subtitles", "含字幕");
 
                     auto* cell = new MediaCell(ui::Icon::Video, item.name, sub);
 
                     HistoryRecord rec;
                     if (PlaybackHistory::getInstance().getRecord(item.path, rec)) {
                         if (rec.completed) {
-                            cell->setBadge("已看完");
+                            cell->setBadge(i18n::tr("common.played", "已看完"));
                             cell->setProgress(1.0f);
                         } else if (rec.duration > 0) {
                             const float ratio =
@@ -582,7 +686,7 @@ void FileBrowserActivity::renderSourcesContent() {
                 } else if (item.is_audio()) {
                     auto* cell = new MediaCell(
                         ui::Icon::Music, item.name,
-                        "音频 · " + MediaScanner::formatFileSize(item.size));
+                        i18n::tr("common.audio", "音频") + " · " + MediaScanner::formatFileSize(item.size));
                     std::string a_path = item.path;
                     cell->registerClickAction([playable_playlist, a_path](brls::View*) {
                         size_t target_idx = 0;
@@ -604,6 +708,35 @@ void FileBrowserActivity::renderSourcesContent() {
 
     scroller->setContentView(list);
     sources_container_->addView(scroller);
+
+    // B 键在子目录内部是「返回上一级」，在最外层时交给外层（返回侧边栏或退出）。
+    scroller->registerAction(i18n::tr("common.back", "返回"), brls::ControllerButton::BUTTON_B,
+        [this](brls::View*) {
+            if (path_history_.empty() && current_path_.empty()) return false;
+            navigateUp();
+            return true;
+        }, false);
+
+    // 侧栏聚焦保护：若当前焦点在侧边栏内，严禁夺取焦点，避免在侧栏上下切换标签时强行抢走焦点。
+    // 仅在用户真正处于文件浏览页面内部返回或跳转时才恢复内容焦点。
+    bool in_sidebar = focus_in_sidebar;
+    brls::View* end_cur = brls::Application::getCurrentFocus();
+    if (end_cur && !brls::Application::isViewDead(end_cur)) {
+        for (brls::View* v = end_cur; v != nullptr; v = v->getParent()) {
+            if (dynamic_cast<brls::SidebarItem*>(v) || dynamic_cast<brls::Sidebar*>(v)) {
+                in_sidebar = true;
+                break;
+            }
+        }
+    }
+    const bool is_files_tab_active = !tab_frame_ || (tab_frame_->getActiveIndex() == 1);
+    if (!in_sidebar && is_files_tab_active) {
+        std::vector<brls::View*> items;
+        collectFocusables(list, items);
+        if (!items.empty()) {
+            brls::Application::giveFocus(items[0]);
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -637,14 +770,7 @@ MediaCell* FileBrowserActivity::makeVideoCell(const MediaItem& item,
         return true;
     });
 
-    // X 键：对当前条目刮削元数据
-    std::string vpath = item.path;
-    std::string vname = item.name;
-    cell->registerAction("获取信息", brls::ControllerButton::BUTTON_X,
-        [this, vpath, vname](brls::View*) {
-            this->scrapeItem(vpath, vname);
-            return true;
-        }, false);
+    // X 键获取信息：暂不暴露在界面底部提示条中，等待刮削方案最终确定
     return cell;
 }
 
@@ -660,13 +786,7 @@ brls::View* FileBrowserActivity::makeVideoCard(const MediaItem& item,
         return true;
     });
 
-    std::string vpath = item.path;
-    std::string vname = item.name;
-    card->registerAction("获取信息", brls::ControllerButton::BUTTON_X,
-        [this, vpath, vname](brls::View*) {
-            this->scrapeItem(vpath, vname);
-            return true;
-        }, false);
+    // X 键获取信息：暂不暴露在界面底部提示条中，等待刮削方案最终确定
     return card;
 }
 
@@ -678,7 +798,7 @@ MediaCell* FileBrowserActivity::makeAudioCell(const MediaItem& item,
     cell->registerClickAction([playlist = std::move(playlist), idx](brls::View*) {
         // 音乐走全局音频引擎，退出本界面后继续在后台播放
         AudioPlayer::getInstance().playPlaylist(playlist, idx);
-        brls::Application::notify("正在播放：" + playlist[idx].name);
+        brls::Application::notify(i18n::tr("audio.now_playing_prefix", "正在播放：") + playlist[idx].name);
         return true;
     });
     return cell;
@@ -693,7 +813,7 @@ brls::View* FileBrowserActivity::makeAudioCard(const MediaItem& item,
                                    MediaScanner::formatFileSize(item.size));
     card->registerClickAction([playlist = std::move(playlist), idx](brls::View*) {
         AudioPlayer::getInstance().playPlaylist(playlist, idx);
-        brls::Application::notify("正在播放：" + playlist[idx].name);
+        brls::Application::notify(i18n::tr("audio.now_playing_prefix", "正在播放：") + playlist[idx].name);
         return true;
     });
     return card;
@@ -709,14 +829,15 @@ brls::Box* FileBrowserActivity::makeLibraryToolbar() {
     auto* bar = new brls::Box();
     bar->setAxis(brls::Axis::ROW);
     bar->setAlignItems(brls::AlignItems::CENTER);
-    bar->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    bar->setJustifyContent(brls::JustifyContent::FLEX_START);
     bar->setHeight(56.0f);
     bar->setWidthPercentage(100.0f);
     bar->setMarginRight(CONTENT_SAFE_MARGIN);
     bar->setMarginBottom(6.0f);
 
-    auto* search = new ToolButton("搜索", ui::Icon::Search, 14.0f);
-    search->setWidth(300.0f);
+    auto* search = new ToolButton(i18n::tr("common.search", "搜索"), ui::Icon::Search, 14.0f);
+    search->setWidth(260.0f);
+    search->setMarginRight(12.0f);
     search->registerClickAction([this](brls::View*) {
         promptSearch();
         return true;
@@ -743,8 +864,8 @@ void FileBrowserActivity::refreshToolbar() {
     }
     if (library_search_btn_) {
         library_search_btn_->setText(library_query_.empty()
-                                         ? std::string("搜索")
-                                         : "搜索：" + library_query_);
+                                         ? i18n::tr("common.search", "搜索")
+                                         : i18n::tr("common.search", "搜索") + "：" + library_query_);
     }
 }
 
@@ -756,7 +877,8 @@ void FileBrowserActivity::promptSearch() {
             refreshToolbar();
             renderLibraryContent();
         },
-        "搜索媒体库", "输入片名的一部分，留空表示不筛选", 64);
+        i18n::tr("library.search_title", "搜索媒体库"),
+        i18n::tr("library.search_hint", "输入片名的一部分，留空表示不筛选"), 64);
 }
 
 void FileBrowserActivity::openViewSheet() {
@@ -835,13 +957,13 @@ brls::View* FileBrowserActivity::createLibraryView() {
     }
 
     // 自检：预设搜索词（IME 是交互式的，无头验证只能这样进来）
-    if (const char* q = std::getenv("DECKPLAYER_SEARCH")) {
+    if (const char* q = std::getenv("MUVIK_SEARCH")) {
         library_query_ = q;
     }
 
     renderLibraryContent();
 
-    library_scroller_->registerAction("重新扫描", brls::ControllerButton::BUTTON_Y,
+    library_scroller_->registerAction(i18n::tr("library.rescan_btn", "重新扫描"), brls::ControllerButton::BUTTON_Y,
         [this](brls::View*) {
             startLibraryScan();
             return true;
@@ -849,7 +971,7 @@ brls::View* FileBrowserActivity::createLibraryView() {
 
     // B 在文件夹内部是「上一级」，在总览上才交给系统（退出界面）。
     // 不接管的话，从文件夹里退出去会直接关掉整个 Activity。
-    library_scroller_->registerAction("返回", brls::ControllerButton::BUTTON_B,
+    library_scroller_->registerAction(i18n::tr("common.back", "返回"), brls::ControllerButton::BUTTON_B,
         [this](brls::View*) {
             if (open_folder_.empty()) return false;
             openFolder(std::string());
@@ -859,7 +981,7 @@ brls::View* FileBrowserActivity::createLibraryView() {
     // BACK（Select）：呼出「视图与排序」。挂在整页上而不是列表上，
     // 因为在平铺网格里焦点落在卡片上，列表容器收不到按键。
     // 用 BACK 而不是某个字母键：手柄布局里没有 V，X/Y 已经给了刮削与重扫。
-    library_root_->registerAction("视图与排序", brls::ControllerButton::BUTTON_BACK,
+    library_root_->registerAction(i18n::tr("library.view_sort", "视图与排序"), brls::ControllerButton::BUTTON_BACK,
         [this](brls::View*) {
             openViewSheet();
             return true;
@@ -926,9 +1048,58 @@ void FileBrowserActivity::renderLibraryContent() {
 
     auto& lib = MediaLibrary::getInstance();
     if (lib.getFolders().empty()) {
-        library_list_->addView(new EmptyState(
-            ui::Icon::Folder, "媒体库还是空的",
-            "到「设置」里添加一个媒体文件夹\n扫描完成后，影片与音乐会出现在这里"));
+        auto detected = detectLocalMediaSources();
+        if (!detected.empty()) {
+            library_list_->addView(new EmptyState(
+                ui::Icon::Video, i18n::tr("library.welcome_title", "欢迎使用 Muvik"),
+                i18n::tr("library.welcome_desc", "已检测到本地存储设备与影音目录\n点击下方按钮一键建立您的专属掌机影院")));
+            auto* one_click = new MediaCell(
+                ui::Icon::Play, i18n::tr("library.one_click_setup", "一键建立影院"),
+                i18n::tr("library.one_click_setup", "一键建立影院") + " (" + std::to_string(detected.size()) + " " + i18n::tr("library.folders_count", "个文件夹") + ")");
+            one_click->setChevron(true);
+            one_click->registerClickAction([this, detected](brls::View*) {
+                auto& ml = MediaLibrary::getInstance();
+                for (const auto& [p, name] : detected) {
+                    ml.addFolder(p, name);
+                }
+                ml.save();
+                brls::Application::notify(i18n::tr("library.folder_added_scanning", "已添加，正在扫描…"));
+                startLibraryScan();
+                refresh();
+                return true;
+            });
+            library_list_->addView(one_click);
+
+            auto* manual_btn = new MediaCell(
+                ui::Icon::Folder, i18n::tr("library.manual_pick", "手动挑选媒体目录"),
+                i18n::tr("library.hero_manual_desc", "选择含有音视频的本地存储或挂载路径"));
+            manual_btn->setChevron(true);
+            manual_btn->registerClickAction([this](brls::View*) {
+                promptAddFolder();
+                return true;
+            });
+            library_list_->addView(manual_btn);
+        } else {
+            library_list_->addView(new EmptyState(
+                ui::Icon::Folder, i18n::tr("library.empty_title", "还没有添加任何媒体目录"),
+                i18n::tr("library.empty_desc", "点击下方按钮或从「文件」标签页添加")));
+            auto* add_folder = new MediaCell(
+                ui::Icon::Plus, i18n::tr("library.add_folder", "添加媒体文件夹"),
+                i18n::tr("library.hero_add_folder_desc", "选择含有音视频的本地存储或挂载目录"));
+            add_folder->setChevron(true);
+            add_folder->registerClickAction([this](brls::View*) {
+                promptAddFolder();
+                return true;
+            });
+            library_list_->addView(add_folder);
+        }
+
+        // 焦点接回：空库状态下同样确保首个操作按钮获得初始手柄焦点
+        std::vector<brls::View*> empty_items;
+        collectFocusables(library_list_, empty_items);
+        if (!empty_items.empty() && focus_was_lost) {
+            brls::Application::giveFocus(empty_items[0]);
+        }
         return;
     }
 
@@ -978,11 +1149,10 @@ void FileBrowserActivity::renderLibraryContent() {
             // 原来在哪一项就还给哪一项（越界时退到最后一项）
             const int idx = std::min(prev_idx, static_cast<int>(items.size()) - 1);
             brls::Application::giveFocus(items[idx]);
-        } else if (focus_was_lost) {
+        } else if (focus_was_lost || ((prev == library_search_btn_ || prev == library_view_btn_) && library_query_.empty())) {
+            // 列表初次填充或失去焦点时，首个卡片获得焦点；若用户未主动搜索，默认焦点切回卡片
             brls::Application::giveFocus(items[0]);
         }
-        // 焦点在工具行（搜索 / 视图入口）时不动它 —— 重建是抽帧或扫描
-        // 触发的，这时候把焦点抢到列表上，用户刚点开的搜索就被打断了
     }
 }
 
@@ -1007,7 +1177,7 @@ void FileBrowserActivity::renderLibraryOverview(const std::vector<MediaLibrary::
     }
 
     library_list_->addView(
-        new SectionHeader("文件夹 · " + std::to_string(groups.size())));
+        new SectionHeader(i18n::tr("common.folders", "文件夹") + " · " + std::to_string(groups.size())));
 
     // 目录卡的四宫格也要真实帧：收集每张卡的前四个条目，统一排队抽帧
     std::vector<MediaItem> want_thumbs;
@@ -1075,7 +1245,7 @@ void FileBrowserActivity::renderLibraryOverview(const std::vector<MediaLibrary::
     }
 
     library_list_->addView(
-        new SectionHeader("最近添加 · " + std::to_string(recent.size())));
+        new SectionHeader(i18n::tr("library.recent_count", "最近添加") + " · " + std::to_string(recent.size())));
     for (const auto& item : recent) {
         if (item.is_video()) {
             size_t idx = 0;
@@ -1103,9 +1273,9 @@ void FileBrowserActivity::renderLibraryFolder(const std::vector<MediaLibrary::Gr
     // 学一套新的操作方式，方向键往上顶一条就是它。
     // 不用右侧的 > 箭头：那是「进入下一层」的语义，而这一行是往上一层。
     std::string back_sub = g.folder.display_name;
-    if (!g.videos.empty()) back_sub += " · " + std::to_string(g.videos.size()) + " 视频";
-    if (!g.audios.empty()) back_sub += " · " + std::to_string(g.audios.size()) + " 首音乐";
-    auto* back = new MediaCell(ui::Icon::Back, "全部文件夹", back_sub);
+    if (!g.videos.empty()) back_sub += " · " + std::to_string(g.videos.size()) + " " + i18n::tr("common.videos", "视频");
+    if (!g.audios.empty()) back_sub += " · " + std::to_string(g.audios.size()) + " " + i18n::tr("common.audios", "音乐");
+    auto* back = new MediaCell(ui::Icon::Back, i18n::tr("library.all_folders", "全部文件夹"), back_sub);
     back->registerClickAction([this](brls::View*) {
         openFolder(std::string());
         return true;
@@ -1114,7 +1284,7 @@ void FileBrowserActivity::renderLibraryFolder(const std::vector<MediaLibrary::Gr
 
     if (!g.videos.empty()) {
         library_list_->addView(
-            new SectionHeader("视频 · " + std::to_string(g.videos.size())));
+            new SectionHeader(i18n::tr("common.videos", "视频") + " · " + std::to_string(g.videos.size())));
         requestThumbnails(g.videos);
         for (size_t i = 0; i < g.videos.size(); ++i) {
             library_list_->addView(makeVideoCell(g.videos[i], g.videos, i));
@@ -1123,7 +1293,7 @@ void FileBrowserActivity::renderLibraryFolder(const std::vector<MediaLibrary::Gr
 
     if (!g.audios.empty()) {
         library_list_->addView(
-            new SectionHeader("音乐 · " + std::to_string(g.audios.size())));
+            new SectionHeader(i18n::tr("common.audios", "音乐") + " · " + std::to_string(g.audios.size())));
         for (size_t i = 0; i < g.audios.size(); ++i) {
             library_list_->addView(makeAudioCell(g.audios[i], g.audios, i));
         }
@@ -1196,12 +1366,12 @@ void FileBrowserActivity::renderLibraryFlat(
 
     if (!videos.empty()) {
         library_list_->addView(
-            new SectionHeader("视频 · " + std::to_string(videos.size())));
+            new SectionHeader(i18n::tr("common.videos", "视频") + " · " + std::to_string(videos.size())));
         renderGrid(videos, true);
     }
     if (!audios.empty()) {
         library_list_->addView(
-            new SectionHeader("音乐 · " + std::to_string(audios.size())));
+            new SectionHeader(i18n::tr("common.audios", "音乐") + " · " + std::to_string(audios.size())));
         renderGrid(audios, false);
     }
 }
@@ -1241,11 +1411,11 @@ brls::View* FileBrowserActivity::createSettingsView() {
     auto& lib = MediaLibrary::getInstance();
 
     // ── 媒体库 ──
-    list->addView(new SectionHeader("媒体库"));
+    list->addView(new SectionHeader(i18n::tr("library.title", "媒体库")));
 
     auto* add_folder = new MediaCell(
-        ui::Icon::Plus, "添加媒体文件夹",
-        "选择包含视频 / 音乐的目录，自动扫描并记住");
+        ui::Icon::Plus, i18n::tr("library.add_folder", "添加媒体文件夹"),
+        i18n::tr("settings.add_folder_desc", "选择包含视频 / 音乐的目录，自动扫描并记住"));
     add_folder->registerClickAction([this](brls::View*) {
         promptAddFolder();
         return true;
@@ -1265,8 +1435,9 @@ brls::View* FileBrowserActivity::createSettingsView() {
     }
 
     auto* rescan = new MediaCell(
-        ui::Icon::Search, "重新扫描媒体库",
-        lib.isScanning() ? "扫描进行中…" : "更新新增或修改的文件");
+        ui::Icon::Search, i18n::tr("settings.rescan", "重新扫描媒体库"),
+        lib.isScanning() ? i18n::tr("settings.scanning", "扫描进行中…")
+                         : i18n::tr("settings.rescan_desc", "更新新增或修改的文件"));
     rescan->registerClickAction([this](brls::View*) {
         startLibraryScan();
         return true;
@@ -1274,51 +1445,112 @@ brls::View* FileBrowserActivity::createSettingsView() {
     list->addView(rescan);
 
     auto* cache = new MediaCell(
-        ui::Icon::Info, "清空扫描缓存",
-        "不清除文件夹，只丢弃已缓存的条目与文件签名");
+        ui::Icon::Info, i18n::tr("settings.clear_cache", "清空扫描缓存"),
+        i18n::tr("settings.clear_cache_desc", "不清除文件夹，只丢弃已缓存的条目与文件签名"));
     cache->registerClickAction([](brls::View*) {
         MediaLibrary::getInstance().clearCache();
-        brls::Application::notify("已清空扫描缓存，下次扫描将重新读取");
+        brls::Application::notify(i18n::tr("settings.cache_cleared", "已清空扫描缓存，下次扫描将重新读取"));
         return true;
     });
     list->addView(cache);
 
     // ── 外观 ──
-    list->addView(new SectionHeader("外观"));
+    list->addView(new SectionHeader(i18n::tr("settings.appearance", "外观")));
 
     {
-        const ThemeKind kind = resolveThemeKind();
-        const ThemeKind next = kind == ThemeKind::Dark  ? ThemeKind::Light
-                             : kind == ThemeKind::Light ? ThemeKind::Oled
-                                                        : ThemeKind::Dark;
+        ThemeItem cur_theme = getCurrentTheme();
         auto* row = new MediaCell(
             ui::Icon::Info,
-            std::string("主题：") + themeDisplayName(kind),
-            "深色 / 浅色 / OLED 真黑，重启后生效");
-        row->registerClickAction([next](brls::View*) {
-            const char* v = next == ThemeKind::Oled    ? "oled"
-                          : next == ThemeKind::Light   ? "light"
-                                                       : "dark";
-            std::ofstream f(AppPaths::configFile("theme"), std::ios::trunc);
-            if (f) {
-                f << v << "\n";
-                brls::Application::notify(
-                    std::string("已切换为") + themeDisplayName(next) +
-                    "，重启应用后生效");
-            } else {
-                brls::Application::notify("写入主题配置失败");
-            }
+            i18n::tr("settings.theme", "主题风格") + "：" + cur_theme.name,
+            i18n::tr("settings.theme_desc", "深色 / OLED 真黑 / 浅色 / 创意工坊自定义主题"));
+        row->registerClickAction([this, row](brls::View*) {
+            showThemeDialog(row);
             return true;
         });
         list->addView(row);
     }
 
+    {
+        const bool fs = DisplayMode::isFullscreen();
+        auto* fs_row = new MediaCell(
+            ui::Icon::Aspect,
+            i18n::tr("settings.display", "显示与视口") + "：" + (fs ? i18n::tr("settings.fullscreen", "全屏") : i18n::tr("settings.windowed", "窗口")),
+            i18n::tr("settings.display_desc", "内置 16:10 / 16:9 / 宽屏与沉浸黑边适配"));
+        fs_row->registerClickAction([fs_row](brls::View*) {
+            DisplayMode::toggleFullscreen(true);
+            const bool now_fs = DisplayMode::isFullscreen();
+            fs_row->setTitle(i18n::tr("settings.display", "显示与视口") + "：" + (now_fs ? i18n::tr("settings.fullscreen", "全屏") : i18n::tr("settings.windowed", "窗口")));
+            return true;
+        });
+        list->addView(fs_row);
+    }
+
+    {
+        const int cur_fps = DisplayMode::getTargetFps();
+        auto* fps_row = new MediaCell(
+            ui::Icon::Sliders,
+            i18n::tr("settings.fps_limit", "帧率上限") + "：" + DisplayMode::getFpsLimitLabel(cur_fps),
+            i18n::tr("settings.fps_limit_desc", "自动跟随屏幕刷新率（OLED 90Hz / 外接高刷 120Hz+）或自定义限帧"));
+        fps_row->registerClickAction([this, fps_row](brls::View*) {
+            showFpsLimitDialog(fps_row);
+            return true;
+        });
+        list->addView(fps_row);
+    }
+
+    {
+        std::string cur_lang = i18n::getLanguage();
+        std::string display_lang = (cur_lang == "zh-Hans") ? "简体中文" : (cur_lang == "en-US" ? "English" : "跟随系统 / Auto");
+        auto* lang_row = new MediaCell(
+            ui::Icon::Subtitles,
+            i18n::tr("settings.language", "界面语言 / Language") + "：" + display_lang,
+            i18n::tr("settings.language_desc", "选择应用程序显示语言"));
+        lang_row->registerClickAction([this, lang_row](brls::View*) {
+            showLanguageDialog(lang_row);
+            return true;
+        });
+        list->addView(lang_row);
+    }
+
+    // ── 控制 ──
+    list->addView(new SectionHeader(i18n::tr("settings.controls", "控制")));
+
+    {
+        const bool swap = InputSettings::isSwapAB();
+        auto* swap_row = new MediaCell(
+            ui::Icon::Sliders,
+            i18n::tr("settings.swap_ab", "手柄确认键") + "：" + (swap ? i18n::tr("settings.layout_switch", "Switch 布局（B 确认 / A 返回）") : i18n::tr("settings.layout_xbox", "Xbox 布局（A 确认 / B 返回）")),
+            i18n::tr("settings.swap_ab_desc", "Nintendo Switch 风格或 Xbox/Steam 风格按键布局，即时生效"));
+        swap_row->registerClickAction([swap_row](brls::View*) {
+            InputSettings::toggleSwapAB();
+            const bool now_swap = InputSettings::isSwapAB();
+            swap_row->setTitle(i18n::tr("settings.swap_ab", "手柄确认键") + "：" +
+                               (now_swap ? i18n::tr("settings.layout_switch", "Switch 布局（B 确认 / A 返回）") : i18n::tr("settings.layout_xbox", "Xbox 布局（A 确认 / B 返回）")));
+            brls::Application::notify(i18n::tr("settings.swap_ab", "手柄确认键") + "：" +
+                                      (now_swap ? "Switch (B)" : "Xbox (A)"));
+            return true;
+        });
+        list->addView(swap_row);
+    }
+
+    {
+        auto* keymap_row = new MediaCell(
+            ui::Icon::Sliders,
+            i18n::tr("settings.keymap_icon", "手柄按键提示图标") + "：" + Keymap::styleToString(Keymap::getStyle()),
+            i18n::tr("settings.keymap_icon_desc", "底栏手柄按键提示图标风格（支持 Xbox、PS 与 Switch）"));
+        keymap_row->registerClickAction([this, keymap_row](brls::View*) {
+            showKeymapDialog(keymap_row);
+            return true;
+        });
+        list->addView(keymap_row);
+    }
+
     // ── 插件 ──
-    list->addView(new SectionHeader("插件"));
+    list->addView(new SectionHeader(i18n::tr("settings.plugins", "插件")));
 
     auto* plugins = new MediaCell(
-        ui::Icon::Plugin, "插件管理",
-        "安装 / 移除视频源与刮削源，来自 ZIP 或目录");
+        ui::Icon::Plugin, i18n::tr("settings.plugins_manage", "插件管理"),
+        i18n::tr("settings.plugins_desc", "安装 / 移除视频源与刮削源，来自 ZIP 或目录"));
     plugins->setChevron(true);
     plugins->registerClickAction([](brls::View*) {
         brls::Application::pushActivity(new PluginManagerActivity());
@@ -1327,34 +1559,360 @@ brls::View* FileBrowserActivity::createSettingsView() {
     list->addView(plugins);
 
     // ── 关于 ──
-    list->addView(new SectionHeader("关于"));
+    list->addView(new SectionHeader(i18n::tr("settings.about", "关于")));
 
     auto* about = new MediaCell(
-        ui::Icon::Info, "DeckPlayer",
-        "GPL-3.0 开源 · 手柄 / 触控优先的本地音视频播放器");
-    about->registerClickAction([](brls::View*) {
-        brls::Application::notify("DeckPlayer · GPL-3.0");
+        ui::Icon::Info, i18n::tr("settings.about_app", "关于 Muvik"),
+        i18n::tr("settings.about_desc", "点击查看版本信息与核心引擎详情"));
+    about->setChevron(true);
+    about->registerClickAction([this](brls::View*) {
+        showAboutDialog();
         return true;
     });
     list->addView(about);
 
+    auto* license_cell = new MediaCell(
+        ui::Icon::Info, i18n::tr("settings.license", "开源许可证：GNU GPL v3.0"),
+        i18n::tr("settings.license_desc", "自由开源软件，保障用户使用、修改与分发的全部权利"));
+    license_cell->registerClickAction([](brls::View*) {
+        brls::Application::notify("GPL-3.0 · LICENSE");
+        return true;
+    });
+    list->addView(license_cell);
+
+    auto* engines_cell = new MediaCell(
+        ui::Icon::Play, i18n::tr("settings.engines", "解码核心与界面引擎"),
+        i18n::tr("settings.engines_desc", "libmpv 硬件加速 + FFmpeg 全能编解码 + Borealis 原生手柄 UI"));
+    engines_cell->registerClickAction([this](brls::View*) {
+        showAboutDialog();
+        return true;
+    });
+    list->addView(engines_cell);
+
+    // ── 系统 ──
+    list->addView(new SectionHeader(i18n::tr("settings.system", "系统")));
+
+    auto* exit_cell = new MediaCell(
+        ui::Icon::Close, i18n::tr("settings.exit", "退出 Muvik"),
+        i18n::tr("settings.exit_desc", "保存所有状态并正常退出程序（手柄按 A 确认）"));
+    exit_cell->registerClickAction([this](brls::View*) {
+        showExitDialog();
+        return true;
+    });
+    list->addView(exit_cell);
+
     scroller->setContentView(list);
     return scroller;
+}
+
+void FileBrowserActivity::showExitDialog() {
+    auto* dialog = new brls::Dialog(i18n::tr("dialog.exit_confirm", "确定要退出 Muvik 吗？"));
+    dialog->addButton(i18n::tr("common.cancel", "取消"), []() {});
+    dialog->addButton(i18n::tr("common.exit", "退出"), []() {
+        brls::Application::quit();
+    });
+    dialog->open();
+}
+
+void FileBrowserActivity::showAboutDialog() {
+    brls::Box* box = new brls::Box();
+    box->setAxis(brls::Axis::COLUMN);
+    box->setWidth(680);
+    box->setPaddingTop(16.0f);
+    box->setPaddingBottom(16.0f);
+    box->setPaddingLeft(24.0f);
+    box->setPaddingRight(24.0f);
+
+    auto* dialog = new brls::Dialog(box);
+
+    auto* title_lbl = new brls::Label();
+    title_lbl->setText(i18n::tr("about.title", "Muvik"));
+    title_lbl->setFontSize(26.0f);
+    title_lbl->setTextColor(brls::Application::getTheme()["brls/sidebar/active_item"]);
+    box->addView(title_lbl);
+
+    auto* subtitle_lbl = new brls::Label();
+    subtitle_lbl->setText(i18n::tr("about.subtitle", "专为大屏与掌机手柄打造的跨平台纯净影音中心"));
+    subtitle_lbl->setFontSize(15.0f);
+    subtitle_lbl->setMarginTop(4.0f);
+    subtitle_lbl->setTextColor(brls::Application::getTheme()["brls/header/subtitle"]);
+    box->addView(subtitle_lbl);
+
+    auto* sep1 = new brls::Rectangle();
+    sep1->setHeight(1.0f);
+    sep1->setMarginTop(12.0f);
+    sep1->setMarginBottom(12.0f);
+    sep1->setColor(brls::Application::getTheme()["brls/sidebar/separator"]);
+    box->addView(sep1);
+
+    auto add_item = [box](const std::string& label, const std::string& desc) {
+        auto* item_box = new brls::Box(brls::Axis::COLUMN);
+        item_box->setMarginBottom(10.0f);
+        auto* l1 = new brls::Label();
+        l1->setText(label);
+        l1->setFontSize(16.0f);
+        l1->setTextColor(brls::Application::getTheme()["brls/text"]);
+        auto* l2 = new brls::Label();
+        l2->setText(desc);
+        l2->setFontSize(13.0f);
+        l2->setMarginTop(2.0f);
+        l2->setTextColor(brls::Application::getTheme()["brls/header/subtitle"]);
+        item_box->addView(l1);
+        item_box->addView(l2);
+        box->addView(item_box);
+    };
+
+    add_item(i18n::tr("about.version_title", "版本信息"), i18n::tr("about.version_detail", "v1.0.0 (Release Build · C++17 · 60FPS Controller UI)"));
+    add_item(i18n::tr("about.license_title", "开源协议"), i18n::tr("about.license_detail", "GNU General Public License v3.0 (GPL-3.0)"));
+    add_item(i18n::tr("about.decoder_title", "解码核心"), i18n::tr("about.decoder_detail", "libmpv (硬件加速、ASS/SSA 特效字幕) + FFmpeg"));
+    add_item(i18n::tr("about.ui_engine_title", "界面引擎"), i18n::tr("about.ui_engine_detail", "Borealis UI + Yoga Flexbox (原生手柄 60FPS 渲染)"));
+    add_item(i18n::tr("about.handheld_title", "交互调优"), i18n::tr("about.handheld_detail", "大屏手柄原生支持、掌机与电视深度适配、视听双引擎独立驱动"));
+    add_item(i18n::tr("about.plugin_ext_title", "扩展支持"), i18n::tr("about.plugin_ext_detail", "QuickJS 极轻量沙盒插件引擎，支持自建媒体源、网盘与刮削器"));
+    add_item(i18n::tr("about.acknowledgments_title", "致谢与参考"), i18n::tr("about.acknowledgments_detail", "特别致谢 wiliwili、Kodi、mpv 等开源项目在手柄交互与音视频架构设计上的启发与贡献"));
+
+    dialog->addButton(i18n::tr("common.close", "关闭"), []() {});
+    dialog->open();
+}
+
+namespace {
+
+struct SelectionOption {
+    std::string id;
+    std::string title;
+    std::string subtitle;
+    ui::Icon icon = ui::Icon::Sliders;
+    bool is_selected = false;
+    std::string badge;
+};
+
+void showSelectionDialog(
+    const std::string& dialog_title,
+    const std::vector<SelectionOption>& options,
+    std::function<void(const std::string& id)> on_select
+) {
+    auto* container = new brls::Box();
+    container->setAxis(brls::Axis::COLUMN);
+    container->setWidth(600);
+
+    auto* list = new brls::Box();
+    list->setAxis(brls::Axis::COLUMN);
+    list->setPaddingBottom(16.0f);
+
+    list->addView(new SectionHeader(dialog_title));
+
+    auto* scroller = new brls::ScrollingFrame();
+    styleScrollingFrame(scroller);
+
+    auto* dialog = new brls::Dialog(container);
+    dialog->setCancelable(true);
+
+    brls::View* focused_view = nullptr;
+
+    for (const auto& opt : options) {
+        auto* cell = new MediaCell(opt.icon, opt.title, opt.subtitle);
+        cell->setHeight(64.0f);
+        if (!opt.badge.empty()) {
+            cell->setBadge(opt.badge);
+        } else if (opt.is_selected) {
+            cell->setBadge(i18n::tr("common.current", "当前"));
+        }
+
+        std::string opt_id = opt.id;
+        cell->registerClickAction([dialog, on_select, opt_id](brls::View*) {
+            if (on_select) on_select(opt_id);
+            dialog->close();
+            return true;
+        });
+
+        if (opt.is_selected && !focused_view) {
+            focused_view = cell;
+        }
+
+        list->addView(cell);
+    }
+
+    scroller->setContentView(list);
+
+    // 计算弹窗高度（自适应选项数量，避免空虚多余留白）
+    const float content_h = std::min(440.0f, options.size() * 64.0f + 64.0f);
+    scroller->setHeight(content_h);
+    container->addView(scroller);
+
+    // 底部添加单项返回按钮，按 B 键或点击均可正常退出
+    dialog->addButton(i18n::tr("common.cancel", "取消"), []() {});
+
+    // 默认高亮选中当前正在生效的项目
+    if (focused_view) {
+        dialog->setLastFocusedView(focused_view);
+    }
+
+    dialog->open();
+}
+
+} // namespace
+
+void FileBrowserActivity::showLanguageDialog([[maybe_unused]] MediaCell* lang_row) {
+    std::string cur_lang = i18n::getLanguage();
+    std::vector<SelectionOption> options;
+
+    for (const auto& opt : i18n::getAvailableLanguages()) {
+        SelectionOption item;
+        item.id = opt.code;
+        item.title = opt.name;
+        item.subtitle = (opt.code == "zh-Hans" ? "简体中文 (Simplified Chinese)" : "English (United States)");
+        item.icon = ui::Icon::Subtitles;
+        item.is_selected = (opt.code == cur_lang);
+        options.push_back(item);
+    }
+
+    showSelectionDialog(
+        i18n::tr("dialog.select_language", "选择界面语言"),
+        options,
+        [this](const std::string& code) {
+            i18n::setLanguage(code);
+            if (tab_frame_) {
+                tab_frame_->setTabLabel(0, i18n::tr("tabs.library", "媒体库"));
+                tab_frame_->setTabLabel(1, i18n::tr("tabs.files", "文件"));
+                tab_frame_->setTabLabel(2, i18n::tr("tabs.history", "历史"));
+                tab_frame_->setTabLabel(3, i18n::tr("tabs.settings", "设置"));
+                tab_frame_->selectTab(3);
+            }
+            refresh();
+            brls::Application::notify(i18n::tr("dialog.language_changed", "已切换语言：") + code);
+        }
+    );
+}
+
+void FileBrowserActivity::showThemeDialog(MediaCell* theme_row) {
+    ThemeItem cur = getCurrentTheme();
+    auto themes = getAvailableThemes();
+
+    std::vector<SelectionOption> options;
+    for (const auto& t : themes) {
+        SelectionOption opt;
+        opt.id = t.id;
+        opt.title = t.name;
+        if (!t.author.empty() && !t.is_builtin) {
+            opt.subtitle = "作者: " + t.author;
+        } else if (t.id == "dark") {
+            opt.subtitle = i18n::tr("theme.dark_desc", "标准深灰蓝影音底色");
+        } else if (t.id == "oled") {
+            opt.subtitle = i18n::tr("theme.oled_desc", "纯黑像素级关屏省电背景");
+        } else if (t.id == "light") {
+            opt.subtitle = i18n::tr("theme.light_desc", "暖白纸感明亮主题");
+        }
+        opt.icon = ui::Icon::Info;
+        if (t.is_workshop) opt.badge = "[创意工坊]";
+        else if (!t.is_builtin) opt.badge = "[自定义]";
+        opt.is_selected = (t.id == cur.id);
+        options.push_back(opt);
+    }
+
+    showSelectionDialog(
+        i18n::tr("dialog.select_theme", "选择主题风格"),
+        options,
+        [this, theme_row, themes](const std::string& tid) {
+            applyThemeById(tid);
+            std::string tname = tid;
+            for (const auto& t : themes) {
+                if (t.id == tid) { tname = t.name; break; }
+            }
+            if (theme_row) {
+                theme_row->setTitle(i18n::tr("settings.theme", "主题风格") + "：" + tname);
+            }
+            refresh();
+            brls::Application::notify(i18n::tr("settings.theme_changed", "已切换为：") + tname);
+        }
+    );
+}
+
+void FileBrowserActivity::showFpsLimitDialog(MediaCell* fps_row) {
+    const int cur_fps = DisplayMode::getTargetFps();
+    const std::vector<std::pair<int, std::string>> presets = {
+        {0, i18n::tr("fps.auto", "自动（跟随屏幕 / 垂直同步）")},
+        {30, i18n::tr("fps.30", "30 FPS（极致省电）")},
+        {40, i18n::tr("fps.40", "40 FPS（掌机平衡）")},
+        {48, i18n::tr("fps.48", "48 FPS（24fps 影视匹配）")},
+        {60, i18n::tr("fps.60", "60 FPS（标准 LCD）")},
+        {90, i18n::tr("fps.90", "90 FPS（Steam Deck OLED）")},
+        {120, i18n::tr("fps.120", "120 FPS（外接高刷）")},
+        {144, i18n::tr("fps.144", "144 FPS（电竞高刷）")},
+    };
+
+    std::vector<SelectionOption> options;
+    for (const auto& [fps, desc] : presets) {
+        SelectionOption opt;
+        opt.id = std::to_string(fps);
+        opt.title = (fps == 0 ? "自动 (VSync)" : std::to_string(fps) + " FPS");
+        opt.subtitle = desc;
+        opt.icon = ui::Icon::Sliders;
+        opt.is_selected = (fps == cur_fps);
+        options.push_back(opt);
+    }
+
+    showSelectionDialog(
+        i18n::tr("settings.fps_limit", "帧率上限"),
+        options,
+        [fps_row](const std::string& id) {
+            int fps = std::stoi(id);
+            DisplayMode::setTargetFps(fps, true);
+            std::string label = DisplayMode::getFpsLimitLabel(fps);
+            if (fps_row) {
+                fps_row->setTitle(i18n::tr("settings.fps_limit", "帧率上限") + "：" + label);
+            }
+            brls::Application::notify(i18n::tr("settings.fps_limit", "帧率上限") + "：" + label);
+        }
+    );
+}
+
+void FileBrowserActivity::showKeymapDialog(MediaCell* keymap_row) {
+    const KeymapStyle cur_style = Keymap::getStyle();
+    const std::vector<std::pair<KeymapStyle, std::string>> styles = {
+        {KeymapStyle::Auto, i18n::tr("keymap.auto", "自动识别（跟随手柄）")},
+        {KeymapStyle::Xbox, i18n::tr("keymap.xbox", "Xbox / Steam Deck（A/B/X/Y）")},
+        {KeymapStyle::PlayStation, i18n::tr("keymap.ps", "PlayStation（✕/◯/▢/△）")},
+        {KeymapStyle::Switch, i18n::tr("keymap.switch", "Nintendo Switch（Switch 风格）")},
+    };
+
+    std::vector<SelectionOption> options;
+    for (const auto& [s, desc] : styles) {
+        SelectionOption opt;
+        opt.id = std::to_string(static_cast<int>(s));
+        opt.title = Keymap::styleToString(s);
+        opt.subtitle = desc;
+        opt.icon = ui::Icon::Sliders;
+        opt.is_selected = (s == cur_style);
+        options.push_back(opt);
+    }
+
+    showSelectionDialog(
+        i18n::tr("dialog.select_keymap", "选择手柄按键提示风格"),
+        options,
+        [keymap_row](const std::string& id) {
+            KeymapStyle s = static_cast<KeymapStyle>(std::stoi(id));
+            Keymap::setStyle(s);
+            Keymap::reloadKeymapFont();
+            if (keymap_row) {
+                keymap_row->setTitle(i18n::tr("settings.keymap_icon", "手柄按键提示图标") + "：" + Keymap::styleToString(s));
+            }
+            brls::Application::notify(Keymap::styleToShortString(s));
+        }
+    );
 }
 
 void FileBrowserActivity::promptAddFolder() {
     auto picker = FilePickerActivity::folders([this](const std::string& path) {
         auto& lib = MediaLibrary::getInstance();
         if (lib.hasFolder(path)) {
-            brls::Application::notify("该文件夹已在媒体库中");
+            brls::Application::notify(i18n::tr("library.folder_exists", "该文件夹已在媒体库中"));
             return;
         }
         if (lib.addFolder(path)) {
             lib.save();
-            brls::Application::notify("已添加，正在扫描…");
+            brls::Application::notify(i18n::tr("library.folder_added_scanning", "已添加，正在扫描…"));
             startLibraryScan();
         } else {
-            brls::Application::notify("添加失败：路径不可用或已存在");
+            brls::Application::notify(i18n::tr("library.folder_add_failed", "添加失败：路径不可用或已存在"));
         }
     });
     brls::Application::pushActivity(picker);
@@ -1363,7 +1921,7 @@ void FileBrowserActivity::promptAddFolder() {
 void FileBrowserActivity::startLibraryScan() {
     auto& lib = MediaLibrary::getInstance();
     if (lib.isScanning()) {
-        brls::Application::notify("扫描已在进行中");
+        brls::Application::notify(i18n::tr("library.scan_running", "扫描已在进行中"));
         return;
     }
 
@@ -1372,26 +1930,32 @@ void FileBrowserActivity::startLibraryScan() {
     alive_flags_.push_back(alive);
 
     std::thread([this, alive]() {
-        MediaLibrary::getInstance().rebuild(
-            [](int done, int total, const std::string& cur) {
-                brls::Logger::info("扫描中 {}/{}: {}", done, total, cur);
+        try {
+            MediaLibrary::getInstance().rebuild(
+                [](int done, int total, const std::string& cur) {
+                    brls::Logger::info("扫描中 {}/{}: {}", done, total, cur);
+                });
+            brls::sync([this, alive]() {
+                // 必须最先检查：活动销毁后 this 已悬垂，任何成员访问都是未定义行为
+                if (!alive->load()) return;
+                brls::Application::notify(i18n::tr("library.scan_complete", "媒体库扫描完成"));
+                refresh();
             });
-        brls::sync([this, alive]() {
-            // 必须最先检查：活动销毁后 this 已悬垂，任何成员访问都是未定义行为
-            if (!alive->load()) return;
-            brls::Application::notify("媒体库扫描完成");
-            refresh();
-        });
+        } catch (const std::exception& e) {
+            brls::Logger::error("startLibraryScan thread error: {}", e.what());
+        } catch (...) {
+            brls::Logger::error("startLibraryScan thread unknown error");
+        }
     }).detach();
 }
 
 void FileBrowserActivity::showFolderOptions(const std::string& path, const std::string& name) {
-    brls::Dialog* dialog = new brls::Dialog("媒体文件夹：" + name + "\n" + path);
-    dialog->addButton("取消", []() {});
-    dialog->addButton("移除该文件夹", [path]() {
+    brls::Dialog* dialog = new brls::Dialog(i18n::tr("library.folder_options_title", "媒体文件夹：") + name + "\n" + path);
+    dialog->addButton(i18n::tr("common.cancel", "取消"), []() {});
+    dialog->addButton(i18n::tr("library.remove_folder", "移除该文件夹"), [path]() {
         if (MediaLibrary::getInstance().removeFolder(path)) {
             MediaLibrary::getInstance().save();
-            brls::Application::notify("已移除");
+            brls::Application::notify(i18n::tr("library.folder_removed", "已移除"));
         }
     });
     dialog->open();
@@ -1399,60 +1963,104 @@ void FileBrowserActivity::showFolderOptions(const std::string& path, const std::
 
 
 brls::View* FileBrowserActivity::createRecentView() {
-    brls::ScrollingFrame* scroller = new brls::ScrollingFrame();
+    auto* scroller = new brls::ScrollingFrame();
     scroller->setGrow(1.0f);
     scroller->setMarginRight(CONTENT_SAFE_MARGIN);
     styleScrollingFrame(scroller);
 
-    brls::Box* list = new brls::Box();
-    list->setAxis(brls::Axis::COLUMN);
-    // 底部留白：最后一个卡片滚到底时也要完整露出，
-    // 否则会被底部提示栏硬切一条边（观感非常像裁切错误）。
-    list->setPaddingBottom(28.0f);
+    recent_slot_ = DynamicBox::makeSlot();
+    recent_list_ = new DynamicBox(recent_slot_);
+    *recent_slot_ = recent_list_;
+    recent_list_->setAxis(brls::Axis::COLUMN);
+    recent_list_->setPaddingBottom(28.0f);
 
-    list->addView(new SectionHeader("继续观看"));
+    renderRecentContent();
+
+    scroller->setContentView(recent_list_);
+    return scroller;
+}
+
+void FileBrowserActivity::renderRecentContent() {
+    if (!recent_list_) return;
+    recent_list_->clearViews();
+
+    recent_list_->addView(new SectionHeader(i18n::tr("history.title", "历史")));
 
     auto recents = PlaybackHistory::getInstance().getRecentList(30);
     if (recents.empty()) {
-        list->addView(new EmptyState(
-            ui::Icon::Clock, "还没有播放记录",
-            "看过一半的影片会出现在这里\n下次打开直接从断点继续"));
-    } else {
-        for (const auto& rec : recents) {
-            fs::path p(rec.path);
-            auto* cell = new MediaCell(ui::Icon::Video, p.filename().string(),
-                                       fs::path(rec.path).parent_path().filename().string());
-
-            std::string badge;
-            if (rec.completed) {
-                badge = "已看完";
-                cell->setProgress(1.0f);
-            } else if (rec.duration > 0) {
-                const float ratio = (float)((double)rec.position / rec.duration);
-                cell->setProgress(ratio);
-                badge = MediaScanner::formatDuration(rec.position) + " / " +
-                        MediaScanner::formatDuration(rec.duration);
-            }
-            if (!badge.empty()) cell->setBadge(badge);
-
-            std::string file_path = rec.path;
-            cell->registerClickAction([file_path](brls::View*) {
-                MediaItem single_item;
-                single_item.name = fs::path(file_path).filename().string();
-                single_item.path = file_path;
-                single_item.type = MediaType::Video;
-
-                std::vector<MediaItem> playlist = { single_item };
-                brls::Application::pushActivity(new PlayerActivity(playlist, 0));
-                return true;
-            });
-
-            list->addView(cell);
-        }
+        recent_list_->addView(new EmptyState(
+            ui::Icon::Clock, i18n::tr("history.empty_title", "暂无播放记录"),
+            i18n::tr("history.empty_desc", "播放过的视频和音频会显示在这里")));
+        return;
     }
 
-    scroller->setContentView(list);
-    return scroller;
+    std::vector<std::string> thumb_paths_to_request;
+    for (const auto& rec : recents) {
+        fs::path p(rec.path);
+        MediaItem item;
+        item.path = rec.path;
+        item.name = p.filename().string();
+        std::string ext = p.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        if (MediaScanner::isSupportedAudioFormat(ext)) {
+            item.type = MediaType::Audio;
+        } else {
+            item.type = MediaType::Video;
+        }
+
+        std::string title = item.name;
+        std::string subtitle = p.parent_path().filename().string();
+        if (auto meta = MetadataStore::getInstance().get(item.path); meta && !meta->is_empty()) {
+            if (!meta->title.empty()) title = meta->title;
+            if (!meta->release_date.empty()) subtitle = meta->release_date.substr(0, 4) + " · " + subtitle;
+        }
+
+        auto* cell = new MediaCell(
+            item.is_audio() ? ui::Icon::Music : ui::Icon::Video,
+            title,
+            subtitle);
+
+        if (item.is_video()) {
+            cell->setThumbnail(sceneSpecFor(item));
+            if (!ThumbnailCache::getInstance().has(item.path)) {
+                thumb_paths_to_request.push_back(item.path);
+            }
+        }
+
+        std::string badge;
+        if (rec.completed) {
+            badge = i18n::tr("common.played", "已看完");
+            cell->setProgress(1.0f);
+        } else if (rec.duration > 0) {
+            const float ratio = (float)((double)rec.position / rec.duration);
+            cell->setProgress(ratio);
+            badge = MediaScanner::formatDuration(rec.position) + " / " +
+                    MediaScanner::formatDuration(rec.duration);
+        }
+        if (!badge.empty()) cell->setBadge(badge);
+
+        cell->registerClickAction([item](brls::View*) {
+            if (item.is_audio()) {
+                AudioPlayer::getInstance().playFile(item.path, item.name);
+                brls::Application::pushActivity(new NowPlayingActivity());
+            } else {
+                std::vector<MediaItem> playlist = { item };
+                brls::Application::pushActivity(new PlayerActivity(playlist, 0));
+            }
+            return true;
+        });
+
+        recent_list_->addView(cell);
+    }
+
+    if (!thumb_paths_to_request.empty() && ThumbnailCache::getInstance().enabled()) {
+        auto alive = std::make_shared<std::atomic<bool>>(true);
+        alive_flags_.push_back(alive);
+        ThumbnailCache::getInstance().requestBatch(thumb_paths_to_request, [this, alive]() {
+            if (!alive->load()) return;
+            renderRecentContent();
+        });
+    }
 }
 
 void FileBrowserActivity::selectTabForTest(int index) {
@@ -1484,7 +2092,7 @@ void FileBrowserActivity::navigateTo(const std::string& path, const std::string&
 void FileBrowserActivity::navigateUp() {
     if (path_history_.empty()) {
         current_path_ = "";
-        frame_->setTitle("DeckPlayer");
+        frame_->setTitle("Muvik");
         renderSourcesContent();
         return;
     }
@@ -1504,10 +2112,11 @@ void FileBrowserActivity::scrapeItem(const std::string& path, const std::string&
     auto scraper_paths = PluginManager::getInstance().getScraperPluginPaths();
     if (scraper_paths.empty()) {
         brls::Dialog* d = new brls::Dialog(
-            "尚未安装刮削器插件。\n\n"
-            "刮削器可为本地影片自动补齐封面、简介与评分。\n"
-            "请到【存储位置 → 插件管理】安装 .so / .dylib 刮削插件。");
-        d->addButton("知道了", []() {});
+            i18n::tr("scraper.not_installed",
+                "尚未安装刮削器插件。\n\n"
+                "刮削器可为本地影片自动补齐封面、简介与评分。\n"
+                "请到【设置 → 插件管理】安装 .so / .dylib / .js 刮削插件。"));
+        d->addButton(i18n::tr("common.understood", "知道了"), []() {});
         d->open();
         return;
     }
@@ -1516,7 +2125,7 @@ void FileBrowserActivity::scrapeItem(const std::string& path, const std::string&
     int64_t year = 0;
     MediaNameParser::parse(filename, query, year);
 
-    brls::Application::notify("正在搜索：" + query);
+    brls::Application::notify(i18n::tr("scraper.searching", "正在搜索：") + query);
 
     // 网络请求可能较慢，放到后台线程，完成后回到 UI 线程。
     // 每次都新建独立标志：若复用 alive_flag_，多个并发刮削会互相覆盖，
@@ -1538,10 +2147,9 @@ void FileBrowserActivity::scrapeItem(const std::string& path, const std::string&
 
             if (!ok) {
                 brls::Dialog* d = new brls::Dialog(
-                    "未找到匹配的影片信息。\n\n"
-                    "搜索词：" + query + "\n\n"
-                    "可尝试重命名文件使其更接近正式片名。");
-                d->addButton("知道了", []() {});
+                    i18n::tr("scraper.not_found", "未找到匹配的影片信息。\n\n搜索词：") + query +
+                    i18n::tr("scraper.not_found_hint", "\n\n可尝试重命名文件使其更接近正式片名。"));
+                d->addButton(i18n::tr("common.understood", "知道了"), []() {});
                 d->open();
                 return;
             }
@@ -1560,21 +2168,21 @@ void FileBrowserActivity::scrapeItem(const std::string& path, const std::string&
             MetadataStore::getInstance().put(meta);
             MetadataStore::getInstance().save();
 
-            std::string body = "标题：" + meta.title + "\n";
-            if (!meta.release_date.empty()) body += "上映：" + meta.release_date + "\n";
+            std::string body = i18n::tr("media.meta_title", "标题：") + meta.title + "\n";
+            if (!meta.release_date.empty()) body += i18n::tr("media.meta_release", "上映：") + meta.release_date + "\n";
             if (meta.runtime_minutes > 0)
-                body += "片长：" + std::to_string(meta.runtime_minutes) + " 分钟\n";
-            if (!meta.genres.empty()) body += "类型：" + meta.genres + "\n";
+                body += i18n::tr("media.meta_runtime", "片长：") + std::to_string(meta.runtime_minutes) + " " + i18n::tr("common.minutes", "分钟") + "\n";
+            if (!meta.genres.empty()) body += i18n::tr("media.meta_genres", "类型：") + meta.genres + "\n";
             if (meta.rating > 0) {
                 char buf[32];
-                snprintf(buf, sizeof(buf), "评分：%.1f / 10\n", meta.rating);
-                body += buf;
+                snprintf(buf, sizeof(buf), "%.1f / 10\n", meta.rating);
+                body += i18n::tr("media.meta_rating", "评分：") + buf;
             }
             if (!meta.overview.empty()) body += "\n" + meta.overview;
 
             brls::Dialog* d = new brls::Dialog(body);
-            d->addButton("完成", [this]() {
-                brls::Application::notify("已保存影片信息");
+            d->addButton(i18n::tr("common.done", "完成"), [this]() {
+                brls::Application::notify(i18n::tr("scraper.saved", "已保存影片信息"));
                 this->refresh();
             });
             d->open();
@@ -1586,22 +2194,22 @@ void FileBrowserActivity::showMediaInfo(const std::string& path, const std::stri
     auto meta = MetadataStore::getInstance().get(path);
     std::string body;
     if (meta && !meta->is_empty()) {
-        body = "标题：" + meta->title + "\n";
-        if (!meta->release_date.empty()) body += "上映：" + meta->release_date + "\n";
+        body = i18n::tr("media.meta_title", "标题：") + meta->title + "\n";
+        if (!meta->release_date.empty()) body += i18n::tr("media.meta_release", "上映：") + meta->release_date + "\n";
         if (meta->runtime_minutes > 0)
-            body += "片长：" + std::to_string(meta->runtime_minutes) + " 分钟\n";
-        if (!meta->genres.empty()) body += "类型：" + meta->genres + "\n";
+            body += i18n::tr("media.meta_runtime", "片长：") + std::to_string(meta->runtime_minutes) + " " + i18n::tr("common.minutes", "分钟") + "\n";
+        if (!meta->genres.empty()) body += i18n::tr("media.meta_genres", "类型：") + meta->genres + "\n";
         if (meta->rating > 0) {
             char buf[32];
-            snprintf(buf, sizeof(buf), "评分：%.1f / 10\n", meta->rating);
-            body += buf;
+            snprintf(buf, sizeof(buf), "%.1f / 10\n", meta->rating);
+            body += i18n::tr("media.meta_rating", "评分：") + buf;
         }
         if (!meta->overview.empty()) body += "\n" + meta->overview;
     } else {
-        body = filename + "\n\n尚未获取影片信息。\n选中该条目后按 X 键可自动刮削。";
+        body = filename + "\n\n" + i18n::tr("media.no_info", "尚未获取影片信息。\n选中该条目后按 X 键可自动刮削。");
     }
     brls::Dialog* d = new brls::Dialog(body);
-    d->addButton("关闭", []() {});
+    d->addButton(i18n::tr("common.close", "关闭"), []() {});
     d->open();
 }
 
@@ -1612,4 +2220,4 @@ void FileBrowserActivity::refresh() {
     renderLibraryContent();
 }
 
-} // namespace deck_player
+} // namespace muvik

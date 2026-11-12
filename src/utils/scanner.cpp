@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include "utils/scanner.hpp"
+#include "utils/i18n.hpp"
 #include <filesystem>
 #include <algorithm>
 #include <iomanip>
@@ -13,7 +14,7 @@
 
 namespace fs = std::filesystem;
 
-namespace deck_player {
+namespace muvik {
 
 // 覆盖业界最普遍、主流及经典音视频格式
 const std::set<std::string> MediaScanner::SUPPORTED_VIDEO_EXTS = {
@@ -77,48 +78,65 @@ std::vector<StorageSource> MediaScanner::getAvailableSources() {
 
     // 1. Linux / SteamOS 存储卡挂载点 (/run/media/*/*)
     const std::string steam_sd_base = "/run/media";
-    if (fs::exists(steam_sd_base)) {
+    std::error_code ec;
+    if (fs::exists(steam_sd_base, ec) && !ec) {
         try {
-            for (const auto& user_entry : fs::directory_iterator(steam_sd_base)) {
-                if (user_entry.is_directory()) {
-                    for (const auto& dev_entry : fs::directory_iterator(user_entry.path())) {
-                        if (dev_entry.is_directory()) {
-                            std::string dev_name = dev_entry.path().filename().string();
-                            std::string label = (dev_name == "mmcblk0p1") ? "Steam Deck MicroSD 卡" : ("扩展存储卡 (" + dev_name + ")");
+            fs::directory_iterator u_it(steam_sd_base, fs::directory_options::skip_permission_denied, ec);
+            fs::directory_iterator u_end;
+            while (!ec && u_it != u_end) {
+                std::error_code e_dir;
+                if (u_it->is_directory(e_dir)) {
+                    std::error_code dev_ec;
+                    fs::directory_iterator dev_it(u_it->path(), fs::directory_options::skip_permission_denied, dev_ec);
+                    fs::directory_iterator dev_end;
+                    while (!dev_ec && dev_it != dev_end) {
+                        std::error_code e_dev_dir;
+                        if (dev_it->is_directory(e_dev_dir)) {
+                            std::string dev_name = dev_it->path().filename().string();
+                            std::string label = (dev_name == "mmcblk0p1")
+                                ? i18n::tr("files.steam_deck_microsd", "Steam Deck MicroSD 卡")
+                                : (i18n::tr("files.external_storage", "扩展存储卡") + " (" + dev_name + ")");
                             sources.push_back({
                                 "sdcard_" + dev_name,
                                 label,
-                                dev_entry.path().string(),
+                                dev_it->path().string(),
                                 "sd_card",
                                 true,
                                 true
                             });
                         }
+                        dev_it.increment(dev_ec);
                     }
                 }
+                u_it.increment(ec);
             }
         } catch (...) {}
     }
 
     // 2. macOS 外部磁盘与 SD 卡挂载点 (/Volumes/*)
     const std::string mac_volumes_base = "/Volumes";
-    if (fs::exists(mac_volumes_base)) {
+    ec.clear();
+    if (fs::exists(mac_volumes_base, ec) && !ec) {
         try {
-            for (const auto& entry : fs::directory_iterator(mac_volumes_base)) {
-                if (entry.is_directory()) {
-                    std::string vol_name = entry.path().filename().string();
+            fs::directory_iterator v_it(mac_volumes_base, fs::directory_options::skip_permission_denied, ec);
+            fs::directory_iterator v_end;
+            while (!ec && v_it != v_end) {
+                std::error_code e_v;
+                if (v_it->is_directory(e_v)) {
+                    std::string vol_name = v_it->path().filename().string();
                     // 过滤系统内置主分区和只读镜像
                     if (vol_name != "Macintosh HD" && vol_name.find("com.apple") == std::string::npos && vol_name[0] != '.') {
                         sources.push_back({
                             "mac_vol_" + vol_name,
-                            "外接驱动器/SD卡 (" + vol_name + ")",
-                            entry.path().string(),
+                            i18n::tr("files.external_volume", "外接卷") + " (" + vol_name + ")",
+                            v_it->path().string(),
                             "sd_card",
                             true,
                             true
                         });
                     }
                 }
+                v_it.increment(ec);
             }
         } catch (...) {}
     }
@@ -129,10 +147,11 @@ std::vector<StorageSource> MediaScanner::getAvailableSources() {
     if (!home_dir.empty()) {
         // macOS 原生叫 Movies，Linux 原生叫 Videos
         std::string movies_path = home_dir + "/Movies";
-        if (fs::exists(movies_path)) {
+        ec.clear();
+        if (fs::exists(movies_path, ec) && !ec) {
             sources.push_back({
                 "movies",
-                "影片库 (Movies)",
+                i18n::tr("files.movies_dir", "电影目录") + " (Movies)",
                 movies_path,
                 "video_library",
                 false,
@@ -141,10 +160,11 @@ std::vector<StorageSource> MediaScanner::getAvailableSources() {
         }
 
         std::string videos_path = home_dir + "/Videos";
-        if (fs::exists(videos_path) && videos_path != movies_path) {
+        ec.clear();
+        if (fs::exists(videos_path, ec) && !ec && videos_path != movies_path) {
             sources.push_back({
                 "videos",
-                "视频库 (Videos)",
+                i18n::tr("files.videos_dir", "视频目录") + " (Videos)",
                 videos_path,
                 "video_library",
                 false,
@@ -153,10 +173,11 @@ std::vector<StorageSource> MediaScanner::getAvailableSources() {
         }
 
         std::string music_path = home_dir + "/Music";
-        if (fs::exists(music_path)) {
+        ec.clear();
+        if (fs::exists(music_path, ec) && !ec) {
             sources.push_back({
                 "music",
-                "音乐音频库 (Music)",
+                i18n::tr("files.music_dir", "音乐目录") + " (Music)",
                 music_path,
                 "music_note",
                 false,
@@ -165,7 +186,8 @@ std::vector<StorageSource> MediaScanner::getAvailableSources() {
         }
 
         std::string downloads_path = home_dir + "/Downloads";
-        if (fs::exists(downloads_path)) {
+        ec.clear();
+        if (fs::exists(downloads_path, ec) && !ec) {
             sources.push_back({
                 "downloads",
                 "下载目录 (Downloads)",
@@ -202,7 +224,8 @@ std::vector<StorageSource> MediaScanner::getAvailableSources() {
 
 std::vector<MediaItem> MediaScanner::listDirectory(const std::string& directory_path) {
     std::vector<MediaItem> items;
-    if (!fs::exists(directory_path) || !fs::is_directory(directory_path)) {
+    std::error_code ec;
+    if (!fs::exists(directory_path, ec) || ec || !fs::is_directory(directory_path, ec) || ec) {
         return items;
     }
 
@@ -210,43 +233,48 @@ std::vector<MediaItem> MediaScanner::listDirectory(const std::string& directory_
         std::vector<MediaItem> directories;
         std::vector<MediaItem> media_files;
 
-        for (const auto& entry : fs::directory_iterator(directory_path, fs::directory_options::skip_permission_denied)) {
-            const auto& path = entry.path();
-            std::string filename = path.filename().string();
+        fs::directory_iterator it(directory_path, fs::directory_options::skip_permission_denied, ec);
+        fs::directory_iterator end;
+        while (!ec && it != end) {
+            try {
+                const auto& path = it->path();
+                std::string filename = path.filename().string();
 
-            // 过滤隐藏文件与系统临时文件
-            if (!filename.empty() && filename[0] == '.') {
-                continue;
-            }
-
-            if (entry.is_directory()) {
-                MediaItem dir_item;
-                dir_item.name = filename;
-                dir_item.path = path.string();
-                dir_item.type = MediaType::Directory;
-                directories.push_back(std::move(dir_item));
-            } else if (entry.is_regular_file()) {
-                std::string ext = path.extension().string();
-                bool is_v = isSupportedVideoFormat(ext);
-                bool is_a = isSupportedAudioFormat(ext);
-
-                if (is_v || is_a) {
-                    MediaItem m_item;
-                    m_item.name = filename;
-                    m_item.path = path.string();
-                    m_item.type = is_v ? MediaType::Video : MediaType::Audio;
-                    m_item.extension = ext;
-                    try {
-                        m_item.size = static_cast<int64_t>(entry.file_size());
-                    } catch (...) {
-                        m_item.size = 0;
-                    }
-                    if (is_v) {
-                        m_item.matched_subtitles = findMatchingSubtitles(m_item.path);
-                    }
-                    media_files.push_back(std::move(m_item));
+                // 过滤隐藏文件与系统临时文件
+                if (!filename.empty() && filename[0] == '.') {
+                    it.increment(ec);
+                    continue;
                 }
-            }
+
+                std::error_code entry_ec;
+                if (it->is_directory(entry_ec)) {
+                    MediaItem dir_item;
+                    dir_item.name = filename;
+                    dir_item.path = path.string();
+                    dir_item.type = MediaType::Directory;
+                    directories.push_back(std::move(dir_item));
+                } else if (it->is_regular_file(entry_ec)) {
+                    std::string ext = path.extension().string();
+                    bool is_v = isSupportedVideoFormat(ext);
+                    bool is_a = isSupportedAudioFormat(ext);
+
+                    if (is_v || is_a) {
+                        MediaItem m_item;
+                        m_item.name = filename;
+                        m_item.path = path.string();
+                        m_item.type = is_v ? MediaType::Video : MediaType::Audio;
+                        m_item.extension = ext;
+                        std::error_code sz_ec;
+                        m_item.size = static_cast<int64_t>(it->file_size(sz_ec));
+                        if (sz_ec) m_item.size = 0;
+                        if (is_v) {
+                            m_item.matched_subtitles = findMatchingSubtitles(m_item.path);
+                        }
+                        media_files.push_back(std::move(m_item));
+                    }
+                }
+            } catch (...) {}
+            it.increment(ec);
         }
 
         auto sorter = [](const MediaItem& a, const MediaItem& b) {
@@ -265,40 +293,46 @@ std::vector<MediaItem> MediaScanner::listDirectory(const std::string& directory_
 
 std::vector<MediaItem> MediaScanner::scanMediaRecursively(const std::string& root_path, bool video_only, int max_depth) {
     std::vector<MediaItem> results;
-    if (!fs::exists(root_path)) return results;
+    std::error_code root_ec;
+    if (!fs::exists(root_path, root_ec) || root_ec) return results;
 
     auto scan_helper = [&](auto& self, const fs::path& current_path, int current_depth) -> void {
         if (current_depth > max_depth) return;
 
         try {
-            for (const auto& entry : fs::directory_iterator(current_path, fs::directory_options::skip_permission_denied)) {
-                if (entry.is_directory()) {
-                    std::string dirname = entry.path().filename().string();
-                    if (!dirname.empty() && dirname[0] != '.') {
-                        self(self, entry.path(), current_depth + 1);
-                    }
-                } else if (entry.is_regular_file()) {
-                    std::string ext = entry.path().extension().string();
-                    bool is_v = isSupportedVideoFormat(ext);
-                    bool is_a = !video_only && isSupportedAudioFormat(ext);
+            std::error_code it_ec;
+            fs::directory_iterator it(current_path, fs::directory_options::skip_permission_denied, it_ec);
+            fs::directory_iterator end;
+            while (!it_ec && it != end) {
+                try {
+                    std::error_code e_type;
+                    if (it->is_directory(e_type)) {
+                        std::string dirname = it->path().filename().string();
+                        if (!dirname.empty() && dirname[0] != '.') {
+                            self(self, it->path(), current_depth + 1);
+                        }
+                    } else if (it->is_regular_file(e_type)) {
+                        std::string ext = it->path().extension().string();
+                        bool is_v = isSupportedVideoFormat(ext);
+                        bool is_a = !video_only && isSupportedAudioFormat(ext);
 
-                    if (is_v || is_a) {
-                        MediaItem item;
-                        item.name = entry.path().filename().string();
-                        item.path = entry.path().string();
-                        item.type = is_v ? MediaType::Video : MediaType::Audio;
-                        item.extension = ext;
-                        try {
-                            item.size = static_cast<int64_t>(entry.file_size());
-                        } catch (...) {
-                            item.size = 0;
+                        if (is_v || is_a) {
+                            MediaItem item;
+                            item.name = it->path().filename().string();
+                            item.path = it->path().string();
+                            item.type = is_v ? MediaType::Video : MediaType::Audio;
+                            item.extension = ext;
+                            std::error_code sz_ec;
+                            item.size = static_cast<int64_t>(it->file_size(sz_ec));
+                            if (sz_ec) item.size = 0;
+                            if (is_v) {
+                                item.matched_subtitles = findMatchingSubtitles(item.path);
+                            }
+                            results.push_back(std::move(item));
                         }
-                        if (is_v) {
-                            item.matched_subtitles = findMatchingSubtitles(item.path);
-                        }
-                        results.push_back(std::move(item));
                     }
-                }
+                } catch (...) {}
+                it.increment(it_ec);
             }
         } catch (...) {}
     };
@@ -314,17 +348,24 @@ std::vector<std::string> MediaScanner::findMatchingSubtitles(const std::string& 
         fs::path parent_dir = v_path.parent_path();
         std::string stem_name = v_path.stem().string();
 
-        if (fs::exists(parent_dir)) {
-            for (const auto& entry : fs::directory_iterator(parent_dir, fs::directory_options::skip_permission_denied)) {
-                if (entry.is_regular_file()) {
-                    std::string ext = entry.path().extension().string();
-                    if (isSupportedSubtitleFormat(ext)) {
-                        std::string sub_stem = entry.path().stem().string();
-                        if (sub_stem.rfind(stem_name, 0) == 0) {
-                            subtitles.push_back(entry.path().string());
+        std::error_code ec;
+        if (fs::exists(parent_dir, ec) && !ec) {
+            fs::directory_iterator it(parent_dir, fs::directory_options::skip_permission_denied, ec);
+            fs::directory_iterator end;
+            while (!ec && it != end) {
+                try {
+                    std::error_code f_ec;
+                    if (it->is_regular_file(f_ec)) {
+                        std::string ext = it->path().extension().string();
+                        if (isSupportedSubtitleFormat(ext)) {
+                            std::string sub_stem = it->path().stem().string();
+                            if (sub_stem.rfind(stem_name, 0) == 0) {
+                                subtitles.push_back(it->path().string());
+                            }
                         }
                     }
-                }
+                } catch (...) {}
+                it.increment(ec);
             }
         }
     } catch (...) {}
@@ -366,4 +407,4 @@ std::string MediaScanner::formatFileSize(int64_t bytes) {
     return oss.str();
 }
 
-} // namespace deck_player
+} // namespace muvik

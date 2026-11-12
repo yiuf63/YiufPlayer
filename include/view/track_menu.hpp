@@ -8,7 +8,7 @@
 #include <functional>
 #include "view/mpv_player.hpp"
 
-namespace deck_player {
+namespace muvik {
 
 class TrackSelectionDialog {
 public:
@@ -28,4 +28,4 @@ public:
     );
 };
 
-} // namespace deck_player
+} // namespace muvik

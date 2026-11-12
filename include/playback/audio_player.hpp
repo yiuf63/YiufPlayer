@@ -15,7 +15,7 @@
 #include <atomic>
 #include <chrono>
 
-namespace deck_player {
+namespace muvik {
 
 // 全局音乐播放引擎。
 //
@@ -103,4 +103,4 @@ private:
     std::chrono::steady_clock::time_point last_notify_;
 };
 
-} // namespace deck_player
+} // namespace muvik

@@ -7,7 +7,7 @@
 #include <fstream>
 #include <filesystem>
 
-using namespace deck_player;
+using namespace muvik;
 namespace fs = std::filesystem;
 
 namespace {
@@ -21,11 +21,11 @@ void writeFile(const std::string& path) {
 } // namespace
 
 int main() {
-    setenv("XDG_CONFIG_HOME", "/tmp/deckplayer_test_library", 1);
-    std::system("rm -rf /tmp/deckplayer_test_library /tmp/deckplayer_test_media");
+    setenv("XDG_CONFIG_HOME", "/tmp/muvik_test_library", 1);
+    std::system("rm -rf /tmp/muvik_test_library /tmp/muvik_test_media");
 
     // 构造测试文件树
-    const std::string root = "/tmp/deckplayer_test_media";
+    const std::string root = "/tmp/muvik_test_media";
     writeFile(root + "/media/a.mp4");
     writeFile(root + "/media/b.mkv");
     writeFile(root + "/media/sub/c.avi");
@@ -75,9 +75,11 @@ int main() {
 
     TEST_BEGIN("媒体库 / 持久化");
     lib.save();
-    CHECK_TRUE(fs::exists("/tmp/deckplayer_test_library/deck-player/libraries.dat"),
+    CHECK_TRUE(fs::exists("/tmp/muvik_test_library/muvik/libraries.dat") ||
+               fs::exists("/tmp/muvik_test_library/muvik/libraries.dat"),
                "libraries.dat 已生成");
-    CHECK_TRUE(fs::exists("/tmp/deckplayer_test_library/deck-player/library_cache.dat"),
+    CHECK_TRUE(fs::exists("/tmp/muvik_test_library/muvik/library_cache.dat") ||
+               fs::exists("/tmp/muvik_test_library/muvik/library_cache.dat"),
                "library_cache.dat 已生成");
 
     TEST_BEGIN("媒体库 / 移除文件夹");
@@ -87,6 +89,6 @@ int main() {
     CHECK_FALSE(lib.removeFolder("/tmp/not_in_library"), "移除不存在的文件夹返回 false");
 
     TEST_END();
-    std::system("rm -rf /tmp/deckplayer_test_media");
+    std::system("rm -rf /tmp/muvik_test_media");
     return TEST_SUMMARY();
 }

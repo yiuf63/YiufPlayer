@@ -38,13 +38,13 @@ const std::string sidebarItemXML = R"xml(
             width="@style/brls/sidebar/item_accent_rect_width"
             height="26"
             visibility="invisible"
-            color="@theme/brls/sidebar/active_item"
+            color="@theme/brls/accent"
             marginTop="0"
             marginBottom="0"
             marginLeft="@style/brls/sidebar/item_accent_margin_sides"
             marginRight="@style/brls/sidebar/item_accent_margin_sides" />
 
-        <!-- DeckPlayer 补丁：条目图标。
+        <!-- Muvik 补丁：条目图标。
              上游 Sidebar 只有文字，窄侧栏（160）里四个汉字撑不满一行，
              右侧会空出一大片。加一个 18px 图标后侧栏才立得住。
              纹理统一走 drawIcon 的矢量路径不方便（XML 里只能放 Image），
@@ -61,6 +61,7 @@ const std::string sidebarItemXML = R"xml(
             width="auto"
             height="auto"
             grow="1.0"
+            singleLine="true"
             fontSize="@style/brls/sidebar/item_font_size"
             marginTop="@style/brls/sidebar/item_accent_margin_top_bottom"
             marginBottom="@style/brls/sidebar/item_accent_margin_top_bottom"
@@ -123,12 +124,13 @@ void SidebarItem::setActive(bool active)
         this->activeEvent.fire(this);
 
         this->accent->setVisibility(Visibility::VISIBLE);
+        this->accent->setColor(theme["brls/accent"]);
         this->label->setTextColor(theme["brls/sidebar/active_item"]);
     }
     else
     {
         this->accent->setVisibility(Visibility::INVISIBLE);
-        this->label->setTextColor(theme["brls/text"]);
+        this->label->setTextColor(theme["brls/sidebar/inactive_item"]);
     }
 
     this->active = active;
@@ -209,7 +211,7 @@ void Sidebar::addItem(std::string label, GenericEvent::Callback focusCallback)
 
 SidebarItem* Sidebar::getItem(int position)
 {
-    // DeckPlayer 补丁：上游直接下标访问 std::vector，越界拿到的是野指针，
+    // Muvik 补丁：上游直接下标访问 std::vector，越界拿到的是野指针，
     // 随后在 dynamic_cast 里 SEGV。崩溃堆栈只显示
     //   dyn_cast_get_derived_info ← __dynamic_cast ← createContentView
     // 完全看不出是「索引越界」，极难定位。

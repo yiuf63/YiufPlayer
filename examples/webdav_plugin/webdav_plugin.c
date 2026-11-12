@@ -1,5 +1,5 @@
 // ============================================================================
-// WebDAV 视频源插件（DeckPlayer 示例 / 参考实现）
+// WebDAV 视频源插件（Muvik 示例 / 参考实现）
 //
 // 这是一个**可实际工作**的插件，演示如何：
 //   1. 用纯 C ABI 实现一个真实的视频源扩展点
@@ -14,20 +14,20 @@
 // ---------------------------------------------------------------------------
 // 插件通过环境变量读取配置（真实产品中可由宿主传入 config_json）：
 //
-//   DECKPLAYER_WEBDAV_URL      服务器地址，如 http://192.168.1.10:5244/dav
-//   DECKPLAYER_WEBDAV_USER     用户名（可空）
-//   DECKPLAYER_WEBDAV_PASS     密码（可空）
+//   MUVIK_WEBDAV_URL      服务器地址，如 http://192.168.1.10:5244/dav
+//   MUVIK_WEBDAV_USER     用户名（可空）
+//   MUVIK_WEBDAV_PASS     密码（可空）
 //
 // 编译：
-//   clang -shared -fPIC -I <deck-player>/include/plugin \
+//   clang -shared -fPIC -I <muvik>/include/plugin \
 //         -o webdav.dylib webdav_plugin.c
 //
 // 安装：
-//   mkdir -p ~/.config/deck-player/plugins
-//   cp webdav.dylib ~/.config/deck-player/plugins/
+//   mkdir -p ~/.config/muvik/plugins
+//   cp webdav.dylib ~/.config/muvik/plugins/
 // ============================================================================
 
-#include "deck_plugin_abi.h"
+#include "muvik_plugin_abi.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,7 +47,7 @@ static char* dup_str(const char* s) {
 }
 
 // 释放媒体列表的全部内容
-static void free_media_list(deck_media_list* list) {
+static void free_media_list(muvik_media_list* list) {
     if (!list) return;
     if (list->items) {
         for (size_t i = 0; i < list->count; ++i) {
@@ -69,7 +69,7 @@ typedef struct {
     char user[128];
     char pass[128];
     char auth_header[512]; // "Authorization: Basic xxx"
-    const deck_host_api* host;
+    const muvik_host_api* host;
 } webdav_state;
 
 // ---------------------------------------------------------------------------
@@ -212,10 +212,10 @@ static int json_get_string(const char* json, const char* key,
     return 1;
 }
 
-static deck_status vs_init(void* impl, const char* config_json,
-                           const deck_host_api* host) {
+static muvik_status vs_init(void* impl, const char* config_json,
+                           const muvik_host_api* host) {
     webdav_state* st = (webdav_state*)impl;
-    if (!st) return DECK_ERR_GENERIC;
+    if (!st) return MUVIK_ERR_GENERIC;
     st->host = host;
 
     // 配置优先级：宿主传入的 config_json > 宿主 get_config > 环境变量。
@@ -234,13 +234,13 @@ static deck_status vs_init(void* impl, const char* config_json,
         if (v) { snprintf(cfg_pass, sizeof(cfg_pass), "%s", v); has_pass = 1; }
     }
 
-    const char* url  = has_url ? cfg_url : getenv("DECKPLAYER_WEBDAV_URL");
-    const char* user = has_user ? cfg_user : getenv("DECKPLAYER_WEBDAV_USER");
-    const char* pass = has_pass ? cfg_pass : getenv("DECKPLAYER_WEBDAV_PASS");
+    const char* url  = has_url ? cfg_url : getenv("MUVIK_WEBDAV_URL");
+    const char* user = has_user ? cfg_user : getenv("MUVIK_WEBDAV_USER");
+    const char* pass = has_pass ? cfg_pass : getenv("MUVIK_WEBDAV_PASS");
 
     if (!url || !*url) {
-        if (host && host->log) host->log(1, "WebDAV: 未设置 DECKPLAYER_WEBDAV_URL");
-        return DECK_ERR_NOT_AVAILABLE;
+        if (host && host->log) host->log(1, "WebDAV: 未设置 MUVIK_WEBDAV_URL");
+        return MUVIK_ERR_NOT_AVAILABLE;
     }
 
     // 规范化：去掉结尾斜杠
@@ -265,7 +265,7 @@ static deck_status vs_init(void* impl, const char* config_json,
                  st->base_url, st->user[0] ? " (带鉴权)" : " (无鉴权)");
         host->log(0, msg);
     }
-    return DECK_OK;
+    return MUVIK_OK;
 }
 
 // 从路径提取最后一段作为显示名
@@ -281,13 +281,13 @@ static void last_segment(const char* path, char* out, size_t out_size) {
     out[n] = '\0';
 }
 
-static deck_status vs_list_items(void* impl, const char* path,
-                                 deck_media_list** out_list) {
+static muvik_status vs_list_items(void* impl, const char* path,
+                                 muvik_media_list** out_list) {
     webdav_state* st = (webdav_state*)impl;
     if (!st || !out_list || !st->host || !st->host->http_request) {
-        return DECK_ERR_NOT_AVAILABLE;
+        return MUVIK_ERR_NOT_AVAILABLE;
     }
-    if (!st->base_url[0]) return DECK_ERR_NOT_AVAILABLE;
+    if (!st->base_url[0]) return MUVIK_ERR_NOT_AVAILABLE;
     *out_list = NULL;
 
     // 组装完整 URL。path 形如 "/" 或 "/sub/dir"
@@ -321,18 +321,18 @@ static deck_status vs_list_items(void* impl, const char* path,
 
     char* body = NULL;
     size_t body_len = 0;
-    deck_status rc = st->host->http_request(
+    muvik_status rc = st->host->http_request(
         "PROPFIND", url, headers, kPropfindBody, &body, &body_len);
 
-    if (rc == DECK_ERR_AUTH) {
+    if (rc == MUVIK_ERR_AUTH) {
         if (st->host->log) st->host->log(2, "WebDAV: 鉴权失败，请检查用户名与密码");
         if (body) st->host->free_buffer(body);
         return rc;
     }
-    if (rc != DECK_OK || !body) {
+    if (rc != MUVIK_OK || !body) {
         if (st->host->log) st->host->log(1, "WebDAV: 请求失败");
         if (body) st->host->free_buffer(body);
-        return rc == DECK_OK ? DECK_ERR_NETWORK : rc;
+        return rc == MUVIK_OK ? MUVIK_ERR_NETWORK : rc;
     }
 
     // 统计 response 块数量，便于一次性分配
@@ -350,13 +350,13 @@ static deck_status vs_list_items(void* impl, const char* path,
     if (count == 0) {
         if (st->host->log) st->host->log(1, "WebDAV: 响应中未找到条目");
         st->host->free_buffer(body);
-        return DECK_ERR_GENERIC;
+        return MUVIK_ERR_GENERIC;
     }
 
-    deck_media_list* list = (deck_media_list*)calloc(1, sizeof(deck_media_list));
-    if (!list) { st->host->free_buffer(body); return DECK_ERR_GENERIC; }
-    list->items = (deck_media_item*)calloc(count, sizeof(deck_media_item));
-    if (!list->items) { free(list); st->host->free_buffer(body); return DECK_ERR_GENERIC; }
+    muvik_media_list* list = (muvik_media_list*)calloc(1, sizeof(muvik_media_list));
+    if (!list) { st->host->free_buffer(body); return MUVIK_ERR_GENERIC; }
+    list->items = (muvik_media_item*)calloc(count, sizeof(muvik_media_item));
+    if (!list->items) { free(list); st->host->free_buffer(body); return MUVIK_ERR_GENERIC; }
 
     size_t emitted = 0;
     const char* cursor = body;
@@ -428,11 +428,11 @@ static deck_status vs_list_items(void* impl, const char* path,
             continue;
         }
 
-        deck_media_item* it = &list->items[list->count];
+        muvik_media_item* it = &list->items[list->count];
         it->name = dup_str(name);
         it->path = dup_str(path_norm);
         it->thumbnail = NULL;
-        it->type = is_dir ? DECK_MEDIA_DIRECTORY : DECK_MEDIA_VIDEO;
+        it->type = is_dir ? MUVIK_MEDIA_DIRECTORY : MUVIK_MEDIA_VIDEO;
         it->size = -1;
         it->duration = -1;
         list->count++;
@@ -446,20 +446,20 @@ static deck_status vs_list_items(void* impl, const char* path,
     if (list->count == 0) {
         free_media_list(list);
         if (st->host->log) st->host->log(1, "WebDAV: 该目录下没有可用媒体");
-        return DECK_ERR_NOT_AVAILABLE;
+        return MUVIK_ERR_NOT_AVAILABLE;
     }
 
     *out_list = list;
-    return DECK_OK;
+    return MUVIK_OK;
 }
 
-static deck_status vs_resolve_play_url(void* impl, const char* path,
+static muvik_status vs_resolve_play_url(void* impl, const char* path,
                                        char** out_url) {
     webdav_state* st = (webdav_state*)impl;
-    if (!st || !out_url || !path) return DECK_ERR_GENERIC;
+    if (!st || !out_url || !path) return MUVIK_ERR_GENERIC;
     *out_url = NULL;
 
-    if (!st->base_url[0]) return DECK_ERR_NOT_AVAILABLE;
+    if (!st->base_url[0]) return MUVIK_ERR_NOT_AVAILABLE;
 
     // 构造直接播放地址；若有鉴权，把凭证内嵌到 URL 中，
     // 因为播放器（libmpv）只接受 URL，无法传递自定义请求头。
@@ -485,10 +485,10 @@ static deck_status vs_resolve_play_url(void* impl, const char* path,
     }
 
     *out_url = dup_str(url);
-    return *out_url ? DECK_OK : DECK_ERR_GENERIC;
+    return *out_url ? MUVIK_OK : MUVIK_ERR_GENERIC;
 }
 
-static void vs_free_list(deck_media_list* list) { free_media_list(list); }
+static void vs_free_list(muvik_media_list* list) { free_media_list(list); }
 
 static void vs_destroy(void* impl) { free(impl); }
 
@@ -500,7 +500,7 @@ static void* vs_create_impl(void) {
 // 扩展点实例
 // ---------------------------------------------------------------------------
 
-static deck_video_source g_video_source = {
+static muvik_video_source g_video_source = {
     .impl = NULL,
     .get_id = vs_get_id,
     .get_display_name = vs_get_display_name,
@@ -512,10 +512,10 @@ static deck_video_source g_video_source = {
     .destroy = vs_destroy,
 };
 
-static deck_video_source* create_video_source(void) {
+static muvik_video_source* create_video_source(void) {
     void* impl = vs_create_impl();
     if (!impl) return NULL;
-    deck_video_source* src = (deck_video_source*)malloc(sizeof(deck_video_source));
+    muvik_video_source* src = (muvik_video_source*)malloc(sizeof(muvik_video_source));
     if (!src) { free(impl); return NULL; }
     *src = g_video_source;
     src->impl = impl;
@@ -526,15 +526,15 @@ static deck_video_source* create_video_source(void) {
 // 插件入口
 // ---------------------------------------------------------------------------
 
-static const deck_plugin_descriptor g_descriptor = {
-    .abi_version = DECK_PLAYER_ABI_VERSION,
+static const muvik_plugin_descriptor g_descriptor = {
+    .abi_version = MUVIK_ABI_VERSION,
     .plugin_name = "WebDAV Source",
     .plugin_version = "1.0.0",
-    .plugin_author = "DeckPlayer",
+    .plugin_author = "Muvik",
     .create_video_source = create_video_source,
     .create_scraper = NULL,
 };
 
-const deck_plugin_descriptor* deck_player_plugin_entry_v1(void) {
+const muvik_plugin_descriptor* muvik_plugin_entry_v1(void) {
     return &g_descriptor;
 }

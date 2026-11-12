@@ -43,6 +43,7 @@ static ThemeValues lightThemeValues = {
     // Sidebar
     { "brls/sidebar/background", nvgRGB(240, 240, 240) },
     { "brls/sidebar/active_item", nvgRGB(49, 79, 235) },
+    { "brls/sidebar/inactive_item", nvgRGB(110, 110, 110) },
     { "brls/sidebar/separator", nvgRGB(208, 208, 208) },
 
     // Header
@@ -102,6 +103,7 @@ static ThemeValues darkThemeValues = {
     // Sidebar
     { "brls/sidebar/background", nvgRGB(50, 50, 50) },
     { "brls/sidebar/active_item", nvgRGB(0, 255, 204) },
+    { "brls/sidebar/inactive_item", nvgRGB(168, 175, 186) },
     { "brls/sidebar/separator", nvgRGB(81, 81, 81) },
 
     // Header

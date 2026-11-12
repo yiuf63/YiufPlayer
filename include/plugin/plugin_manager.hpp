@@ -3,15 +3,16 @@
 #include <mutex>
 #include <string>
 #include <vector>
-#include <mutex>
-#include "model/media_item.hpp"
-#include <string>
-#include <vector>
+#include <map>
 #include <memory>
+#include "model/media_item.hpp"
 
-namespace deck_player {
+namespace muvik {
 
-// 刮削详情的 C++ 表示（从 ABI 的 deck_scrape_result 转换而来）
+class JSPlugin;
+struct PlayLinksResult;
+
+// 刮削详情的 C++ 表示（从 ABI 的 muvik_scrape_result 转换而来）
 struct ScrapeDetail {
     std::string title;
     std::string overview;
@@ -23,30 +24,57 @@ struct ScrapeDetail {
     int32_t runtime_minutes = -1;
 };
 
+// 插件来源类型
+enum class PluginSourceType {
+    Local,      // 本地手动安装或 ZIP 解压（~/.config/muvik/plugins/）
+    Workshop,   // Steam 创意工坊订阅（steamapps/workshop/content/<appid>/<itemid>/）
+    DLC,        // Steam DLC 扩展内容（<appdir>/dlc/ 或 steamapps/common/.../dlc/）
+};
+
 // 一个已加载的插件实例
 struct LoadedPlugin {
-    std::string path;          // 动态库文件路径
+    std::string path;          // 动态库文件路径或 JS 插件目录
+    std::string id;            // 唯一标识（如 "com.example.source"）
     std::string name;
     std::string version;
     std::string author;
+    std::string description;
+    bool is_js_plugin = false; // 是否为现代 JS 插件
     bool has_video_source = false;
     bool has_scraper = false;
-    void* dl_handle = nullptr;  // 内部句柄，不对外暴露
+    bool has_storage = false;
+    void* dl_handle = nullptr;  // 内部 C 句柄，不对外暴露
+
+    PluginSourceType source_type = PluginSourceType::Local;
+    std::string workshop_item_id; // 若来自创意工坊，为其订阅数字 ID
+    std::string source_badge;     // 显示徽标，如 "[本地]", "[创意工坊]", "[DLC]"
 };
 
 // 插件管理器：负责扫描插件目录、按 ABI 规则加载、校验版本、卸载。
 //
-// 关键设计：插件通过纯 C ABI（见 deck_plugin_abi.h）与本程序交互，
+// 关键设计：插件通过纯 C ABI（见 muvik_plugin_abi.h）与本程序交互，
 // 绝不跨动态库边界传递 C++ 对象，从而避免编译器/STL 版本差异导致的崩溃。
 class PluginManager {
 public:
     static PluginManager& getInstance();
 
     // 扫描插件目录并加载全部合法插件。返回成功加载的数量。
+    // plugins_dir 为空时自动扫描本地插件、Steam 创意工坊订阅与 Steam DLC。
     size_t loadAll(const std::string& plugins_dir = "");
 
-    // 加载单个插件文件
-    bool loadPlugin(const std::string& file_path);
+    // 加载单个插件文件（支持指定来源类型与创意工坊 ID）
+    bool loadPlugin(const std::string& file_path,
+                    PluginSourceType source = PluginSourceType::Local,
+                    const std::string& workshop_id = "");
+
+    // 获取检测到的 Steam 创意工坊搜索路径列表
+    std::vector<std::string> getWorkshopSearchPaths() const;
+
+    // 获取检测到的 Steam DLC 搜索路径列表
+    std::vector<std::string> getDlcSearchPaths() const;
+
+    // 获取 Steam App ID（优先读环境变量 STEAM_APP_ID，默认 "3290940"）
+    std::string getSteamAppId() const;
 
     // 已加载插件列表
     std::vector<LoadedPlugin> getPlugins() const;
@@ -79,6 +107,14 @@ public:
     // 获取所有刮削器插件的路径
     std::vector<std::string> getScraperPluginPaths() const;
 
+    // 获取指定插件的 JS 实例（若该插件为 JS 驱动）
+    std::shared_ptr<JSPlugin> getJSPlugin(const std::string& path_or_id) const;
+
+    // 解析流媒体真实播放链接（由 JS 插件的 loadLinks 提供）
+    bool loadStreamLinks(const std::string& plugin_path_or_id,
+                         const std::string& episode_id,
+                         PlayLinksResult& out_links);
+
 private:
     // 插件表被多线程访问：UI 线程读取（getPlugins/渲染），
     // 后台线程可能同时 loadAll/listVideoSourceItems，
@@ -89,6 +125,7 @@ private:
     PluginManager() = default;
 
     std::vector<LoadedPlugin> plugins_;
+    std::map<std::string, std::shared_ptr<JSPlugin>> js_plugins_;
 };
 
-} // namespace deck_player
+} // namespace muvik

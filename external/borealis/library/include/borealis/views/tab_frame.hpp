@@ -38,8 +38,9 @@ class TabFrame : public Box
 
     void addTab(std::string label, TabViewCreator creator);
 
-    // DeckPlayer 补丁：带图标的标签页。icon 为 PNG 路径，空串等同不带图标。
+    // Muvik 补丁：带图标的标签页。icon 为 PNG 路径，空串等同不带图标。
     void addTab(std::string label, std::string icon, TabViewCreator creator);
+    void setTabLabel(int position, const std::string& label);
     void focusTab(int position);
 
     // 以编程方式切换到第 position 个标签（0 起）。
@@ -48,7 +49,7 @@ class TabFrame : public Box
     // 本方法先移动焦点，再显式触发一次，用于自动化测试与外部调用。
     void selectTab(int position);
 
-    // DeckPlayer 补丁：默认焦点应落在**内容区**，而不是侧边栏。
+    // Muvik 补丁：默认焦点应落在**内容区**，而不是侧边栏。
     //
     // 不覆写时继承 Box/View 的默认实现，返回的是「第一个可聚焦子视图」
     // —— 也就是侧边栏的第一项。后果是应用一启动、或切标签之后，

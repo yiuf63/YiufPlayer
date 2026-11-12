@@ -46,7 +46,7 @@ python3 tests/tools/release_check.py        # 发布模式，退出码 0 才能�
 ### 为什么阻断
 
 GPL-3.0 允许**收费分发**，但要求同时提供完整对应源码。
-当前仓库 `https://github.com/yiuf63/deck-player` 是**私有**的，
+当前仓库 `https://github.com/yiuf63/muvik` 是**私有**的，
 外部使用者拿不到源码 —— 只要对外分发二进制就违规。
 
 > 注意：本项目此前是闭源商业授权，这条要求当时不存在；
@@ -55,7 +55,7 @@ GPL-3.0 允许**收费分发**，但要求同时提供完整对应源码。
 ### 怎么做
 
 ```bash
-gh repo edit yiuf63/deck-player --visibility public   # 或 --accept-visibility-change-consequences
+gh repo edit yiuf63/muvik --visibility public   # 或 --accept-visibility-change-consequences
 ```
 
 如果暂时不想公开仓库，就**不要对外分发二进制**，只在内部自测。
@@ -63,7 +63,7 @@ gh repo edit yiuf63/deck-player --visibility public   # 或 --accept-visibility-
 ### 验收标准
 
 ```bash
-gh repo view yiuf63/deck-player --json visibility    # 必须是 public
+gh repo view yiuf63/muvik --json visibility    # 必须是 public
 # 且产物依赖能在公开的构建里复现：
 python3 tests/tools/license_audit.py                 # 列出产物实际链接的库
 ```
@@ -79,13 +79,13 @@ GPL-3.0 之下链接 GPL 版 FFmpeg 合法，所以这一步**只在想让产物
 
 ```bash
 # 需要网络（下载 FFmpeg 与 mpv 源码）+ meson + ninja + pkg-config
-./scripts/build-lgpl-libmpv.sh /opt/deckplayer-lgpl
+./scripts/build-lgpl-libmpv.sh /opt/muvik-lgpl
 
 # 用产出的 LGPL 版重新构建
 cmake -B build-release \
       -DCMAKE_BUILD_TYPE=Release \
-      -DMPV_ROOT=/opt/deckplayer-lgpl \
-      -DCMAKE_PREFIX_PATH=/opt/deckplayer-lgpl
+      -DMPV_ROOT=/opt/muvik-lgpl \
+      -DCMAKE_PREFIX_PATH=/opt/muvik-lgpl
 cmake --build build-release -j
 ```
 
@@ -94,7 +94,7 @@ cmake --build build-release -j
 ```bash
 python3 tests/tools/license_audit.py --strict     # 退出码 0（产物不含 GPL 组件）
 python3 tests/tools/release_check.py              # 退出码 0
-./build-release/deck-player                       # 能正常播放
+./build-release/muvik                       # 能正常播放
 ```
 
 **注意**：脚本已内置两道防线，不要绕过它们——
@@ -112,7 +112,7 @@ python3 tests/tools/release_check.py              # 退出码 0
 
 ### 为什么阻断
 
-`flatpak/org.deckplayer.DeckPlayer.yaml` 里有两处占位符：
+`flatpak/org.muvik.Muvik.yaml` 里有两处占位符：
 
 ```
 sha256: REPLACE_WITH_REAL_SHA256_OF_FFMPEG_7.1
@@ -127,7 +127,7 @@ sha256: REPLACE_WITH_REAL_SHA256_OF_MPV_0.39.0
 ```bash
 ./scripts/update-flatpak-sources.sh    # 拉取源码并填入真实 sha256
 flatpak-builder --user --install --force-clean build-flatpak \
-    flatpak/org.deckplayer.DeckPlayer.yaml
+    flatpak/org.muvik.Muvik.yaml
 ```
 
 ### 验收标准
@@ -141,7 +141,7 @@ grep -c "REPLACE_WITH_REAL" flatpak/*.yaml     # 必须为 0
 #    会误判。正确做法是调用官方 API avutil_license()。
 #    GPL-3.0 之下 GPL 或 LGPL 都可接受，但必须**如实写进 THIRD-PARTY-NOTICES.md**，
 #    因为分发时要按 §6 提供对应源码。
-flatpak run --command=sh org.deckplayer.DeckPlayer -c \
+flatpak run --command=sh org.muvik.Muvik -c \
   'python3 -c "
 import ctypes, glob
 so = glob.glob(\"/app/lib/libavutil.so*\")[0]
@@ -152,7 +152,7 @@ print(lib.avutil_license().decode())
 # 把输出结果登记到 THIRD-PARTY-NOTICES.md
 
 # 3. 能启动并播放
-flatpak run org.deckplayer.DeckPlayer /path/to/video.mp4
+flatpak run org.muvik.Muvik /path/to/video.mp4
 ```
 
 ---
@@ -178,9 +178,9 @@ flatpak run org.deckplayer.DeckPlayer /path/to/video.mp4
 
 ```bash
 # 1. 装完后先看资源定位
-DECKPLAYER_FRAMEGRAB=/tmp/g.ppm \
-DECKPLAYER_FRAMEGRAB_START=120 \
-  ./deck-player
+MUVIK_FRAMEGRAB=/tmp/g.ppm \
+MUVIK_FRAMEGRAB_START=120 \
+  ./muvik
 # 日志里应有：资源目录: /path/to/resources
 
 # 2. 跑端到端验证（Linux 上帧缓冲读取走同一套 glReadPixels）

@@ -3,7 +3,7 @@
 #include <string>
 #include <string>
 
-namespace deck_player {
+namespace muvik {
 
 // 资源路径解析。
 //
@@ -31,4 +31,4 @@ private:
     static std::string findResourceDir();
 };
 
-} // namespace deck_player
+} // namespace muvik

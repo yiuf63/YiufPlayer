@@ -12,7 +12,7 @@
 
 namespace fs = std::filesystem;
 
-namespace deck_player {
+namespace muvik {
 
 namespace {
 
@@ -187,7 +187,7 @@ void PluginConfigStore::save() const {
         std::lock_guard<std::recursive_mutex> lock(mutex_);
         std::ofstream out(tmp, std::ios::trunc);
         if (!out.is_open()) return;
-        out << "# DeckPlayer plugin config v1 (fields separated by 0x1f)\n";
+        out << "# Muvik plugin config v1 (fields separated by 0x1f)\n";
         for (const auto& pit : data_) {
             for (const auto& kv : pit.second) {
                 out << escape(pit.first) << kSep
@@ -207,4 +207,4 @@ void PluginConfigStore::save() const {
     }
 }
 
-} // namespace deck_player
+} // namespace muvik

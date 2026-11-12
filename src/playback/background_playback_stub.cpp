@@ -14,12 +14,12 @@
 
 #if !defined(__APPLE__)
 
-namespace deck_player {
+namespace muvik {
 
 void BackgroundPlayback::begin() {}
 void BackgroundPlayback::end() {}
 bool BackgroundPlayback::isActive() { return false; }
 
-} // namespace deck_player
+} // namespace muvik
 
 #endif

@@ -5,7 +5,7 @@
 #include "playback/audio_player.hpp"
 #include "ui/icons.hpp"
 
-namespace deck_player {
+namespace muvik {
 
 // 「正在播放」条：贴在主界面底部，切换任何标签页都能看到音乐状态。
 // 音乐本身由全局 AudioPlayer 持有，离开界面也不会中断，这才是后台播放。
@@ -45,4 +45,4 @@ private:
     static inline NowPlayingBar* instance_ = nullptr;
 };
 
-} // namespace deck_player
+} // namespace muvik

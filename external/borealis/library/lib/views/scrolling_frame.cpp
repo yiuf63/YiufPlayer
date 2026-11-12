@@ -158,24 +158,35 @@ void ScrollingFrame::naturalScrollingBehaviour()
         // If current focus view is outside scrolling bounds,
         // change focus to this.
         //
-        // DeckPlayer 补丁：currentFocus 可能为 nullptr。
+        // Muvik 补丁：currentFocus 可能为 nullptr。
         // 列表被 rebuild（clearViews）时，正在被聚焦的子项会连同焦点一起
         // 销毁 —— View 析构里的 focus sanity check 把 currentFocus 置空。
         // 下一帧走到这里就是对着 nullptr 调 getFrame()，SEGV 在
         // KERN_INVALID_ADDRESS at 0x5xx，堆栈完全看不出是「焦点为空」。
         // 媒体库加文件夹层后，手柄按 A 进文件夹必踩。
         View* currentFocus = Application::getCurrentFocus();
-        // DeckPlayer 补丁 2：还没走完一次布局的视图 frame 是 0×0，
-        // inscribed() 对任何容器都返回 false。列表刚重建、giveFocus 刚
-        // 落到新列表项的那一帧，这里会把焦点抢回 this（然后顺着
-        // findTopMostFocusableView 落到第一项）—— 手柄进文件夹后焦点
-        // 偶发停在「全部文件夹」返回行上，就是这一抢。
+        // Muvik 补丁 2：还没走完一次布局的视图 frame 是 0×0，
         // 0×0 视图不参与「焦点是否出界」的判定，等布局完成再说。
         const bool focusUnlaidOut = currentFocus &&
             currentFocus->getFrame().getWidth() <= 0.0f &&
             currentFocus->getFrame().getHeight() <= 0.0f;
-        if (!currentFocus ||
-            (!focusUnlaidOut && !currentFocus->getFrame().inscribed(getFrame())))
+
+        // Muvik 补丁 3：垂直滚动容器只判定垂直方向边界（允许 1.0f 浮点容差），
+        // 绝不因横向百分比布局、卡片边距或滚动条亚像素偏差误判为「出界」。
+        bool isOutsideBounds = false;
+        if (!currentFocus)
+        {
+            isOutsideBounds = true;
+        }
+        else if (!focusUnlaidOut)
+        {
+            const Rect& cf = currentFocus->getFrame();
+            const Rect& sf = getFrame();
+            if (cf.getMinY() < sf.getMinY() - 1.0f || cf.getMaxY() > sf.getMaxY() + 1.0f)
+                isOutsideBounds = true;
+        }
+
+        if (isOutsideBounds)
         {
             Application::giveFocus(this);
         }
@@ -186,7 +197,7 @@ void ScrollingFrame::naturalScrollingBehaviour()
         {
             View* topMostView = findTopMostFocusableView();
 
-            if (topMostView && topMostView != currentFocus)
+            if (topMostView && topMostView != currentFocus && topMostView->isFocusable())
             {
                 Application::giveFocus(topMostView);
                 Application::getAudioPlayer()->play(Sound::SOUND_FOCUS_CHANGE);
@@ -239,7 +250,7 @@ void ScrollingFrame::naturalScrollingBehaviour()
 View* ScrollingFrame::findTopMostFocusableView()
 {
     Rect frame       = getFrame();
-    Point check      = Point(frame.getMidX(), frame.getMinY());
+    Point check      = Point(frame.getMidX(), frame.getMinY() + 5.0f);
     View* focusCheck = contentView->hitTest(check);
     if (focusCheck)
     {
@@ -247,13 +258,30 @@ View* ScrollingFrame::findTopMostFocusableView()
         if (focusCheckDefaultFocus)
             focusCheck = focusCheckDefaultFocus;
 
-        while (focusCheck && !focusCheck->getFrame().inscribed(frame))
+        // Muvik 补丁：必须持续向下遍历，直到找到【真正可聚焦】且【处于可见区域内】的有效视图。
+        // 原版只判 inscribed，当顶部为不可聚焦元素（如 SectionHeader、EmptyState）时，
+        // 会把不可聚焦控件当作焦点返回，随后 giveFocus 触发清空焦点，导致整个手柄控制完全失效。
+        while (focusCheck && (!focusCheck->isFocusable() ||
+                              focusCheck->getFrame().getMinY() < frame.getMinY() - 1.0f ||
+                              focusCheck->getFrame().getMaxY() > frame.getMaxY() + 1.0f))
         {
-            focusCheck = focusCheck->getParent()->getNextFocus(FocusDirection::DOWN, focusCheck);
+            if (!focusCheck->hasParent())
+                break;
+            View* next = focusCheck->getParent()->getNextFocus(FocusDirection::DOWN, focusCheck);
+            if (next == focusCheck)
+                break;
+            focusCheck = next;
         }
 
-        return focusCheck;
+        if (focusCheck && focusCheck->isFocusable())
+            return focusCheck;
     }
+
+    // 兜底：若 hitTest 没有找到可用焦点（例如列表刚构建或顶部全为不可聚焦控件），
+    // 顺着 contentView 的默认焦点查找
+    View* def = contentView->getDefaultFocus();
+    if (def && def->isFocusable())
+        return def;
 
     return nullptr;
 }
@@ -470,17 +498,29 @@ View* ScrollingFrame::getDefaultFocus()
     if (behavior == ScrollingBehavior::CENTERED)
     {
         View* focus = contentView->getDefaultFocus();
-        if (focus)
+        if (focus && focus->isFocusable())
             return focus;
         else
             return Box::getDefaultFocus();
     }
 
+    // Muvik 补丁：优先将默认焦点给内容区内可见的首个可聚焦子项。
+    // 在刚加载（未完成首次布局）或可见范围内时直接采用，避免落入容器自身。
     View* focus = contentView->getDefaultFocus();
-    if (focus && focus->getFrame().inscribed(getFrame()))
+    if (focus && focus->isFocusable())
+    {
+        const Rect& cf = focus->getFrame();
+        const Rect& sf = getFrame();
+        const bool unlaidOut = (cf.getWidth() <= 0.0f || cf.getHeight() <= 0.0f || sf.getHeight() <= 0.0f);
+        if (unlaidOut || (cf.getMinY() >= sf.getMinY() - 1.0f && cf.getMaxY() <= sf.getMaxY() + 1.0f))
+            return focus;
+    }
+
+    if (focus = findTopMostFocusableView(); focus && focus != this && focus->isFocusable())
         return focus;
 
-    if (focus = findTopMostFocusableView(); focus && focus != this)
+    // 兜底：始终优先让内容区的可聚焦元素获得焦点，绝不让焦点停留在不可见边框的滚动容器自身上
+    if (focus = contentView->getDefaultFocus(); focus && focus->isFocusable())
         return focus;
 
     return Box::getDefaultFocus();
@@ -522,6 +562,14 @@ View* ScrollingFrame::getParentNavigationDecision(View* from, View* newFocus, Fo
         if (from == contentView)
         {
             naturalScrollingCanScroll = true;
+            // Muvik 修复：当已滚动至顶部并向上导航，或已滚动至底部并向下导航时，
+            // 严禁将焦点死锁在当前元素，必须返回 nullptr 允许焦点脱离滚动容器向上/向下转移
+            if (direction == FocusDirection::UP && this->getContentOffsetY() <= 0.01f)
+                return nullptr;
+            float bottomLimit = this->getContentHeight() - this->getScrollingAreaHeight();
+            if (direction == FocusDirection::DOWN && this->getContentOffsetY() >= (bottomLimit - 0.01f))
+                return nullptr;
+
             if (currentFocus->getFrame().inscribed(this->getFrame()))
                 return currentFocus;
 

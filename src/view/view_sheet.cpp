@@ -4,17 +4,18 @@
 
 #include "model/library_view_options.hpp"
 #include "ui/design.hpp"
+#include "utils/i18n.hpp"
 #include "view/tool_button.hpp"
 
-namespace deck_player {
+namespace muvik {
 
 namespace {
 
-constexpr float PANEL_W = 460.0f;
+constexpr float PANEL_W = 500.0f;
 constexpr float PANEL_BOTTOM = 88.0f;
 constexpr float PAD = 20.0f;
 constexpr float ROW_H = 44.0f;
-constexpr float LABEL_W = 46.0f;
+constexpr float LABEL_W = 56.0f;
 
 // Box 本身不画背景（borealis 里只有 Rectangle 画），而这一层需要
 // 「圆角 + 半透明」的底。重写 draw：先铺底，再交给基类画子项。
@@ -42,6 +43,7 @@ brls::Label* makeLabel(const std::string& text, float size, NVGcolor color) {
     l->setTextColor(color);
     l->setHorizontalAlign(brls::HorizontalAlign::LEFT);
     l->setVerticalAlign(brls::VerticalAlign::CENTER);
+    l->setSingleLine(true);
     return l;
 }
 
@@ -65,7 +67,7 @@ ViewSheet::ViewSheet(std::function<void()> on_change, std::function<void()> on_c
         this->hide();
         return true;
     });
-    this->registerAction("关闭", brls::ControllerButton::BUTTON_B,
+    this->registerAction(i18n::tr("common.close", "关闭"), brls::ControllerButton::BUTTON_B,
                          [this](brls::View*) {
                              this->hide();
                              return true;
@@ -182,9 +184,9 @@ void ViewSheet::rebuild() {
         head->setWidthPercentage(100.0f);
         head->setMarginBottom(2.0f);
 
-        head->addView(makeLabel("视图与排序", ui::font::title, pal.text));
+        head->addView(makeLabel(i18n::tr("view_sheet.title", "视图与排序"), ui::font::title, pal.text));
 
-        auto* closeBtn = new ToolButton("关闭", ui::Icon::Close, 13.0f);
+        auto* closeBtn = new ToolButton(i18n::tr("common.close", "关闭"), ui::Icon::Close, 13.0f);
         closeBtn->setCompact(true);
         closeBtn->registerClickAction([this](brls::View*) {
             hide();
@@ -200,9 +202,9 @@ void ViewSheet::rebuild() {
     }
 
     // ── 分组：结构是两层还是一层 ──
-    panel_->addView(makeRow("分组",
-        {{"按文件夹", [p]() { return p->group == LibraryGroup::Folder; }},
-         {"全部平铺", [p]() { return p->group == LibraryGroup::Flat; }}},
+    panel_->addView(makeRow(i18n::tr("view_sheet.group", "分组"),
+        {{i18n::tr("view_sheet.group_folder", "按文件夹"), [p]() { return p->group == LibraryGroup::Folder; }},
+         {i18n::tr("view_sheet.group_flat", "全部平铺"), [p]() { return p->group == LibraryGroup::Flat; }}},
         [this, p](size_t i) {
             p->group = (i == 0) ? LibraryGroup::Folder : LibraryGroup::Flat;
             syncChips();
@@ -210,10 +212,10 @@ void ViewSheet::rebuild() {
         }));
 
     // ── 内容 ──
-    panel_->addView(makeRow("内容",
-        {{"视频与音乐", [p]() { return p->content == LibraryContent::All; }},
-         {"仅视频", [p]() { return p->content == LibraryContent::VideoOnly; }},
-         {"仅音乐", [p]() { return p->content == LibraryContent::AudioOnly; }}},
+    panel_->addView(makeRow(i18n::tr("view_sheet.content", "内容"),
+        {{i18n::tr("view_sheet.content_all", "视频与音乐"), [p]() { return p->content == LibraryContent::All; }},
+         {i18n::tr("view_sheet.content_video", "仅视频"), [p]() { return p->content == LibraryContent::VideoOnly; }},
+         {i18n::tr("view_sheet.content_audio", "仅音乐"), [p]() { return p->content == LibraryContent::AudioOnly; }}},
         [this, p](size_t i) {
             p->content = (i == 0) ? LibraryContent::All
                       : (i == 1) ? LibraryContent::VideoOnly
@@ -223,11 +225,11 @@ void ViewSheet::rebuild() {
         }));
 
     // ── 排序 ──
-    panel_->addView(makeRow("排序",
-        {{"名称", [p]() { return p->sort == LibrarySort::Name; }},
-         {"最近添加", [p]() { return p->sort == LibrarySort::Recent; }},
-         {"大小", [p]() { return p->sort == LibrarySort::Size; }},
-         {"进度", [p]() { return p->sort == LibrarySort::Progress; }}},
+    panel_->addView(makeRow(i18n::tr("view_sheet.sort", "排序"),
+        {{i18n::tr("view_sheet.sort_name", "名称"), [p]() { return p->sort == LibrarySort::Name; }},
+         {i18n::tr("view_sheet.sort_recent", "最近添加"), [p]() { return p->sort == LibrarySort::Recent; }},
+         {i18n::tr("view_sheet.sort_size", "大小"), [p]() { return p->sort == LibrarySort::Size; }},
+         {i18n::tr("view_sheet.sort_progress", "进度"), [p]() { return p->sort == LibrarySort::Progress; }}},
         [this, p](size_t i) {
             p->sort = (i == 0) ? LibrarySort::Name
                    : (i == 1) ? LibrarySort::Recent
@@ -238,10 +240,10 @@ void ViewSheet::rebuild() {
         }));
 
     // ── 筛选 ──
-    panel_->addView(makeRow("筛选",
-        {{"不限", [p]() { return p->filter == LibraryFilter::All; }},
-         {"未看完", [p]() { return p->filter == LibraryFilter::Unfinished; }},
-         {"已看完", [p]() { return p->filter == LibraryFilter::Finished; }}},
+    panel_->addView(makeRow(i18n::tr("view_sheet.filter", "筛选"),
+        {{i18n::tr("view_sheet.filter_all", "不限"), [p]() { return p->filter == LibraryFilter::All; }},
+         {i18n::tr("view_sheet.filter_unfinished", "未看完"), [p]() { return p->filter == LibraryFilter::Unfinished; }},
+         {i18n::tr("view_sheet.filter_finished", "已看完"), [p]() { return p->filter == LibraryFilter::Finished; }}},
         [this, p](size_t i) {
             p->filter = (i == 0) ? LibraryFilter::All
                       : (i == 1) ? LibraryFilter::Unfinished
@@ -272,7 +274,7 @@ void ViewSheet::rebuild() {
         dirGroup->setAxis(brls::Axis::ROW);
         dirGroup->setAlignItems(brls::AlignItems::CENTER);
 
-        auto* asc = new ToolButton("升序", ui::Icon::None, 13.0f);
+        auto* asc = new ToolButton(i18n::tr("view_sheet.order_asc", "升序"), ui::Icon::None, 13.0f);
         asc->setCompact(true);
         asc->setMarginRight(6.0f);
         asc->setActive(!p->descending);
@@ -285,7 +287,7 @@ void ViewSheet::rebuild() {
         dirGroup->addView(asc);
         chips_.push_back({asc, []() { return !LibraryViewOptions::get().descending; }});
 
-        auto* desc = new ToolButton("降序", ui::Icon::None, 13.0f);
+        auto* desc = new ToolButton(i18n::tr("view_sheet.order_desc", "降序"), ui::Icon::None, 13.0f);
         desc->setCompact(true);
         desc->setActive(p->descending);
         desc->registerClickAction([this](brls::View*) {
@@ -299,7 +301,7 @@ void ViewSheet::rebuild() {
 
         foot->addView(dirGroup);
 
-        auto* reset = new ToolButton("恢复默认", ui::Icon::None, 13.0f);
+        auto* reset = new ToolButton(i18n::tr("view_sheet.reset", "恢复默认"), ui::Icon::None, 13.0f);
         reset->setCompact(true);
         reset->registerClickAction([this](brls::View*) {
             LibraryViewOptions::get().reset();
@@ -313,4 +315,4 @@ void ViewSheet::rebuild() {
     }
 }
 
-} // namespace deck_player
+} // namespace muvik

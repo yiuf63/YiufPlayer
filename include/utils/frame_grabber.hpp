@@ -3,7 +3,7 @@
 #include <string>
 #include <string>
 
-namespace deck_player {
+namespace muvik {
 
 // 帧缓冲抓取工具。
 //
@@ -11,14 +11,14 @@ namespace deck_player {
 // CI 环境无显示）时，直接从 OpenGL 帧缓冲读取画面并写入文件，
 // 用于验证 UI 是否真的渲染出内容。
 //
-// 仅在设置了环境变量 DECKPLAYER_FRAMEGRAB=<输出路径.ppm> 时启用。
+// 仅在设置了环境变量 MUVIK_FRAMEGRAB=<输出路径.ppm> 时启用。
 //
 // 支持连续抓取（用于验证视频是否真的在播放）：
-//   DECKPLAYER_FRAMEGRAB=/tmp/f.ppm        抓到 1 帧后退出
-//   DECKPLAYER_FRAMEGRAB_COUNT=5           连续抓 5 帧，文件名加 _0.._4 后缀
-//   DECKPLAYER_FRAMEGRAB_INTERVAL=30       每 30 帧抓一次（约 0.5 秒）
-//   DECKPLAYER_FRAMEGRAB_EXIT=0            抓完不退出，继续运行
-//   DECKPLAYER_FRAMEGRAB_START=180         延迟到第 180 帧才开始抓（约 3 秒）
+//   MUVIK_FRAMEGRAB=/tmp/f.ppm        抓到 1 帧后退出
+//   MUVIK_FRAMEGRAB_COUNT=5           连续抓 5 帧，文件名加 _0.._4 后缀
+//   MUVIK_FRAMEGRAB_INTERVAL=30       每 30 帧抓一次（约 0.5 秒）
+//   MUVIK_FRAMEGRAB_EXIT=0            抓完不退出，继续运行
+//   MUVIK_FRAMEGRAB_START=180         延迟到第 180 帧才开始抓（约 3 秒）
 //                                          验证视频播放时必须设大一些，
 //                                          否则 mpv 还没解码出首帧
 //
@@ -40,4 +40,4 @@ private:
                          const unsigned char* rgb_flipped);
 };
 
-} // namespace deck_player
+} // namespace muvik

@@ -99,7 +99,7 @@
 #### 2. 标签索引越界导致 `Sidebar::getItem` 返回野指针
 
 - **位置**：`external/borealis/library/lib/views/sidebar.cpp:185`
-- **证据**：实测——`DECKPLAYER_START_TAB=1000` 连跑必崩
+- **证据**：实测——`MUVIK_START_TAB=1000` 连跑必崩
 - **触发条件**：任何把越界索引传给 `TabFrame::selectTab`
 - **严重程度**：会崩
 - **判定**：**已修**（项目侧夹紧索引，不改上游）
@@ -166,7 +166,7 @@
 子代理不共享本会话的上下文，提示词必须自包含。模板：
 
 ```
-仓库：/Users/yiuf/code/deck-player（C++17，Borealis UI + libmpv）
+仓库：/Users/yiuf/code/muvik（C++17，Borealis UI + libmpv）
 
 背景：<这次改了什么，已知哪些问题>
 

@@ -130,9 +130,8 @@ class Logger
             printf("! Invalid log format string: \"%s\": %s\n", fmt::basic_string_view<char>(format).data(), e.what());
         }
 
-#ifdef __MINGW32__
-        fflush(logOut);
-#endif
+        if (logOut)
+            fflush(logOut);
     }
 
     template <typename... Args>

@@ -7,7 +7,11 @@
 #include "activity/file_browser_activity.hpp"
 #include "playback/audio_player.hpp"
 #include "utils/resource_locator.hpp"
-#include "theme/deck_theme.hpp"
+#include "utils/i18n.hpp"
+#include "utils/display_mode.hpp"
+#include "utils/input_settings.hpp"
+#include "utils/keymap.hpp"
+#include "theme/muvik_theme.hpp"
 #include "selftest/functional_smoke.hpp"
 #include "utils/frame_grabber.hpp"
 #include "utils/scanner.hpp"
@@ -42,7 +46,7 @@
 
 int main(int argc, char* argv[]) {
     // 支持直接打开媒体文件：
-    //   deck-player /path/to/movie.mkv
+    //   muvik /path/to/movie.mkv
     // 这样从文件管理器、Steam 快捷方式或命令行都能直接播放，
     // 也是自动化测试（抓帧验证）的唯一入口。
     std::string startup_file;
@@ -61,7 +65,10 @@ int main(int argc, char* argv[]) {
     //    borealis 把资源路径编译进二进制且为相对路径，因此必须把工作目录
     //    切到资源目录的父目录，否则从桌面启动器 / Flatpak 启动时
     //    字体与图标会加载失败。
-    deck_player::ResourceLocator::setup();
+    muvik::ResourceLocator::setup();
+
+    // 初始化多语言支持
+    muvik::i18n::init();
 
     // 1. 设置 Borealis 日志级别
     brls::Logger::setLogLevel(brls::LogLevel::LOG_INFO);
@@ -72,31 +79,40 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    // 允许通过环境变量强制窗口尺寸，用于验证不同屏幕下的适配：
-    //   DECKPLAYER_WINDOW=1280x800   （Steam Deck 原生分辨率）
-    //   DECKPLAYER_WINDOW=640x360    （小屏）
-    // 这既是测试手段，也方便用户在自己的显示器上按需指定。
-    // 默认创建窗口（针对 macOS Retina 大屏与外接显示器自适应）
-    brls::Application::createWindow("DeckPlayer");
+    // 全屏显示机制：掌机 / 主机 / 电视场景默认全屏沉浸，
+    // 同时支持配置文件持久化、MUVIK_WINDOW/MUVIK_FULLSCREEN 环境变量覆盖。
+    VideoContext::FULLSCREEN = muvik::DisplayMode::resolveFullscreen();
+
+    // 适配连接手柄的按键提示字体（Xbox/Steam Deck vs PlayStation vs Switch）
+    muvik::Keymap::applyKeymapFont();
+
+    // 默认创建窗口或全屏画面（针对 macOS Retina 大屏与外接显示器自适应）
+    brls::Application::createWindow("Muvik");
+
+    // 注册全局全屏快捷键（F11 / Alt+Enter / macOS Cmd+F）
+    muvik::DisplayMode::setupGlobalKeyBindings();
 
     // 应用本项目自有配色，覆盖 borealis 默认的 Switch 风格深色主题。
     // 必须在窗口创建之后（主题在此阶段初始化完成）。
-    deck_player::applyDeckTheme();
+    muvik::applyMuvikTheme();
+
+    // 应用手柄按键布局偏好（Xbox / Steam 标准 vs Nintendo Switch 反转）
+    muvik::InputSettings::applySettings();
 
     // 允许强制窗口尺寸，用于验证不同屏幕下的适配：
-    //   DECKPLAYER_WINDOW=1280x800   （Steam Deck 原生分辨率）
-    //   DECKPLAYER_WINDOW=640x360    （小屏）
+    //   MUVIK_WINDOW=1280x800   （Steam Deck 原生分辨率）
+    //   MUVIK_WINDOW=640x360    （小屏）
     //
     // 必须在 createWindow 之后再调 glfwSetWindowSize：
     // 直接改 Application::windowWidth 会被窗口创建流程覆盖（实测无效，
     // 三种尺寸抓出来的帧都是 1280x720）。
-    if (const char* spec = std::getenv("DECKPLAYER_WINDOW")) {
+    if (const char* spec = std::getenv("MUVIK_WINDOW")) {
         unsigned int w = 0, h = 0;
         if (std::sscanf(spec, "%ux%u", &w, &h) == 2 && w >= 320 && h >= 200) {
 #if defined(ANDROID)
             // Android 上没有 GLFW 窗口；尺寸由设备决定，
-            // DECKPLAYER_WINDOW 在此平台无效（保留变量以免脚本报错）。
-            brls::Logger::info("Android：忽略 DECKPLAYER_WINDOW={}（尺寸由设备决定）", spec);
+            // MUVIK_WINDOW 在此平台无效（保留变量以免脚本报错）。
+            brls::Logger::info("Android：忽略 MUVIK_WINDOW={}（尺寸由设备决定）", spec);
 #else
             auto* vc = dynamic_cast<brls::GLFWVideoContext*>(
                 brls::Application::getPlatform()->getVideoContext());
@@ -109,11 +125,11 @@ int main(int argc, char* argv[]) {
                 brls::Application::setWindowSize((int)w, (int)h);
                 brls::Logger::info("窗口尺寸被指定为 {}x{}", w, h);
             } else {
-                brls::Logger::warning("无法获取窗口句柄，忽略 DECKPLAYER_WINDOW");
+                brls::Logger::warning("无法获取窗口句柄，忽略 MUVIK_WINDOW");
             }
 #endif
         } else {
-            brls::Logger::warning("DECKPLAYER_WINDOW 格式应为 宽x高，收到: {}", spec);
+            brls::Logger::warning("MUVIK_WINDOW 格式应为 宽x高，收到: {}", spec);
         }
     }
 
@@ -127,20 +143,21 @@ int main(int argc, char* argv[]) {
     brls::Application::getPlatform()->setWindowSizeLimits(min_w, min_h, 0, 0);
 #endif
 
-    // 启用全局退出拦截
-    brls::Application::setGlobalQuit(true);
+    // 禁用默认的全局退出拦截（Borealis 默认会把 BUTTON_START 绑定为全局退出，
+    // 导致手柄上的设置/菜单键 ☰ 按下后程序直接关闭，像闪退一样）。
+    brls::Application::setGlobalQuit(false);
 
     // 3. 进入主界面；若指定了文件则直接开始播放
     if (!startup_file.empty()) {
-        std::vector<deck_player::MediaItem> playlist;
-        deck_player::MediaItem item;
+        std::vector<muvik::MediaItem> playlist;
+        muvik::MediaItem item;
         item.path = startup_file;
         item.name = std::filesystem::path(startup_file).filename().string();
         std::string ext = std::filesystem::path(startup_file).extension().string();
         item.extension = ext;
-        item.type = deck_player::MediaScanner::isSupportedAudioFormat(ext)
-                        ? deck_player::MediaType::Audio
-                        : deck_player::MediaType::Video;
+        item.type = muvik::MediaScanner::isSupportedAudioFormat(ext)
+                        ? muvik::MediaType::Audio
+                        : muvik::MediaType::Video;
         playlist.push_back(item);
 
         // 若同目录下还有其他同类媒体，一并加入播放列表，支持自动连播。
@@ -150,24 +167,33 @@ int main(int argc, char* argv[]) {
             fs::path dir = fs::path(startup_file).parent_path();
             std::error_code ec;
             if (!dir.empty()) {
-                std::vector<deck_player::MediaItem> siblings;
-                for (const auto& entry : fs::directory_iterator(dir, ec)) {
-                    if (ec || !entry.is_regular_file()) continue;
-                    std::string p2 = entry.path().string();
-                    if (p2 == startup_file) continue;
-                    std::string e2 = entry.path().extension().string();
-                    if (!deck_player::MediaScanner::isSupportedVideoFormat(e2))
-                        continue;
-                    if (item.type != deck_player::MediaType::Video) continue;
-                    deck_player::MediaItem sib;
-                    sib.path = p2;
-                    sib.name = entry.path().filename().string();
-                    sib.extension = e2;
-                    sib.type = deck_player::MediaType::Video;
-                    siblings.push_back(sib);
-                }
+                std::vector<muvik::MediaItem> siblings;
+                try {
+                    fs::directory_iterator it(dir, fs::directory_options::skip_permission_denied, ec);
+                    fs::directory_iterator end;
+                    while (!ec && it != end) {
+                        try {
+                            std::error_code reg_ec;
+                            if (it->is_regular_file(reg_ec)) {
+                                std::string p2 = it->path().string();
+                                if (p2 != startup_file) {
+                                    std::string e2 = it->path().extension().string();
+                                    if (muvik::MediaScanner::isSupportedVideoFormat(e2) && item.type == muvik::MediaType::Video) {
+                                        muvik::MediaItem sib;
+                                        sib.path = p2;
+                                        sib.name = it->path().filename().string();
+                                        sib.extension = e2;
+                                        sib.type = muvik::MediaType::Video;
+                                        siblings.push_back(sib);
+                                    }
+                                }
+                            }
+                        } catch (...) {}
+                        it.increment(ec);
+                    }
+                } catch (...) {}
                 std::sort(siblings.begin(), siblings.end(),
-                          [](const deck_player::MediaItem& a, const deck_player::MediaItem& b) {
+                          [](const muvik::MediaItem& a, const muvik::MediaItem& b) {
                               return a.name < b.name;
                           });
                 playlist.insert(playlist.end(), siblings.begin(), siblings.end());
@@ -176,25 +202,25 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        auto* browser = new deck_player::FileBrowserActivity();
+        auto* browser = new muvik::FileBrowserActivity();
 
         brls::Application::pushActivity(browser);
 
         // 音频必须走全局 AudioPlayer，才能保持后台播放；
         // 若错误地交给 PlayerActivity（视频播放器），退出界面音乐就停了。
-        if (item.type == deck_player::MediaType::Audio) {
+        if (item.type == muvik::MediaType::Audio) {
             brls::Logger::info("直接播放音频: {}", startup_file);
-            deck_player::AudioPlayer::getInstance().playPlaylist(playlist, 0);
+            muvik::AudioPlayer::getInstance().playPlaylist(playlist, 0);
         } else {
             brls::Logger::info("直接播放视频: {}", startup_file);
             brls::Application::pushActivity(
-                new deck_player::PlayerActivity(playlist, 0));
+                new muvik::PlayerActivity(playlist, 0));
         }
-    } else if (std::getenv("DECKPLAYER_SEED_META")) {
+    } else if (std::getenv("MUVIK_SEED_META")) {
         // 测试用：预置一条刮削元数据，验证视频库是否正确显示
         {
-            deck_player::MediaMetadata m;
-            m.path = std::getenv("DECKPLAYER_SEED_META");
+            muvik::MediaMetadata m;
+            m.path = std::getenv("MUVIK_SEED_META");
             m.title = "星际穿越";
             m.overview = "一支探险队穿越虫洞寻找人类新家园。";
             m.rating = 8.7;
@@ -202,65 +228,70 @@ int main(int argc, char* argv[]) {
             m.runtime_minutes = 169;
             m.scraper_id = "demo";
             m.updated_at = 1700000000;
-            deck_player::MetadataStore::getInstance().put(m);
-            deck_player::MetadataStore::getInstance().save();
+            muvik::MetadataStore::getInstance().put(m);
+            muvik::MetadataStore::getInstance().save();
             brls::Logger::info("已预置元数据: {}", m.title);
         }
-        brls::Application::pushActivity(new deck_player::FileBrowserActivity());
-    } else if (std::getenv("DECKPLAYER_OPEN_BROWSER")) {
+        brls::Application::pushActivity(new muvik::FileBrowserActivity());
+    } else if (std::getenv("MUVIK_OPEN_BROWSER")) {
         // 直接进入第一个含视频源插件的浏览界面，验证远程目录渲染
-        brls::Application::pushActivity(new deck_player::FileBrowserActivity());
-        auto plugins = deck_player::PluginManager::getInstance().getPlugins();
+        brls::Application::pushActivity(new muvik::FileBrowserActivity());
+        auto plugins = muvik::PluginManager::getInstance().getPlugins();
         for (const auto& p : plugins) {
             if (p.has_video_source) {
                 brls::Logger::info("打开插件浏览: {}", p.name);
-                auto* act = new deck_player::PluginBrowserActivity(p.path, p.name);
-                if (const char* sub = std::getenv("DECKPLAYER_BROWSE_PATH")) {
+                auto* act = new muvik::PluginBrowserActivity(p.path, p.name);
+                if (const char* sub = std::getenv("MUVIK_BROWSE_PATH")) {
                     act->setInitialPath(sub);
                 }
                 brls::Application::pushActivity(act);
                 break;
             }
         }
-    } else if (std::getenv("DECKPLAYER_OPEN_PLUGINS")) {
+    } else if (std::getenv("MUVIK_OPEN_PLUGINS")) {
         // 直接打开插件管理页，便于自动化验证其渲染
-        brls::Application::pushActivity(new deck_player::FileBrowserActivity());
-        brls::Application::pushActivity(new deck_player::PluginManagerActivity());
+        brls::Application::pushActivity(new muvik::FileBrowserActivity());
+        brls::Application::pushActivity(new muvik::PluginManagerActivity());
     } else {
-        brls::Application::pushActivity(new deck_player::FileBrowserActivity());
+        brls::Application::pushActivity(new muvik::FileBrowserActivity());
     }
 
     // 4. 运行主循环
     //    每帧驱动后台音频引擎，使其在离开播放器界面后仍能持续解码与推进进度。
-    //    若设置了 DECKPLAYER_FRAMEGRAB，还会在主循环中抓取一帧画面后退出，
+    //    若设置了 MUVIK_FRAMEGRAB，还会在主循环中抓取一帧画面后退出，
     //    用于在无法使用系统截图的环境下验证 UI 渲染。
     int frame_index = 0;
-    // 帧率限制：macOS 上 GLFW 的 swapInterval 在实测中【并不生效】
-    // （独立测试：swapInterval=1 仍跑到 3354 FPS），
-    // 导致主循环全速空转、CPU 占用稳定在 85% 以上。
-    // 对掌机来说这是致命问题：发热、风扇狂转、电量几分钟耗尽。
-    // 这里按目标帧率主动休眠。桌面与掌机都适用，不依赖平台 vsync 行为。
-    const char* fps_env = std::getenv("DECKPLAYER_FPS");
-    const int target_fps = fps_env ? std::max(1, atoi(fps_env)) : 60;
-    const auto frame_budget = std::chrono::microseconds(1000000 / target_fps);
+    // 帧率限制：从设置或环境变量读取。
+    // target_fps == 0 表示自动跟随显示器刷新率（SteamOS 下由 Gamescope / VSync 自然同步，
+    // 原生支持 Steam Deck LCD 60Hz、OLED 90Hz 以及外接高刷显示器 120Hz/144Hz）。
+    const int configured_fps = muvik::DisplayMode::getTargetFps();
+    int target_fps = configured_fps;
+#if defined(__APPLE__)
+    // macOS 上 GLFW 的 swapInterval 偶有失效，设 120 FPS 软兜底防止空转
+    if (target_fps <= 0) target_fps = 120;
+#endif
+    const bool should_throttle = (target_fps > 0);
+    const auto frame_budget = should_throttle
+                                ? std::chrono::microseconds(1000000 / target_fps)
+                                : std::chrono::microseconds(0);
     auto frame_start = std::chrono::steady_clock::now();
 
     // 自检：打印当前输入类型与按键图标，用于验证键盘/手柄区隔
-    const bool print_keyicon = std::getenv("DECKPLAYER_PRINT_KEYICON") != nullptr;
+    const bool print_keyicon = std::getenv("MUVIK_PRINT_KEYICON") != nullptr;
     // 自检：模拟一次键盘操作，验证输入类型能正确切到 KEYBOARD
-    if (std::getenv("DECKPLAYER_FAKE_KEYBOARD")) {
+    if (std::getenv("MUVIK_FAKE_KEYBOARD")) {
         brls::Application::reportInputSource(true);
         brls::Logger::info("已模拟键盘输入");
     }
 
-    // 功能级冒烟测试（仅 DECKPLAYER_SMOKE 时运行）
-    deck_player::runFunctionalSmoke();
+    // 功能级冒烟测试（仅 MUVIK_SMOKE 时运行）
+    muvik::runFunctionalSmoke();
 
     while (brls::Application::mainLoop()) {
-        deck_player::AudioPlayer::getInstance().tick();
+        muvik::AudioPlayer::getInstance().tick();
 
-        if (deck_player::FrameGrabber::enabled()) {
-            if (deck_player::FrameGrabber::tick(frame_index)) {
+        if (muvik::FrameGrabber::enabled()) {
+            if (muvik::FrameGrabber::tick(frame_index)) {
                 brls::Logger::info("FrameGrabber: 抓帧完成，退出");
                 break;
             }
@@ -280,7 +311,7 @@ int main(int argc, char* argv[]) {
         }
 
         // 补足本帧剩余时间，避免忙等空转
-        if (!deck_player::FrameGrabber::enabled()) {
+        if (!muvik::FrameGrabber::enabled() && should_throttle) {
             auto elapsed = std::chrono::steady_clock::now() - frame_start;
             if (elapsed < frame_budget) {
                 std::this_thread::sleep_for(frame_budget - elapsed);
@@ -290,7 +321,7 @@ int main(int argc, char* argv[]) {
     }
 
     // 退出前落盘进度并关闭音频引擎
-    deck_player::AudioPlayer::getInstance().shutdown();
+    muvik::AudioPlayer::getInstance().shutdown();
 
     return EXIT_SUCCESS;
 }

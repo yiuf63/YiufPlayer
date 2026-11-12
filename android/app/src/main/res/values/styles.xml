@@ -9,7 +9,7 @@
         这里只是把窗口背景设为黑色，避免启动瞬间的白色闪烁，
         全屏由 Activity 的 hideSystemUi() 处理。
     -->
-    <style name="DeckPlayerTheme" parent="@android:style/Theme.NoTitleBar.Fullscreen">
+    <style name="MuvikTheme" parent="@android:style/Theme.NoTitleBar.Fullscreen">
         <item name="android:windowBackground">@android:color/black</item>
     </style>
 </resources>

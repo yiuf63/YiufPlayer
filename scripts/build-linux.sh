@@ -1,9 +1,9 @@
 #!/bin/bash
-# 在 Linux 上构建 DeckPlayer（用于 Steam Deck / SteamOS 验证）
+# 在 Linux 上构建 Muvik（用于 Steam Deck / SteamOS 验证）
 #
 # 用法（推荐在容器里跑，见根目录 Dockerfile.linux）：
-#   docker build --platform linux/amd64 -f Dockerfile.linux -t deckplayer-linux .
-#   docker run --rm -v "$PWD:/src" deckplayer-linux
+#   docker build --platform linux/amd64 -f Dockerfile.linux -t muvik-linux .
+#   docker run --rm -v "$PWD:/src" muvik-linux
 #
 # 直接在 Linux 主机上跑也可以，需要先装好构建依赖（见 Dockerfile.linux）。
 
@@ -63,7 +63,7 @@ cmake --build "$BUILD_DIR" -j"$JOBS"
 
 echo
 echo "=== 完成 ==="
-ls -lh "$BUILD_DIR/deck-player" 2>/dev/null || echo "  未找到产物"
+ls -lh "$BUILD_DIR/muvik" 2>/dev/null || echo "  未找到产物"
 echo
 echo "运行前确认 SteamOS 上装有："
 echo "  mpv-libs 或 libmpv, ffmpeg, glfw, libcurl, fmt, tinyxml2"

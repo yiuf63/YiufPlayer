@@ -21,7 +21,7 @@
 
 #include "ui/icons.hpp"
 
-namespace deck_player {
+namespace muvik {
 
 class ToolButton;
 
@@ -31,6 +31,8 @@ public:
     // on_close：菜单关闭后触发（宿主把焦点接回列表）。
     ViewSheet(std::function<void()> on_change, std::function<void()> on_close);
 
+    using brls::Box::show;
+    using brls::Box::hide;
     void show(brls::Box* parent);
     void hide();
     bool isOpen() const { return open_; }
@@ -69,4 +71,4 @@ private:
     std::vector<ChipRef> chips_;
 };
 
-} // namespace deck_player
+} // namespace muvik

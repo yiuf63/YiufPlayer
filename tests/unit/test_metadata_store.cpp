@@ -5,7 +5,7 @@
 #include "test_framework.hpp"
 #include <cstdlib>
 
-using namespace deck_player;
+using namespace muvik;
 
 namespace {
 
@@ -17,8 +17,8 @@ void isolateConfig(const char* dir) {
 } // namespace
 
 int main() {
-    isolateConfig("/tmp/deckplayer_test_metadata");
-    std::system("rm -rf /tmp/deckplayer_test_metadata");
+    isolateConfig("/tmp/muvik_test_metadata");
+    std::system("rm -rf /tmp/muvik_test_metadata");
 
     auto& store = MetadataStore::getInstance();
 

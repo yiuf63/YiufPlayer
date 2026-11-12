@@ -4,7 +4,7 @@
 
 #include "ui/design.hpp"
 
-namespace deck_player::ui {
+namespace muvik::ui {
 
 namespace {
 
@@ -12,9 +12,9 @@ constexpr float kPi = 3.14159265358979f;
 
 void iconPlay(NVGcontext* vg) {
     nvgBeginPath(vg);
-    nvgMoveTo(vg, 8.0f, 5.2f);
-    nvgLineTo(vg, 19.2f, 12.0f);
-    nvgLineTo(vg, 8.0f, 18.8f);
+    nvgMoveTo(vg, 8.5f, 5.5f);
+    nvgLineTo(vg, 18.5f, 12.0f);
+    nvgLineTo(vg, 8.5f, 18.5f);
     nvgClosePath(vg);
     nvgFill(vg);
 }
@@ -27,9 +27,9 @@ void iconPause(NVGcontext* vg) {
 }
 
 void iconChevrons(NVGcontext* vg, float dir) {
-    // 双箭头：比「10s」文字更耐看，尺寸再小也不会糊成一团。
+    // 双箭头：严格居中于 x = 12.0f（外框范围 6.0f .. 18.0f）
     for (int i = 0; i < 2; ++i) {
-        const float apex  = dir > 0.0f ? (16.0f - 6.0f * i) : (8.0f + 6.0f * i);
+        const float apex  = dir > 0.0f ? (18.0f - 6.0f * i) : (6.0f + 6.0f * i);
         const float start = apex - 6.0f * dir;
         nvgBeginPath(vg);
         nvgMoveTo(vg, start, 6.0f);
@@ -40,23 +40,23 @@ void iconChevrons(NVGcontext* vg, float dir) {
 }
 
 void iconSkip(NVGcontext* vg, bool next) {
-    // 竖条 + 三角，方向由 next 决定
+    // 竖条 + 三角，方向由 next 决定，外框严格居中于 x = 12.0f（6.0f .. 18.0f）
     nvgBeginPath(vg);
     if (next) {
-        nvgRect(vg, 16.4f, 6.0f, 2.0f, 12.0f);
+        nvgRect(vg, 16.0f, 6.0f, 2.0f, 12.0f);
     } else {
-        nvgRect(vg, 5.6f, 6.0f, 2.0f, 12.0f);
+        nvgRect(vg, 6.0f, 6.0f, 2.0f, 12.0f);
     }
     nvgFill(vg);
 
     nvgBeginPath(vg);
     if (next) {
         nvgMoveTo(vg, 6.0f, 6.0f);
-        nvgLineTo(vg, 14.6f, 12.0f);
+        nvgLineTo(vg, 14.2f, 12.0f);
         nvgLineTo(vg, 6.0f, 18.0f);
     } else {
         nvgMoveTo(vg, 18.0f, 6.0f);
-        nvgLineTo(vg, 9.4f, 12.0f);
+        nvgLineTo(vg, 9.8f, 12.0f);
         nvgLineTo(vg, 18.0f, 18.0f);
     }
     nvgClosePath(vg);
@@ -82,7 +82,8 @@ void iconSubtitles(NVGcontext* vg, bool off) {
 }
 
 void iconAudio(NVGcontext* vg) {
-    const float xs[4]    = {5.6f, 10.0f, 14.4f, 18.0f};
+    // 4 根音频柱对称居中：x 范围 4.7f .. 19.3f，中心点恰好 12.0f
+    const float xs[4]    = {4.7f, 9.1f, 13.5f, 17.1f};
     const float hs[4]    = {6.0f, 13.0f, 9.0f, 4.4f};
     nvgBeginPath(vg);
     for (int i = 0; i < 4; ++i)
@@ -183,10 +184,11 @@ void iconLock(NVGcontext* vg, bool open) {
 }
 
 void iconBack(NVGcontext* vg) {
+    // 返回箭头：居中于 x = 12.0f（8.2f .. 15.8f，中心 12.0f）
     nvgBeginPath(vg);
-    nvgMoveTo(vg, 15.0f, 5.2f);
-    nvgLineTo(vg, 7.6f, 12.0f);
-    nvgLineTo(vg, 15.0f, 18.8f);
+    nvgMoveTo(vg, 15.8f, 5.2f);
+    nvgLineTo(vg, 8.2f, 12.0f);
+    nvgLineTo(vg, 15.8f, 18.8f);
     nvgStroke(vg);
 }
 
@@ -474,4 +476,4 @@ void drawIconButton(NVGcontext* vg, Icon icon, float cx, float cy, float diamete
     drawIcon(vg, icon, cx, cy, iconSize, fg);
 }
 
-} // namespace deck_player::ui
+} // namespace muvik::ui

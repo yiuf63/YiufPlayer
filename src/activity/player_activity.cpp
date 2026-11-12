@@ -8,6 +8,7 @@
 #include <vector>
 #include "activity/player_activity.hpp"
 #include "utils/playback_history.hpp"
+#include "utils/i18n.hpp"
 #include "view/media_cell.hpp"
 #include "ui/icons.hpp"
 #include <borealis/views/dialog.hpp>
@@ -20,7 +21,7 @@
 #include <memory>
 #include <cstdio>
 
-namespace deck_player {
+namespace muvik {
 
 PlayerActivity::PlayerActivity(const std::vector<MediaItem>& playlist, size_t initial_index)
     : playlist_(playlist), current_index_(initial_index) {}
@@ -62,14 +63,14 @@ void PlayerActivity::onContentAvailable() {
                 current_index_++;
                 playCurrentIndex();
             } else {
-                brls::Application::notify("已经是最后一集了");
+                brls::Application::notify(i18n::tr("player.last_episode", "已经是最后一集了"));
             }
         } else {
             if (current_index_ > 0) {
                 current_index_--;
                 playCurrentIndex();
             } else {
-                brls::Application::notify("已经是第一集了");
+                brls::Application::notify(i18n::tr("player.first_episode", "已经是第一集了"));
             }
         }
     });
@@ -80,7 +81,7 @@ void PlayerActivity::onContentAvailable() {
     brls::Logger::info("播放列表按键: ↑ (BUTTON_UP)");
 
     // 测试用：启动后自动打开播放列表，便于自动化验证对话框内容
-    if (std::getenv("DECKPLAYER_OPEN_PLAYLIST")) {
+    if (std::getenv("MUVIK_OPEN_PLAYLIST")) {
         auto alive = std::make_shared<std::atomic<bool>>(true);
         alive_flags_.push_back(alive);
         std::thread([this, alive]() {
@@ -93,12 +94,13 @@ void PlayerActivity::onContentAvailable() {
     }
 
     playCurrentIndex();
+    brls::Application::giveFocus(player_view_);
 }
 
 void PlayerActivity::showPlaylistDialog() {
     brls::Logger::info("showPlaylistDialog: 列表 {} 个", playlist_.size());
     if (playlist_.empty()) {
-        brls::Application::notify("播放列表为空");
+        brls::Application::notify(i18n::tr("player.playlist_empty", "播放列表为空"));
         return;
     }
 
@@ -115,8 +117,8 @@ void PlayerActivity::showPlaylistDialog() {
     list->setPaddingBottom(20.0f);
 
     brls::Dialog* dialog = new brls::Dialog(container);
-    list->addView(new SectionHeader("播放列表 · " +
-                                    std::to_string(playlist_.size()) + " 项"));
+    list->addView(new SectionHeader(i18n::tr("player.playlist", "播放列表") + " · " +
+                                    std::to_string(playlist_.size())));
 
     for (size_t i = 0; i < playlist_.size(); ++i) {
         const auto& item = playlist_[i];
@@ -125,12 +127,12 @@ void PlayerActivity::showPlaylistDialog() {
         // 详情：当前正在播放 / 是否有断点
         std::string detail;
         if (is_current) {
-            detail = "正在播放";
+            detail = i18n::tr("player.playing", "正在播放");
         }
         HistoryRecord rec;
         if (PlaybackHistory::getInstance().getRecord(item.path, rec)) {
             if (rec.completed) {
-                detail += detail.empty() ? "已看完" : " · 已看完";
+                detail += detail.empty() ? i18n::tr("common.played", "已看完") : " · " + i18n::tr("common.played", "已看完");
             } else if (rec.position > 15) {
                 const int mins = static_cast<int>(rec.position) / 60;
                 const int secs = static_cast<int>(rec.position) % 60;
@@ -145,7 +147,7 @@ void PlayerActivity::showPlaylistDialog() {
         // 当前项另有「播放中」badge。
         auto* cell = new MediaCell(ui::Icon::Video, item.name, detail);
         cell->setHeight(64.0f);
-        cell->setBadge(is_current ? "播放中" : "");
+        cell->setBadge(is_current ? i18n::tr("player.playing", "播放中") : "");
 
         // 当前项：选中即关闭，不做重新加载（避免打断正在播放的内容）
         if (is_current) {
@@ -173,7 +175,7 @@ void PlayerActivity::showPlaylistDialog() {
 
     container->addView(scroller);
 
-    dialog->addButton("关闭", []() {});
+    dialog->addButton(i18n::tr("common.close", "关闭"), []() {});
     dialog->open();
     brls::Logger::info("播放列表对话框已打开");
 }
@@ -182,6 +184,17 @@ void PlayerActivity::playCurrentIndex() {
     if (current_index_ >= playlist_.size()) return;
 
     const auto& item = playlist_[current_index_];
+
+    // 检查本地文件是否存在，避免静默黑屏
+    if (item.path.find("://") == std::string::npos && !std::filesystem::exists(item.path)) {
+        brls::Logger::error("PlayerActivity: 文件不存在 {}", item.path);
+        brls::Dialog* dialog = new brls::Dialog("播放失败\n\n视频文件不存在或已被移动：\n" + item.path);
+        dialog->addButton("返回", []() {
+            brls::Application::popActivity();
+        });
+        dialog->open();
+        return;
+    }
     
     // 检查历史断点记录
     int64_t resume_pos = 0;
@@ -195,4 +208,4 @@ void PlayerActivity::playCurrentIndex() {
     player_view_->openFile(item.path, item.name, resume_pos);
 }
 
-} // namespace deck_player
+} // namespace muvik

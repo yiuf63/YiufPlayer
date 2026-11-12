@@ -10,7 +10,7 @@
 #include <memory>
 #include <atomic>
 
-namespace deck_player {
+namespace muvik {
 
 class PlayerActivity : public brls::Activity {
 public:
@@ -30,4 +30,4 @@ private:
     std::vector<std::shared_ptr<std::atomic<bool>>> alive_flags_;
 };
 
-} // namespace deck_player
+} // namespace muvik

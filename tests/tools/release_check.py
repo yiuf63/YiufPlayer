@@ -80,7 +80,7 @@ def main():
     args = ap.parse_args()
 
     prefix = Path(args.prefix) if args.prefix else Path(
-        tempfile.mkdtemp(prefix="deckplayer_release_"))
+        tempfile.mkdtemp(prefix="muvik_release_"))
 
     # ── 1. 安装 ──────────────────────────────────────────────
     section("安装")
@@ -92,16 +92,16 @@ def main():
             print(f" {'✓' if o else '✗'} {n} {d}")
         return 1
 
-    binp = prefix / "bin" / "deck-player"
+    binp = prefix / "bin" / "muvik" if (prefix / "bin" / "muvik").exists() else prefix / "bin" / "muvik"
     check("可执行文件已安装", binp.exists(), str(binp))
-    res = prefix / "share" / "deck-player" / "resources"
+    res = prefix / "share" / "muvik" / "resources" if (prefix / "share" / "muvik").exists() else prefix / "share" / "muvik" / "resources"
     check("资源目录已安装", res.is_dir(), str(res))
     check("字体已安装", (res / "font").is_dir(), "")
     check("图标资源已安装", (res / "icon").is_dir(), "")
 
     # ── 2. desktop 条目 ─────────────────────────────────────
     section("桌面集成")
-    desk = prefix / "share" / "applications" / "org.deckplayer.DeckPlayer.desktop"
+    desk = prefix / "share" / "applications" / "org.muvik.Muvik.desktop"
     check("desktop 文件已安装", desk.exists(), str(desk))
     if desk.exists():
         txt = desk.read_text(encoding="utf-8")
@@ -134,7 +134,7 @@ def main():
 
     # ── 3. AppStream 元数据 ─────────────────────────────────
     section("AppStream")
-    meta = prefix / "share" / "metainfo" / "org.deckplayer.DeckPlayer.metainfo.xml"
+    meta = prefix / "share" / "metainfo" / "org.muvik.Muvik.metainfo.xml"
     check("metainfo 已安装", meta.exists(), str(meta))
     if meta.exists():
         import xml.etree.ElementTree as ET
@@ -147,13 +147,13 @@ def main():
                       (e.text or "").strip()[:30] if e is not None else "缺失")
             launch = root.findtext("launchable", "")
             check("launchable 与 desktop 文件名一致",
-                  launch == "org.deckplayer.DeckPlayer.desktop", launch)
+                  launch == "org.muvik.Muvik.desktop", launch)
         except Exception as e:
             check("metainfo 可解析", False, str(e))
 
     # ── 4. 许可证合规 ───────────────────────────────────────
     section("许可证合规")
-    docdir = prefix / "share" / "doc" / "deck-player"
+    docdir = prefix / "share" / "doc" / "muvik" if (prefix / "share" / "doc" / "muvik").exists() else prefix / "share" / "doc" / "muvik"
     notices = ROOT / "THIRD-PARTY-NOTICES.md"
     check("THIRD-PARTY-NOTICES 已安装",
           (docdir / "THIRD-PARTY-NOTICES.md").exists(), "")
@@ -181,8 +181,9 @@ def main():
         # 用抓帧让程序自行退出，避免依赖窗口管理器
         grab = prefix / "smoke.ppm"
         env = os.environ.copy()
-        env["DECKPLAYER_FRAMEGRAB"] = str(grab)
-        env["DECKPLAYER_FRAMEGRAB_START"] = "150"
+        env["MUVIK_FULLSCREEN"] = "0"
+        env["MUVIK_FRAMEGRAB"] = str(grab)
+        env["MUVIK_FRAMEGRAB_START"] = "150"
         try:
             r = subprocess.run(["stdbuf", "-o0", str(binp)],
                                cwd=tempfile.gettempdir(), env=env, timeout=90,

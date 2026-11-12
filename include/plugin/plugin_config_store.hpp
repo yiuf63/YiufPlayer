@@ -8,12 +8,12 @@
 #include <map>
 #include <mutex>
 
-namespace deck_player {
+namespace muvik {
 
 // 插件配置存储。
 //
 // 每个插件按 id 拥有独立的键值对配置，持久化到
-// ~/.config/deck-player/plugin_config.dat。
+// ~/.config/muvik/plugin_config.dat。
 //
 // 用途：视频源插件（如 WebDAV）需要服务器地址与账号密码，
 // 这些必须能被用户在界面上填写并保存，而不是只能靠环境变量。
@@ -53,4 +53,4 @@ private:
     std::map<std::string, std::map<std::string, std::string>> data_;
 };
 
-} // namespace deck_player
+} // namespace muvik

@@ -5,7 +5,7 @@
 //
 // 另有一条需要真实 WebDAV 服务的用例，通过环境变量启用：
 //   python3 tests/tools/dav_test_server.py /tmp/davroot 18081 u p &
-//   DECKPLAYER_TEST_DAV=http://127.0.0.1:18081/ ./tests/run_tests.sh scraper
+//   MUVIK_TEST_DAV=http://127.0.0.1:18081/ ./tests/run_tests.sh scraper
 // 该用例用于回归「listVideoSourceItems 漏调 init」——
 // 不启用时它会被跳过，因此默认运行不会因缺少服务器而失败。
 
@@ -16,7 +16,7 @@
 #include <cstdlib>
 #include <filesystem>
 
-using namespace deck_player;
+using namespace muvik;
 namespace fs = std::filesystem;
 
 int main() {
@@ -24,6 +24,8 @@ int main() {
 
     // 需要显式加载：测试进程不经过 main()，没有自动扫描。
     // 用 build 目录里的演示插件（与主程序同一份产物）。
+    // 显式开启原生 C 插件加载开关以测试遗留 ABI
+    setenv("MUVIK_ENABLE_NATIVE_PLUGINS", "1", 1);
     std::string plugins_dir = AppPaths::configDir() + "/plugins";
     if (!fs::exists(plugins_dir)) {
         printf("跳过：%s 不存在\n", plugins_dir.c_str());
@@ -69,10 +71,26 @@ int main() {
     // 用一个不存在的目录来调用：只要不崩溃、且返回 false 即可，
     // 关键是它能进入 list_items 分支而不是在 init 阶段被挡下。
     if (!scrapers.empty()) {
-        // 找一个视频源插件
+        // 找一个需要网络配置的视频源插件（如 WebDAV），验证配置生效性
         std::string vs_path;
         for (const auto& pl : pm.getPlugins()) {
-            if (pl.has_video_source) { vs_path = pl.path; break; }
+            if (pl.has_video_source && pl.name.find("WebDAV") != std::string::npos) {
+                vs_path = pl.path;
+                break;
+            }
+        }
+        if (vs_path.empty()) {
+            for (const auto& pl : pm.getPlugins()) {
+                if (pl.has_video_source && !pl.is_js_plugin) {
+                    vs_path = pl.path;
+                    break;
+                }
+            }
+        }
+        if (vs_path.empty()) {
+            for (const auto& pl : pm.getPlugins()) {
+                if (pl.has_video_source) { vs_path = pl.path; break; }
+            }
         }
         if (!vs_path.empty()) {
             std::string stem = fs::path(vs_path).stem().string();
@@ -81,13 +99,13 @@ int main() {
             const std::string old_url = cfg.get(stem, "url");
 
             // 0) 若外部已配置了可达的服务，应能列出内容
-            if (std::getenv("DECKPLAYER_TEST_DAV")) {
-                cfg.set(stem, "url", std::getenv("DECKPLAYER_TEST_DAV"));
+            if (std::getenv("MUVIK_TEST_DAV")) {
+                cfg.set(stem, "url", std::getenv("MUVIK_TEST_DAV"));
                 cfg.set(stem, "user", "u");
                 cfg.set(stem, "pass", "p");
                 cfg.save();
             }
-            if (!old_url.empty() || std::getenv("DECKPLAYER_TEST_DAV")) {
+            if (!old_url.empty() || std::getenv("MUVIK_TEST_DAV")) {
                 std::vector<MediaItem> items;
                 bool listed = pm.listVideoSourceItems(vs_path, "", items);
                 printf("已配置 -> 列表%s（%zu 项）\n",

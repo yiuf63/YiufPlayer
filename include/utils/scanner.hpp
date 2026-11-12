@@ -8,7 +8,7 @@
 #include <vector>
 #include <set>
 
-namespace deck_player {
+namespace muvik {
 
 class MediaScanner {
 public:
@@ -42,4 +42,4 @@ private:
     static const std::set<std::string> SUPPORTED_SUBTITLE_EXTS;
 };
 
-} // namespace deck_player
+} // namespace muvik

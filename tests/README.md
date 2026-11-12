@@ -44,11 +44,15 @@ tests/
     ├── test_plugin_installer.cpp    # ZIP 安装与安全隐患
     ├── test_plugin_config.cpp       # 插件配置持久化
     ├── test_playback_history.cpp    # 播放进度持久化与并发
+    ├── test_display_mode.cpp        # 全屏模式解析与配置持久化
+    ├── test_input_settings.cpp      # 手柄按键布局反转与配置持久化
+    ├── test_i18n.cpp                # 多语言翻译接口与持久化
+    ├── test_workshop_dlc.cpp        # Steam 创意工坊与 DLC 插件发现
     ├── test_scraper.cpp             # 插件加载与刮削（含本地 WebDAV 服务）
     └── test_concurrency.cpp         # 并发安全
 ```
 
-共 **8 个套件**（7 个在 `run_tests.sh` 的 `TESTS` 数组里登记，
+共 **10 个套件**（9 个在 `run_tests.sh` 的 `TESTS` 数组里登记，
 `plugin_installer` 因需要 fmt/borealis 头文件而单独编译）。
 
 ## 编写新测试

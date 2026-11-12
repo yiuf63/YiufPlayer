@@ -7,7 +7,7 @@
 #include <borealis/core/logger.hpp>
 #endif
 
-namespace deck_player {
+namespace muvik {
 
 #if defined(__APPLE__)
 
@@ -26,7 +26,7 @@ void BackgroundPlayback::begin() {
         // 声明「用户可感知的后台活动」，阻止 App Nap 降低调度优先级
         NSObject* token = [info beginActivityWithOptions:(NSActivityUserInitiated |
                                                               NSActivityLatencyCritical)
-                                                     reason:@"DeckPlayer background audio playback"];
+                                                     reason:@"Muvik background audio playback"];
         // 非 ARC 环境，手动持有，确保生命周期覆盖到 end()
         g_activity = [token retain];
         brls::Logger::info("macOS: 已抑制 App Nap，后台音频可继续播放");
@@ -56,4 +56,4 @@ bool BackgroundPlayback::isActive() { return false; }
 
 #endif
 
-} // namespace deck_player
+} // namespace muvik

@@ -33,7 +33,7 @@ namespace brls
 
     bool static getPlatformBool(const std::string& method, bool defaultValue = false) {
         auto env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
-        // DeckPlayer 补丁：JNIEnv 可能为空（例如在 SDL 尚未初始化 JNI，
+        // Muvik 补丁：JNIEnv 可能为空（例如在 SDL 尚未初始化 JNI，
         // 或当前 native 线程还没 attach 时被调用）。
         // 上游直接 env->FindClass(...) 会空指针崩溃，
         // 实测崩在 BottomBar 构造里的 canShowBatteryLevel()。
@@ -72,7 +72,7 @@ namespace brls
 
     int static getPlatformInt(const std::string& method, int defaultValue = 100) {
         auto env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
-        // DeckPlayer 补丁：JNIEnv 可能为空（例如在 SDL 尚未初始化 JNI，
+        // Muvik 补丁：JNIEnv 可能为空（例如在 SDL 尚未初始化 JNI，
         // 或当前 native 线程还没 attach 时被调用）。
         // 上游直接 env->FindClass(...) 会空指针崩溃，
         // 实测崩在 BottomBar 构造里的 canShowBatteryLevel()。
@@ -177,7 +177,7 @@ namespace brls
 
     void AndroidPlatform::openBrowser(std::string url) {
         auto env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
-        // DeckPlayer 补丁：JNIEnv 可能为空，直接解引用会崩。
+        // Muvik 补丁：JNIEnv 可能为空，直接解引用会崩。
         if (env == nullptr)
             return;
 
@@ -200,7 +200,7 @@ namespace brls
 
     float AndroidPlatform::getBacklightBrightness() {
         auto env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
-        // DeckPlayer 补丁：JNIEnv 可能为空，直接解引用会崩。
+        // Muvik 补丁：JNIEnv 可能为空，直接解引用会崩。
         if (env == nullptr)
             return 100.0f;
 

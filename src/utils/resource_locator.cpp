@@ -2,10 +2,13 @@
 #include <string>
 #include <vector>
 #include "utils/resource_locator.hpp"
-#include <borealis/core/logger.hpp>
 #include <filesystem>
 #include <vector>
 #include <cstdlib>
+
+#if !defined(TESTING_WITHOUT_BOREALIS)
+#include <borealis/core/logger.hpp>
+#endif
 
 #if defined(__APPLE__)
 #include <mach-o/dyld.h>
@@ -16,7 +19,7 @@
 
 namespace fs = std::filesystem;
 
-namespace deck_player {
+namespace muvik {
 
 namespace {
 
@@ -71,7 +74,7 @@ std::string ResourceLocator::findResourceDir() {
     std::vector<std::string> candidates;
 
     // 1. 环境变量优先（便于调试与特殊部署）
-    if (const char* env = std::getenv("DECKPLAYER_RESOURCES")) {
+    if (const char* env = std::getenv("MUVIK_RESOURCES")) {
         candidates.emplace_back(env);
     }
 
@@ -83,16 +86,16 @@ std::string ResourceLocator::findResourceDir() {
         fs::path exe(exe_dir);
         candidates.push_back((exe / "resources").string());              // bin/resources
         candidates.push_back((exe.parent_path() / "resources").string()); // ../resources
-        candidates.push_back((exe.parent_path() / "share" / "deck-player" / "resources").string());
-        candidates.push_back((exe.parent_path().parent_path() / "share" / "deck-player" / "resources").string());
-        // Flatpak 常见布局：/app/bin/deck-player -> /app/share/deck-player/resources
-        candidates.push_back((exe.parent_path().parent_path() / "share" / "deck-player" / "resources").string());
+        candidates.push_back((exe.parent_path() / "share" / "muvik" / "resources").string());
+        candidates.push_back((exe.parent_path().parent_path() / "share" / "muvik" / "resources").string());
+        // Flatpak 常见布局：/app/bin/muvik -> /app/share/muvik/resources
+        candidates.push_back((exe.parent_path().parent_path() / "share" / "muvik" / "resources").string());
     }
 
     // 4. 系统级安装路径
-    candidates.push_back("/app/share/deck-player/resources");           // Flatpak
-    candidates.push_back("/usr/share/deck-player/resources");            // 系统安装
-    candidates.push_back("/usr/local/share/deck-player/resources");
+    candidates.push_back("/app/share/muvik/resources");                 // Flatpak
+    candidates.push_back("/usr/share/muvik/resources");                  // 系统安装
+    candidates.push_back("/usr/local/share/muvik/resources");
 
     for (const auto& c : candidates) {
         if (isValidResourceDir(c)) {
@@ -105,9 +108,11 @@ std::string ResourceLocator::findResourceDir() {
 bool ResourceLocator::setup() {
     std::string dir = findResourceDir();
     if (dir.empty()) {
+#if !defined(TESTING_WITHOUT_BOREALIS)
         brls::Logger::warning(
             "未能定位资源目录，字体与图标可能缺失。"
-            "可通过 DECKPLAYER_RESOURCES 环境变量指定。");
+            "可通过 MUVIK_RESOURCES 环境变量指定。");
+#endif
         return false;
     }
 
@@ -119,10 +124,14 @@ bool ResourceLocator::setup() {
     std::error_code ec;
     fs::current_path(parent, ec);
     if (ec) {
+#if !defined(TESTING_WITHOUT_BOREALIS)
         brls::Logger::warning("切换工作目录失败: {}", ec.message());
+#endif
     }
 
+#if !defined(TESTING_WITHOUT_BOREALIS)
     brls::Logger::info("资源目录: {}", dir);
+#endif
     return true;
 }
 
@@ -130,4 +139,4 @@ const std::string& ResourceLocator::resourceDir() {
     return g_resource_dir;
 }
 
-} // namespace deck_player
+} // namespace muvik

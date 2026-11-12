@@ -1,6 +1,6 @@
 # WebDAV 视频源插件示例
 
-这是一个**可实际工作**的 DeckPlayer 插件参考实现，展示如何用纯 C ABI
+这是一个**可实际工作**的 Muvik 插件参考实现，展示如何用纯 C ABI
 接入一个真实的网络媒体源。
 
 适用服务：Alist、群晖 WebDAV、坚果云、Nextcloud、任意标准 WebDAV 服务器。
@@ -22,7 +22,7 @@
 ## 编译
 
 ```bash
-clang -shared -fPIC -I <deck-player>/include/plugin \
+clang -shared -fPIC -I <muvik>/include/plugin \
       -o webdav.dylib examples/webdav_plugin/webdav_plugin.c
 ```
 
@@ -31,11 +31,11 @@ Linux 上把输出后缀改为 `.so`。
 ## 安装
 
 ```bash
-mkdir -p ~/.config/deck-player/plugins
-cp webdav.dylib ~/.config/deck-player/plugins/
+mkdir -p ~/.config/muvik/plugins
+cp webdav.dylib ~/.config/muvik/plugins/
 ```
 
-然后在 DeckPlayer 里进入「存储位置 → 插件管理 → 重新扫描」（或按 Y）。
+然后在 Muvik 里进入「存储位置 → 插件管理 → 重新扫描」（或按 Y）。
 
 ## 配置
 
@@ -43,20 +43,20 @@ cp webdav.dylib ~/.config/deck-player/plugins/
 
 | 变量 | 说明 | 示例 |
 | :--- | :--- | :--- |
-| `DECKPLAYER_WEBDAV_URL` | 服务器地址 | `http://192.168.1.10:5244/dav` |
-| `DECKPLAYER_WEBDAV_USER` | 用户名（可空） | `alist` |
-| `DECKPLAYER_WEBDAV_PASS` | 密码（可空） | `secret` |
+| `MUVIK_WEBDAV_URL` | 服务器地址 | `http://192.168.1.10:5244/dav` |
+| `MUVIK_WEBDAV_USER` | 用户名（可空） | `alist` |
+| `MUVIK_WEBDAV_PASS` | 密码（可空） | `secret` |
 
 启动示例：
 
 ```bash
-DECKPLAYER_WEBDAV_URL=http://192.168.1.10:5244/dav \
-DECKPLAYER_WEBDAV_USER=alist \
-DECKPLAYER_WEBDAV_PASS=secret \
-./deck-player
+MUVIK_WEBDAV_URL=http://192.168.1.10:5244/dav \
+MUVIK_WEBDAV_USER=alist \
+MUVIK_WEBDAV_PASS=secret \
+./muvik
 ```
 
-未设置 `DECKPLAYER_WEBDAV_URL` 时，插件会正常加载但报告「需要配置」，
+未设置 `MUVIK_WEBDAV_URL` 时，插件会正常加载但报告「需要配置」，
 不会导致主程序出错。
 
 ---
@@ -73,7 +73,7 @@ DECKPLAYER_WEBDAV_PASS=secret \
   PASS 提供视频源扩展点
 
 == 未配置时优雅降级 ==
-  [plugin L1] WebDAV: 未设置 DECKPLAYER_WEBDAV_URL
+  [plugin L1] WebDAV: 未设置 MUVIK_WEBDAV_URL
   PASS 无配置时 init 返回非 OK
   PASS needs_config 返回真
 

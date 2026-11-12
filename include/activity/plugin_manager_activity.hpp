@@ -11,7 +11,7 @@
 #include "plugin/plugin_manager.hpp"
 #include <functional>
 
-namespace deck_player {
+namespace muvik {
 
 // 插件管理面板：展示已加载插件的状态，提供重新扫描与打开目录的入口。
 // 手柄与触控均可操作。
@@ -33,4 +33,4 @@ private:
     std::vector<std::shared_ptr<std::atomic<bool>>> alive_flags_;
 };
 
-} // namespace deck_player
+} // namespace muvik

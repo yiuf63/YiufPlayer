@@ -1,5 +1,5 @@
 // ============================================================================
-// DeckPlayer 示例插件：演示如何用纯 C ABI 同时提供「视频源」与「刮削器」。
+// Muvik 示例插件：演示如何用纯 C ABI 同时提供「视频源」与「刮削器」。
 //
 // 这个插件不访问网络，返回假的演示数据，用于验证 ABI 链路是否打通。
 // 真实插件可以在此基础上接入 Emby / Jellyfin / 哔哩哔哩 / TMDB 等。
@@ -10,11 +10,11 @@
 //   gcc -shared -fPIC -o demo_plugin.so demo_plugin.c
 //
 // 安装：
-//   mkdir -p ~/.config/deck-player/plugins
-//   cp demo_plugin.* ~/.config/deck-player/plugins/
+//   mkdir -p ~/.config/muvik/plugins
+//   cp demo_plugin.* ~/.config/muvik/plugins/
 // ============================================================================
 
-#include "deck_plugin_abi.h"
+#include "muvik_plugin_abi.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,7 +32,7 @@ static char* dup_str(const char* s) {
     return out;
 }
 
-static const deck_host_api* g_host = NULL;
+static const muvik_host_api* g_host = NULL;
 
 // ---------------------------------------------------------------------------
 // 视频源实现
@@ -47,57 +47,57 @@ static const char* vs_get_display_name(void* impl) {
 
 static int vs_needs_config(void* impl) { (void)impl; return 0; }
 
-static deck_status vs_init(void* impl, const char* config_json,
-                           const deck_host_api* host) {
+static muvik_status vs_init(void* impl, const char* config_json,
+                           const muvik_host_api* host) {
     (void)impl; (void)config_json;
     g_host = host;
     if (g_host && g_host->log) g_host->log(0, "演示视频源已初始化");
-    return DECK_OK;
+    return MUVIK_OK;
 }
 
-static deck_status vs_list_items(void* impl, const char* path,
-                                 deck_media_list** out_list) {
+static muvik_status vs_list_items(void* impl, const char* path,
+                                 muvik_media_list** out_list) {
     (void)impl;
     (void)path;
-    if (!out_list) return DECK_ERR_GENERIC;
+    if (!out_list) return MUVIK_ERR_GENERIC;
 
     // 构造两条演示条目
-    deck_media_list* list = (deck_media_list*)calloc(1, sizeof(deck_media_list));
-    if (!list) return DECK_ERR_GENERIC;
+    muvik_media_list* list = (muvik_media_list*)calloc(1, sizeof(muvik_media_list));
+    if (!list) return MUVIK_ERR_GENERIC;
 
     list->count = 2;
-    list->items = (deck_media_item*)calloc(2, sizeof(deck_media_item));
+    list->items = (muvik_media_item*)calloc(2, sizeof(muvik_media_item));
     if (!list->items) {
         free(list);
-        return DECK_ERR_GENERIC;
+        return MUVIK_ERR_GENERIC;
     }
 
     list->items[0].name = dup_str("演示影片一.mp4");
     list->items[0].path = dup_str("demo://movie/1");
-    list->items[0].type = DECK_MEDIA_VIDEO;
+    list->items[0].type = MUVIK_MEDIA_VIDEO;
     list->items[0].size = 1024LL * 1024 * 700;
     list->items[0].duration = 7200;
 
     list->items[1].name = dup_str("演示文件夹");
     list->items[1].path = dup_str("demo://folder/1");
-    list->items[1].type = DECK_MEDIA_DIRECTORY;
+    list->items[1].type = MUVIK_MEDIA_DIRECTORY;
     list->items[1].size = -1;
     list->items[1].duration = -1;
 
     *out_list = list;
-    return DECK_OK;
+    return MUVIK_OK;
 }
 
-static deck_status vs_resolve_play_url(void* impl, const char* path,
+static muvik_status vs_resolve_play_url(void* impl, const char* path,
                                        char** out_url) {
     (void)impl;
-    if (!path || !out_url) return DECK_ERR_GENERIC;
+    if (!path || !out_url) return MUVIK_ERR_GENERIC;
     // 真实插件在这里换取带鉴权的播放直链
     *out_url = dup_str(path);
-    return *out_url ? DECK_OK : DECK_ERR_GENERIC;
+    return *out_url ? MUVIK_OK : MUVIK_ERR_GENERIC;
 }
 
-static void vs_free_list(deck_media_list* list) {
+static void vs_free_list(muvik_media_list* list) {
     if (!list) return;
     if (list->items) {
         for (size_t i = 0; i < list->count; ++i) {
@@ -123,17 +123,17 @@ static const char* sc_get_display_name(void* impl) {
 }
 static const char* sc_get_category(void* impl) { (void)impl; return "movie"; }
 
-static deck_status sc_init(void* impl, const char* config_json,
-                           const deck_host_api* host) {
+static muvik_status sc_init(void* impl, const char* config_json,
+                           const muvik_host_api* host) {
     (void)impl; (void)config_json;
     g_host = host;
-    return DECK_OK;
+    return MUVIK_OK;
 }
 
-static deck_status sc_search(void* impl, const char* query, int64_t year,
+static muvik_status sc_search(void* impl, const char* query, int64_t year,
                              char** out_json) {
     (void)impl; (void)year;
-    if (!out_json) return DECK_ERR_GENERIC;
+    if (!out_json) return MUVIK_ERR_GENERIC;
 
     // 演示如何通过宿主发 HTTP 请求（插件自身不链接任何网络库）。
     // 把 DECK_DEMO_HTTP_TARGET 编译进插件即可指向真实 API；
@@ -142,12 +142,12 @@ static deck_status sc_search(void* impl, const char* query, int64_t year,
     if (g_host && g_host->http_request && target && *target) {
         char* body = NULL;
         size_t len = 0;
-        deck_status st = g_host->http_request("GET", target, NULL, NULL, &body, &len);
-        if (st == DECK_OK && body) {
+        muvik_status st = g_host->http_request("GET", target, NULL, NULL, &body, &len);
+        if (st == MUVIK_OK && body) {
             if (g_host->log) g_host->log(0, "刮削器已通过宿主成功获取远程数据");
             *out_json = dup_str(body);
             g_host->free_buffer(body);
-            if (*out_json) return DECK_OK;
+            if (*out_json) return MUVIK_OK;
         }
         if (body) g_host->free_buffer(body);
         if (g_host->log) g_host->log(1, "宿主 HTTP 不可用，回退到本地演示数据");
@@ -160,16 +160,16 @@ static deck_status sc_search(void* impl, const char* query, int64_t year,
              "\"overview\":\"这是示例刮削结果\"}]",
              query ? query : "");
     *out_json = dup_str(buf);
-    return *out_json ? DECK_OK : DECK_ERR_GENERIC;
+    return *out_json ? MUVIK_OK : MUVIK_ERR_GENERIC;
 }
 
-static deck_status sc_fetch_detail(void* impl, const char* candidate_id,
-                                   deck_scrape_result** out_result) {
+static muvik_status sc_fetch_detail(void* impl, const char* candidate_id,
+                                   muvik_scrape_result** out_result) {
     (void)impl;
-    if (!candidate_id || !out_result) return DECK_ERR_GENERIC;
+    if (!candidate_id || !out_result) return MUVIK_ERR_GENERIC;
 
-    deck_scrape_result* r = (deck_scrape_result*)calloc(1, sizeof(deck_scrape_result));
-    if (!r) return DECK_ERR_GENERIC;
+    muvik_scrape_result* r = (muvik_scrape_result*)calloc(1, sizeof(muvik_scrape_result));
+    if (!r) return MUVIK_ERR_GENERIC;
     r->title = dup_str("演示影片");
     r->overview = dup_str("这是演示用的剧情简介。");
     r->poster_url = dup_str("https://example.invalid/poster.jpg");
@@ -179,10 +179,10 @@ static deck_status sc_fetch_detail(void* impl, const char* candidate_id,
     r->rating = 8.5;
     r->runtime_minutes = 120;
     *out_result = r;
-    return DECK_OK;
+    return MUVIK_OK;
 }
 
-static void sc_free_result(deck_scrape_result* r) {
+static void sc_free_result(muvik_scrape_result* r) {
     if (!r) return;
     free((void*)r->title);
     free((void*)r->overview);
@@ -199,7 +199,7 @@ static void sc_destroy(void* impl) { (void)impl; }
 // 扩展点实例
 // ---------------------------------------------------------------------------
 
-static deck_video_source g_video_source = {
+static muvik_video_source g_video_source = {
     .impl = NULL,
     .get_id = vs_get_id,
     .get_display_name = vs_get_display_name,
@@ -211,7 +211,7 @@ static deck_video_source g_video_source = {
     .destroy = vs_destroy,
 };
 
-static deck_scraper g_scraper = {
+static muvik_scraper g_scraper = {
     .impl = NULL,
     .get_id = sc_get_id,
     .get_display_name = sc_get_display_name,
@@ -223,22 +223,22 @@ static deck_scraper g_scraper = {
     .destroy = sc_destroy,
 };
 
-static deck_video_source* create_video_source(void) { return &g_video_source; }
-static deck_scraper* create_scraper(void) { return &g_scraper; }
+static muvik_video_source* create_video_source(void) { return &g_video_source; }
+static muvik_scraper* create_scraper(void) { return &g_scraper; }
 
 // ---------------------------------------------------------------------------
 // 插件入口
 // ---------------------------------------------------------------------------
 
-static const deck_plugin_descriptor g_descriptor = {
-    .abi_version = DECK_PLAYER_ABI_VERSION,
+static const muvik_plugin_descriptor g_descriptor = {
+    .abi_version = MUVIK_ABI_VERSION,
     .plugin_name = "Demo Plugin",
     .plugin_version = "1.0.0",
-    .plugin_author = "DeckPlayer",
+    .plugin_author = "Muvik",
     .create_video_source = create_video_source,
     .create_scraper = create_scraper,
 };
 
-const deck_plugin_descriptor* deck_player_plugin_entry_v1(void) {
+const muvik_plugin_descriptor* muvik_plugin_entry_v1(void) {
     return &g_descriptor;
 }

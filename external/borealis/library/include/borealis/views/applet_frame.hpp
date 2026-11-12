@@ -65,7 +65,7 @@ class AppletFrame : public Box
         return contentView;
     }
 
-    // DeckPlayer 补丁：把默认焦点转发给内容视图。
+    // Muvik 补丁：把默认焦点转发给内容视图。
     //
     // View::getDefaultFocus() 的默认实现只在自身可聚焦时返回 this，
     // 否则返回 nullptr —— **不会递归进子视图**。

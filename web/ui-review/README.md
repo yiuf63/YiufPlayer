@@ -1,6 +1,6 @@
 # UI 评审台（浏览器原型）
 
-DeckPlayer 界面的可交互投影。用来在任意设备上检阅 UI、标注问题、把需求攒成
+Muvik 界面的可交互投影。用来在任意设备上检阅 UI、标注问题、把需求攒成
 一份可以直接贴回对话 / issue 的清单。
 
 ```
@@ -181,7 +181,7 @@ cd web/ui-review && python3 -m http.server 8899
 是黑的。Plex / Jellyfin 的默认策略是 `min(时长 × 0.1, 30s)`，本项目照此实现：
 
 - 抽帧位置 `min(duration * 0.1, 30.0)` 秒
-- 输出 320 × 180 JPEG，落到 `~/.cache/deck-player/thumbs/<hash>.jpg`
+- 输出 320 × 180 JPEG，落到 `~/.cache/muvik/thumbs/<hash>.jpg`
 - 主程序目前只链了 `MPV_LIBRARIES`，直接抽帧需要显式链接
   avformat / avcodec / swscale（FFmpeg 本来就在，由 libmpv 带入）
 

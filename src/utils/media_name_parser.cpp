@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cctype>
 
-namespace deck_player {
+namespace muvik {
 
 namespace {
 
@@ -128,4 +128,4 @@ std::string MediaNameParser::queryFromFilename(const std::string& filename) {
     return q;
 }
 
-} // namespace deck_player
+} // namespace muvik

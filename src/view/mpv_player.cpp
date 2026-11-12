@@ -15,6 +15,7 @@
 #include "ui/icons.hpp"
 #include "utils/playback_history.hpp"
 #include "utils/scanner.hpp"
+#include "utils/i18n.hpp"
 #include <cmath>
 #include <algorithm>
 #include <ctime>
@@ -52,7 +53,7 @@ extern "C" int nvglCreateImageFromHandleGLES3(
     NVGcontext* ctx, unsigned int textureId, int w, int h, int flags);
 #endif
 
-namespace deck_player {
+namespace muvik {
 
 // ─────────────────────────────────────────────────────────────
 // OSD 视觉规格
@@ -69,7 +70,6 @@ namespace deck_player {
 namespace osd {
 // 字号（与 ui::font 分级对齐）
 constexpr float FONT_TITLE    = 20.0f;  // 片名
-constexpr float FONT_META     = 12.5f;  // 技术信息行
 constexpr float FONT_TIME     = 14.0f;  // 时间
 constexpr float FONT_HUD      = 17.0f;  // 居中 HUD 文字
 constexpr float FONT_HUD_ICON = 24.0f;  // HUD 图标
@@ -84,22 +84,19 @@ constexpr float TRANSPORT_D    = 64.0f;  // 播放/暂停主按钮直径
 constexpr float SIDE_D         = 46.0f;  // 快退/快进按钮直径
 constexpr float SKIP_D         = 40.0f;  // 上一集/下一集按钮直径
 constexpr float SETTINGS_D     = 40.0f;  // 设置行按钮直径
-constexpr float TIME_GAP       = 62.0f;  // 进度条两端让给时间的宽度
 
 // 内容左右安全边距：随宽度按比例，但设上下限（掌机窄屏不贴边，
 // 桌面宽屏也不至于离得太远）。
 inline float marginFor(float width) {
     return std::clamp(width * 0.042f, 24.0f, 56.0f);
 }
-// 底部两条水平基线（评审台 2026-11 改版：四条基线压成两条）。
-// 旧版是 设置行/主控行/进度条/时间 各一条轴，主控居中、设置右对齐、
-// 时间独占一行 —— 三条对齐轴互不相干，左下角整片空白，观感是「没对齐」。
-// 现在：工具条一条轴（主控块左缘贴 m、设置块右缘贴 w−m），
-// 进度条一条轴（时间内联在两端，条的两端各让出 TIME_GAP）。
-inline float barCenterY(float y, float h) { return y + h - 58.0f; }
-inline float toolCenterY(float y, float h) { return y + h - 124.0f; }
-// 主控块：左缘贴 m，块内播放按钮居中（块宽 = 124*2 + 64 = 312）。
-inline float transportCenterX(float x, float m) { return x + m + 142.0f; }
+// 底部两条水平基线：
+//   工具条一条轴：主控块水平居中于画面中轴线，设置块右缘贴 w−m
+//   进度条一条轴：左侧当前时间贴 m、右侧总时长贴 w−m，进度条居中延展
+inline float barCenterY(float y, float h) { return y + h - 56.0f; }
+inline float toolCenterY(float y, float h) { return y + h - 126.0f; }
+// 主控块：居中于画面中轴线（播放/暂停及前后跳过按钮水平居中）
+inline float transportCenterX(float x, float width) { return x + width * 0.5f; }
 } // namespace osd
 
 // 把 showHUD() 的历史字符串键映射到矢量图标。
@@ -169,58 +166,176 @@ MPVPlayerView::MPVPlayerView() {
 
     last_user_action_time_ = std::chrono::steady_clock::now();
 
-    // 绑定基础播放与寻迹控制
-    this->registerAction("播放/暂停", brls::ControllerButton::BUTTON_A, [this]([[maybe_unused]] brls::View* view) {
-        if (touch_locked_) return false;
-        togglePlayPause();
+    auto handleLocked = [this]() -> bool {
+        if (!touch_locked_) return false;
+        auto now = std::chrono::steady_clock::now();
+        lock_hint_until_ = now + std::chrono::milliseconds(2600);
+        return true;
+    };
+
+    // 绑定基础播放与控制
+    this->registerAction(i18n::tr("player.play_pause", "播放/暂停"), brls::ControllerButton::BUTTON_A, [this]([[maybe_unused]] brls::View* view) {
+        auto now = std::chrono::steady_clock::now();
+        if (touch_locked_) {
+            const auto dt_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_a_press_time_).count();
+            if (dt_ms < 450) {
+                toggleTouchLock();
+                showOSD(true);
+                last_user_action_time_ = now;
+                return true;
+            }
+            last_a_press_time_ = now;
+            lock_hint_until_ = now + std::chrono::milliseconds(2600);
+            return true;
+        }
+        last_a_press_time_ = now;
+        if (isOsdActive()) {
+            activateOsdFocus();
+        } else {
+            showOSD(true);
+            osd_focus_ = OsdFocusItem::PlayPause;
+            togglePlayPause();
+        }
+        last_user_action_time_ = now;
         return true;
     }, false);
 
-    this->registerAction("快退", brls::ControllerButton::BUTTON_LEFT, [this]([[maybe_unused]] brls::View* view) {
-        if (touch_locked_) return false;
-        seek(-10);
+    this->registerAction(i18n::tr("common.back", "返回"), brls::ControllerButton::BUTTON_B, [handleLocked]([[maybe_unused]] brls::View* view) {
+        if (handleLocked()) return true;
+        // 退出当前视频播放页（立即返回上一页，无需淡出等待）
+        brls::Application::popActivity(brls::TransitionAnimation::NONE);
         return true;
     }, false);
 
-    this->registerAction("快进", brls::ControllerButton::BUTTON_RIGHT, [this]([[maybe_unused]] brls::View* view) {
-        if (touch_locked_) return false;
-        seek(10);
+    this->registerAction(i18n::tr("player.rewind", "快退"), brls::ControllerButton::BUTTON_LEFT, [this, handleLocked]([[maybe_unused]] brls::View* view) {
+        if (handleLocked()) return true;
+        if (isOsdActive()) {
+            navigateOsdFocus(brls::FocusDirection::LEFT);
+        } else {
+            showOSD(true);
+            osd_focus_ = OsdFocusItem::ProgressBar;
+            seek(-10);
+        }
+        last_user_action_time_ = std::chrono::steady_clock::now();
         return true;
-    }, false);
+    }, false, true);
 
-    this->registerAction("音量减", brls::ControllerButton::BUTTON_LT, [this]([[maybe_unused]] brls::View* view) {
-        if (touch_locked_) return false;
+    this->registerAction(i18n::tr("player.fast_forward", "快进"), brls::ControllerButton::BUTTON_RIGHT, [this, handleLocked]([[maybe_unused]] brls::View* view) {
+        if (handleLocked()) return true;
+        if (isOsdActive()) {
+            navigateOsdFocus(brls::FocusDirection::RIGHT);
+        } else {
+            showOSD(true);
+            osd_focus_ = OsdFocusItem::ProgressBar;
+            seek(10);
+        }
+        last_user_action_time_ = std::chrono::steady_clock::now();
+        return true;
+    }, false, true);
+
+    this->registerAction(i18n::tr("player.volume_down", "音量减"), brls::ControllerButton::BUTTON_LT, [this, handleLocked]([[maybe_unused]] brls::View* view) {
+        if (handleLocked()) return true;
         setVolume(volume_ - 5);
         return true;
     }, false, true);   // 第 5 个参数 = 按住连发
 
-    this->registerAction("音量加", brls::ControllerButton::BUTTON_RT, [this]([[maybe_unused]] brls::View* view) {
-        if (touch_locked_) return false;
+    this->registerAction(i18n::tr("player.volume_up", "音量加"), brls::ControllerButton::BUTTON_RT, [this, handleLocked]([[maybe_unused]] brls::View* view) {
+        if (handleLocked()) return true;
         setVolume(volume_ + 5);
         return true;
     }, false, true);
 
-    this->registerAction("上一集", brls::ControllerButton::BUTTON_LB, [this]([[maybe_unused]] brls::View* view) {
-        if (touch_locked_) return false;
-        if (on_prev_next_cb_) on_prev_next_cb_(false);
+    // 肩键：快退 15 秒 / 快进 15 秒（支持按住连续调节）
+    this->registerAction(i18n::tr("player.rewind", "快退"), brls::ControllerButton::BUTTON_LB, [this, handleLocked]([[maybe_unused]] brls::View* view) {
+        if (handleLocked()) return true;
+        seek(-15);
+        return true;
+    }, false, true);
+
+    this->registerAction(i18n::tr("player.fast_forward", "快进"), brls::ControllerButton::BUTTON_RB, [this, handleLocked]([[maybe_unused]] brls::View* view) {
+        if (handleLocked()) return true;
+        seek(15);
+        return true;
+    }, false, true);
+
+    this->registerAction(i18n::tr("player.playlist", "播放列表"), brls::ControllerButton::BUTTON_UP, [this, handleLocked]([[maybe_unused]] brls::View* view) {
+        if (handleLocked()) return true;
+        if (isOsdActive()) {
+            navigateOsdFocus(brls::FocusDirection::UP);
+        } else {
+            showOSD(true);
+            osd_focus_ = OsdFocusItem::PlayPause;
+        }
+        last_user_action_time_ = std::chrono::steady_clock::now();
         return true;
     }, false);
 
-    this->registerAction("下一集", brls::ControllerButton::BUTTON_RB, [this]([[maybe_unused]] brls::View* view) {
-        if (touch_locked_) return false;
-        if (on_prev_next_cb_) on_prev_next_cb_(true);
+    this->registerAction("控制栏", brls::ControllerButton::BUTTON_DOWN, [this, handleLocked]([[maybe_unused]] brls::View* view) {
+        if (handleLocked()) return true;
+        if (isOsdActive()) {
+            navigateOsdFocus(brls::FocusDirection::DOWN);
+        } else {
+            showOSD(true);
+            osd_focus_ = OsdFocusItem::ProgressBar;
+        }
+        last_user_action_time_ = std::chrono::steady_clock::now();
         return true;
     }, false);
 
-    this->registerAction("播放列表", brls::ControllerButton::BUTTON_UP, [this]([[maybe_unused]] brls::View* view) {
-        if (touch_locked_) return false;
-        if (on_show_playlist_cb_) on_show_playlist_cb_();
+    // 摇杆与方向导航映射：未唤出控制栏时唤出并聚焦对应控件，唤出后正常行进导航
+    this->registerAction("", brls::ControllerButton::BUTTON_NAV_LEFT, [this, handleLocked]([[maybe_unused]] brls::View* view) {
+        if (handleLocked()) return true;
+        if (isOsdActive()) {
+            navigateOsdFocus(brls::FocusDirection::LEFT);
+        } else {
+            showOSD(true);
+            osd_focus_ = OsdFocusItem::ProgressBar;
+            seek(-10);
+        }
+        last_user_action_time_ = std::chrono::steady_clock::now();
         return true;
-    }, false);
+    }, true, true);
+
+    this->registerAction("", brls::ControllerButton::BUTTON_NAV_RIGHT, [this, handleLocked]([[maybe_unused]] brls::View* view) {
+        if (handleLocked()) return true;
+        if (isOsdActive()) {
+            navigateOsdFocus(brls::FocusDirection::RIGHT);
+        } else {
+            showOSD(true);
+            osd_focus_ = OsdFocusItem::ProgressBar;
+            seek(10);
+        }
+        last_user_action_time_ = std::chrono::steady_clock::now();
+        return true;
+    }, true, true);
+
+    this->registerAction("", brls::ControllerButton::BUTTON_NAV_UP, [this, handleLocked]([[maybe_unused]] brls::View* view) {
+        if (handleLocked()) return true;
+        if (isOsdActive()) {
+            navigateOsdFocus(brls::FocusDirection::UP);
+        } else {
+            showOSD(true);
+            osd_focus_ = OsdFocusItem::PlayPause;
+        }
+        last_user_action_time_ = std::chrono::steady_clock::now();
+        return true;
+    }, true, false);
+
+    this->registerAction("", brls::ControllerButton::BUTTON_NAV_DOWN, [this, handleLocked]([[maybe_unused]] brls::View* view) {
+        if (handleLocked()) return true;
+        if (isOsdActive()) {
+            navigateOsdFocus(brls::FocusDirection::DOWN);
+        } else {
+            showOSD(true);
+            osd_focus_ = OsdFocusItem::ProgressBar;
+        }
+        last_user_action_time_ = std::chrono::steady_clock::now();
+        return true;
+    }, true, false);
 
     // 绑定高级功能按键
-    this->registerAction("音轨选择", brls::ControllerButton::BUTTON_X, [this]([[maybe_unused]] brls::View* view) {
-        if (touch_locked_) return false;
+    this->registerAction(i18n::tr("player.audio_track", "音轨选择"), brls::ControllerButton::BUTTON_X, [this, handleLocked]([[maybe_unused]] brls::View* view) {
+        if (handleLocked()) return true;
         auto tracks = getTracks("audio");
         TrackSelectionDialog::showAudioDialog(tracks, [this](int track_id) {
             selectTrack("audio", track_id);
@@ -228,8 +343,8 @@ MPVPlayerView::MPVPlayerView() {
         return true;
     }, false);
 
-    this->registerAction("字幕设置", brls::ControllerButton::BUTTON_Y, [this]([[maybe_unused]] brls::View* view) {
-        if (touch_locked_) return false;
+    this->registerAction(i18n::tr("player.sub_track", "字幕设置"), brls::ControllerButton::BUTTON_Y, [this, handleLocked]([[maybe_unused]] brls::View* view) {
+        if (handleLocked()) return true;
         auto tracks = getTracks("sub");
         TrackSelectionDialog::showSubtitleDialog(tracks, subtitle_delay_,
             [this](int track_id) { selectTrack("sub", track_id); },
@@ -240,15 +355,15 @@ MPVPlayerView::MPVPlayerView() {
     }, false);
 
     // 按下右摇杆 (R3)：循环切换倍速 (1.0x -> 1.25x -> 1.5x -> 2.0x -> 0.75x)
-    this->registerAction("倍速切换", brls::ControllerButton::BUTTON_RSB, [this]([[maybe_unused]] brls::View* view) {
-        if (touch_locked_) return false;
+    this->registerAction(i18n::tr("player.speed", "倍速切换"), brls::ControllerButton::BUTTON_RSB, [this, handleLocked]([[maybe_unused]] brls::View* view) {
+        if (handleLocked()) return true;
         cyclePlaybackSpeed();
         return true;
     }, false);
 
     // 按下左摇杆 (L3)：循环切换画面比例 (适应 -> 16:10 满屏 -> 16:9 -> 4:3)
-    this->registerAction("比例切换", brls::ControllerButton::BUTTON_LSB, [this]([[maybe_unused]] brls::View* view) {
-        if (touch_locked_) return false;
+    this->registerAction(i18n::tr("player.aspect_ratio", "比例切换"), brls::ControllerButton::BUTTON_LSB, [this, handleLocked]([[maybe_unused]] brls::View* view) {
+        if (handleLocked()) return true;
         cycleAspectRatio();
         return true;
     }, false);
@@ -287,26 +402,12 @@ MPVPlayerView::MPVPlayerView() {
         return true;
     }, false);
 
-    // 视频渲染必须在 nanoVG 提交完成之后进行，否则会被覆盖
+    // 视频渲染在帧末执行：mpv 画面直接渲染到默认帧缓冲中
     brls::Application::postDrawHook = [this]() {
-        // 关键：Dialog 在 borealis 里是「压栈的新 Activity」
-        //   void Dialog::open() { Application::pushActivity(new Activity(this)); }
-        //
-        // 对话框打开后，本视图仍在栈中、draw() 仍在被调用、postDrawHook
-        // 依然生效。若此时照常渲染 mpv 画面（它画满整个窗口），会把包括
-        // 对话框在内的整套 UI 整屏盖掉——实测播放列表完全看不见。
-        //
-        // 判据：本视图所属的 Activity 必须就是栈顶 Activity，才渲染视频。
-        // 这样任何压栈的对话框/二级页面都会自动让出画面。
-        brls::Activity* mine = this->getParentActivity();
-        brls::Activity* top = brls::Application::getTopActivity();
-        if (mine && top && top != mine) {
-            return;   // 被对话框或其它 Activity 覆盖，不画视频
-        }
         this->renderMPV();
     };
 
-    // 手势自检：设置 DECKPLAYER_GESTURE_TEST=1 后自动注入触摸序列，
+    // 手势自检：设置 MUVIK_GESTURE_TEST=1 后自动注入触摸序列，
     // 用于在无人交互的环境下验证手势是否真的生效。
     setupGestureSelfTest();
 }
@@ -324,7 +425,7 @@ static void injectTouch(brls::View* view, brls::TouchPhase phase,
 }
 
 void MPVPlayerView::setupGestureSelfTest() {
-    if (!std::getenv("DECKPLAYER_GESTURE_TEST")) return;
+    if (!std::getenv("MUVIK_GESTURE_TEST")) return;
 
     brls::Logger::info("=== 手势自检开始 ===");
     brls::Logger::info("初始: osd={} playing={} vol={} bright={}%",
@@ -650,32 +751,38 @@ void MPVPlayerView::drawOverlay() {
     const auto& r = last_draw_;
     if (r.w <= 0.0f || r.h <= 0.0f) return;
 
-    // 这里**不要**自己设 glViewport。
-    //
-    // 视口由平台层负责：SDL 后端在 sdlWindowFramebufferSizeCallback 里
-    // 已经用物理像素调用过 glViewport(0, 0, fWidth, fHeight)，
-    // 而 nanoVG 的 GL 后端根本不碰视口（glnvg__renderViewport 只记录
-    // gl->view，从不读取它）。
-    //
-    // 之前这里写 glViewport(0,0,windowWidth,windowHeight) 是错的：
-    // windowWidth 已经是**物理像素**（见 Application::onWindowResized），
-    // 再乘 windowScale 会放大到屏幕外，OSD 就只剩左上角一块。
-    //
-    // nvgBeginFrame 的 windowWidth/Height 参数只是记录用途，
-    // 真正的逻辑→物理换算由紧随其后的 nvgScale 完成，
-    // 与 borealis 主循环（application.cpp:803-804）保持一致。
-    // 与 borealis 主循环保持一致：
-    //   nvgBeginFrame(windowWidth(物理), windowHeight(物理), scaleFactor)
-    //   nvgScale(windowScale)
-    // 这样 View 用逻辑坐标（contentWidth=1280）绘制，nvgScale 之后
-    // 自动映射到物理像素（3392）。**两处必须完全一致**，
-    // 否则 OSD 与主 UI 会落在不同的坐标空间里。
     nvgBeginFrame(vg, brls::Application::windowWidth,
                   brls::Application::windowHeight,
                   brls::Application::windowScale);
     nvgScale(vg, brls::Application::windowScale, brls::Application::windowScale);
 
-    drawHud(vg, r.x, r.y, r.w, r.h);
+    brls::Activity* mine = this->getParentActivity();
+    brls::Activity* top = brls::Application::getTopActivity();
+    bool has_overlay_activity = (mine && top && top != mine);
+
+    if (!has_overlay_activity) {
+        drawHud(vg, r.x, r.y, r.w, r.h);
+    } else {
+        // 当有压栈的 Activity（如播放列表、音轨/字幕选择或退出对话框）时：
+        // 视频画面在底层保持渲染（不黑屏、不闪屏），将顶层 Activity 及其半透明 backdrop 遮罩
+        // 绘制在视频之上，确保对话框卡片、按钮和高亮完整可见。
+        brls::FrameContext frameContext;
+        frameContext.pixelRatio = (float)brls::Application::windowWidth / (float)brls::Application::windowHeight;
+        frameContext.vg         = vg;
+        frameContext.fontStash  = brls::Application::getFontStash();
+        frameContext.theme      = brls::Application::getTheme();
+
+        brls::View* topView = top->getContentView();
+        if (topView) {
+            topView->frame(&frameContext);
+        }
+
+        brls::View* focus = brls::Application::getCurrentFocus();
+        if (focus && !brls::Application::isViewDead(focus) &&
+            brls::Application::getInputType() != brls::InputType::TOUCH) {
+            focus->frameHighlight(&frameContext);
+        }
+    }
 
     nvgEndFrame(vg);
 }
@@ -699,30 +806,7 @@ void MPVPlayerView::drawHud(NVGcontext* vg, float x, float y, float width, float
         nvgFill(vg);
     }
 
-    // 字幕避让 OSD 控制栏：
-    // sub-pos=80 是为「控制栏隐藏」设计的（距底 20%）；
-    // 控制栏一旦显示（底部占约 24% 屏高），字幕就会压在按钮行上。
-    // 显示期间抬到 60，隐藏时回落。按 alpha 过半切换，
-    // 只在跨越阈值时下发，避免每帧 set_property。
-    if (mpv_) {
-        const int sub_pos_target = osd_alpha_ > 0.5f ? 60 : 80;
-        if (sub_pos_target != sub_pos_applied_) {
-            sub_pos_applied_ = sub_pos_target;
-            char buf[8];
-            std::snprintf(buf, sizeof(buf), "%d", sub_pos_target);
-            mpv_set_property_string(mpv_, "sub-pos", buf);
-        }
-    }
-
     auto now = std::chrono::steady_clock::now();
-
-    // ── 锁定徽标（始终显示，否则用户不知道「为什么点了没反应」）──
-    if (touch_locked_) {
-        const float bx = x + osd::marginFor(width) + 18.0f;
-        const float by = y + 34.0f;
-        ui::fillCircle(vg, bx, by, 18.0f, nvgRGBA(18, 20, 24, 150));
-        ui::drawIcon(vg, ui::Icon::Lock, bx, by, 17.0f, nvgRGBA(255, 190, 120, 220));
-    }
 
     // ── 居中 HUD 提示（音量 / 亮度 / 倍速 / 跳转结果）──
     if (now < hud_expire_time_) {
@@ -732,41 +816,43 @@ void MPVPlayerView::drawHud(NVGcontext* vg, float x, float y, float width, float
                 / 260.0f, 0.0f, 1.0f);
         const bool has_bar = hud_progress_ >= 0.0f;
         const float text_w = ui::textWidth(vg, osd::FONT_HUD, hud_text_);
-        const float box_w  = std::clamp(text_w + 34.0f + 26.0f + 34.0f, 190.0f, width - 80.0f);
-        const float box_h  = has_bar ? 88.0f : 64.0f;
+        const float box_w  = std::clamp(text_w + 32.0f + 26.0f + 32.0f, 180.0f, width - 100.0f);
+        const float box_h  = has_bar ? 74.0f : 52.0f;
         const float box_x  = x + (width - box_w) * 0.5f;
-        const float box_y  = y + (height - box_h) * 0.5f - 12.0f;
-        const float mid_y  = has_bar ? box_y + 32.0f : box_y + box_h * 0.5f;
+        // 略微偏上（距顶 38% 高度），避开画面正中心的人脸与焦点区
+        const float box_y  = y + height * 0.38f - box_h * 0.5f;
+        const float mid_y  = has_bar ? box_y + 26.0f : box_y + box_h * 0.5f;
 
-        ui::fillRoundRect(vg, box_x, box_y, box_w, box_h, 18.0f,
-                          nvgRGBA(18, 20, 24, (int)(236 * fade)));
-        ui::strokeRoundRect(vg, box_x, box_y, box_w, box_h, 18.0f,
-                            nvgRGBA(255, 255, 255, (int)(26 * fade)));
-        ui::drawIcon(vg, hudIconFor(hud_icon_), box_x + 34.0f, mid_y, osd::FONT_HUD_ICON,
-                     nvgRGBA(255, 159, 69, (int)(255 * fade)));
-        ui::text(vg, box_x + 58.0f, mid_y, osd::FONT_HUD,
+        // 半透明暗色毛玻璃底色：由原先 236（92.5% 不透明）改为 130（51% 半透明），通透不挡画面
+        ui::fillRoundRect(vg, box_x, box_y, box_w, box_h, 16.0f,
+                          nvgRGBA(16, 20, 26, (int)(130 * fade)));
+        ui::strokeRoundRect(vg, box_x, box_y, box_w, box_h, 16.0f,
+                            nvgRGBA(255, 255, 255, (int)(38 * fade)), 1.2f);
+        ui::drawIcon(vg, hudIconFor(hud_icon_), box_x + 30.0f, mid_y, osd::FONT_HUD_ICON,
+                     nvgRGBA(26, 159, 255, (int)(255 * fade)));
+        ui::text(vg, box_x + 54.0f, mid_y, osd::FONT_HUD,
                  nvgRGBA(255, 255, 255, (int)(255 * fade)),
                  NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE,
-                 ui::ellipsize(vg, osd::FONT_HUD, hud_text_, box_w - 92.0f));
+                 ui::ellipsize(vg, osd::FONT_HUD, hud_text_, box_w - 84.0f));
 
         if (has_bar) {
-            const float bar_w = box_w - 68.0f;
-            const float bar_x = box_x + 34.0f;
-            const float bar_y = box_y + box_h - 26.0f;
+            const float bar_w = box_w - 60.0f;
+            const float bar_x = box_x + 30.0f;
+            const float bar_y = box_y + box_h - 20.0f;
             ui::fillRoundRect(vg, bar_x, bar_y, bar_w, 4.0f, 2.0f,
                               nvgRGBA(255, 255, 255, (int)(42 * fade)));
             ui::fillRoundRect(vg, bar_x, bar_y,
                               bar_w * std::clamp(hud_progress_, 0.0f, 1.0f), 4.0f, 2.0f,
-                              nvgRGBA(255, 159, 69, (int)(255 * fade)));
+                              nvgRGBA(26, 159, 255, (int)(255 * fade)));
         }
     }
 
-    // ── 锁定态提示：轻点屏幕后短暂出现「双击解锁」──
+    // ── 锁定态提示：按键或轻点屏幕后短暂出现解锁提示 ──
     if (touch_locked_ && now < lock_hint_until_) {
         const float fade = std::clamp(
             std::chrono::duration<float, std::milli>(lock_hint_until_ - now).count()
                 / 260.0f, 0.0f, 1.0f);
-        const std::string label = "触控已锁定 · 双击解锁";
+        const std::string label = i18n::tr("player.lock_hint", "屏幕已锁定 · 连按两次 A 键或双击屏幕解锁");
         const float tw = ui::textWidth(vg, 14.0f, label);
         const float pw = tw + 74.0f;
         const float px = x + (width - pw) * 0.5f;
@@ -776,20 +862,21 @@ void MPVPlayerView::drawHud(NVGcontext* vg, float x, float y, float width, float
         ui::strokeRoundRect(vg, px, py, pw, 44.0f, 22.0f,
                             nvgRGBA(255, 255, 255, (int)(26 * fade)));
         ui::drawIcon(vg, ui::Icon::Unlock, px + 30.0f, py + 22.0f, 18.0f,
-                     nvgRGBA(255, 159, 69, (int)(255 * fade)));
+                     nvgRGBA(26, 159, 255, (int)(255 * fade)));
         ui::text(vg, px + 50.0f, py + 22.5f, 14.0f,
                  nvgRGBA(255, 255, 255, (int)(240 * fade)),
                  NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, label);
     }
 
     // ── OSD 显隐状态机 ──
-    const auto idle_seconds =
-        std::chrono::duration_cast<std::chrono::seconds>(now - last_user_action_time_).count();
-    // 测试用：DECKPLAYER_OSD_OFF 强制隐藏 OSD，
+    constexpr int64_t kOsdIdleTimeoutMs = 4500;
+    const auto idle_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(now - last_user_action_time_).count();
+    // 测试用：MUVIK_OSD_OFF 强制隐藏 OSD，
     // 便于脚本单独验证「字幕是否被控制栏遮挡」。
-    static const bool osd_force_off = std::getenv("DECKPLAYER_OSD_OFF") != nullptr;
+    static const bool osd_force_off = std::getenv("MUVIK_OSD_OFF") != nullptr;
     const bool osd_shown = !osd_force_off && !touch_locked_
-                        && osd_visible_ && idle_seconds < 8;
+                        && osd_visible_ && idle_ms < kOsdIdleTimeoutMs;
 
     // ── OSD 渐显动画 ──
     // 目标翻转时记下起点 alpha 与时刻；每帧按耗时插值（帧率无关）。
@@ -835,40 +922,54 @@ void MPVPlayerView::drawHud(NVGcontext* vg, float x, float y, float width, float
                     NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, video_title_,
                     width - (title_x - x) - m - clock_w);
 
-    // 技术信息：分辨率 · 硬解。空则整行不画，避免留一条空白。
-    std::string meta_line;
-    if (video_w_ > 0 && video_h_ > 0) {
-        meta_line = std::to_string(video_w_) + "×" + std::to_string(video_h_);
-    }
-    if (video_w_ > 0 || video_h_ > 0) {
-        meta_line += meta_line.empty() ? "" : "  ·  ";
-        meta_line += hwdec_active_ ? "硬件解码" : "软件解码";
-    }
-    if (!meta_line.empty()) {
-        ui::text(vg, title_x, y + 65.0f + top_slide, osd::FONT_META,
-                 nvgRGBA(255, 255, 255, (int)(150 * a)),
-                 NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, meta_line);
+    // 顶部格式徽标（微胶囊排版，告别技术调试串）
+    float cur_bx = title_x;
+    const float badge_y = y + 57.0f + top_slide;
+    const float badge_h = 20.0f;
+    const auto& pal = ui::palette();
+    for (const auto& badge : format_badges_) {
+        const float tw = ui::textWidth(vg, 11.0f, badge.text);
+        const float bw = tw + 14.0f;
+        const NVGcolor bg = badge.is_accent ? ui::rgba(pal.accent, 0.22f * a)
+                                            : nvgRGBA(255, 255, 255, (int)(22 * a));
+        const NVGcolor border = badge.is_accent ? ui::rgba(pal.accent, 0.70f * a)
+                                                : nvgRGBA(255, 255, 255, (int)(45 * a));
+        const NVGcolor fg = badge.is_accent ? pal.accent
+                                            : nvgRGBA(255, 255, 255, (int)(220 * a));
+        ui::fillRoundRect(vg, cur_bx, badge_y, bw, badge_h, 4.0f, bg);
+        ui::strokeRoundRect(vg, cur_bx, badge_y, bw, badge_h, 4.0f, border, 1.0f);
+        ui::text(vg, cur_bx + bw * 0.5f, badge_y + badge_h * 0.5f + 0.5f, 11.0f, fg,
+                 NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, badge.text);
+        cur_bx += bw + 6.0f;
     }
 
-    // 右上角时钟：信息密度低，只在顶部出现，不与底部时间重复。
-    ui::text(vg, x + width - m, y + 38.0f + top_slide, osd::FONT_TIME,
-             nvgRGBA(255, 255, 255, (int)(150 * a)),
-             NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE, getCurrentTimeStr());
+    // 右上角时钟：等宽数字排版，平稳无抖动
+    ui::tabularText(vg, x + width - m, y + 38.0f + top_slide, osd::FONT_TIME,
+                    nvgRGBA(255, 255, 255, (int)(150 * a)),
+                    NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE, getCurrentTimeStr());
 
     // ═══════════════ 底部：压边 + 进度条 + 时间 ═══════════════
     ui::scrimBottom(vg, x, y + height - osd::BOTTOM_H + bot_slide, width,
                     osd::BOTTOM_H, a);
 
     const float bar_cy = osd::barCenterY(y, height) + bot_slide;
-    // 进度条两端各让出 TIME_GAP：时间并进同一条基线，不再独占一行
-    const float bar_x  = x + m + osd::TIME_GAP;
-    const float bar_w  = width - m * 2.0f - osd::TIME_GAP * 2.0f;
-    const float bar_top = bar_cy - osd::BAR_H * 0.5f;
 
     // 拖动中的预览值优先，否则用真实播放位置
     const double shown_pos   = seek_dragging_ ? seek_preview_ : current_position_;
     const double shown_total = seek_dragging_ && seek_preview_total_ > 0
                                    ? seek_preview_total_ : total_duration_;
+
+    const std::string pos_str   = MediaScanner::formatDuration((int64_t)shown_pos);
+    const std::string total_str = MediaScanner::formatDuration((int64_t)shown_total);
+
+    // 时间显示宽度自适应（等宽排版，至少预留 64px，带时分秒时不挤压）
+    const float time_w = std::max(ui::tabularTextWidth(vg, osd::FONT_TIME, total_str), 64.0f);
+    constexpr float kTimeGap = 16.0f; // 时间文字与进度条两端留出的安全间距
+
+    // 进度条两端让出时间显示区域，时间与进度条位于同一垂直中心线
+    const float bar_x   = x + m + time_w + kTimeGap;
+    const float bar_w   = width - (m + time_w + kTimeGap) * 2.0f;
+    const float bar_top = bar_cy - osd::BAR_H * 0.5f;
 
     seek_bar_.x     = bar_x;
     seek_bar_.y     = bar_top;
@@ -877,7 +978,13 @@ void MPVPlayerView::drawHud(NVGcontext* vg, float x, float y, float width, float
     seek_bar_.hit_h = osd::BAR_HIT_H;
     seek_bar_.hit_y = bar_cy - osd::BAR_HIT_H * 0.5f;
 
-    ui::fillRoundRect(vg, bar_x, bar_top, bar_w, osd::BAR_H, osd::BAR_H * 0.5f,
+    const bool is_bar_focused = (osd_focus_ == OsdFocusItem::ProgressBar && a > 0.05f);
+
+    const float track_h = osd::BAR_H;
+    const float track_top = bar_cy - track_h * 0.5f;
+
+    // 进度条槽底色（去除整个长条的外发光蓝框，聚焦时仅高亮进度圆点）
+    ui::fillRoundRect(vg, bar_x, track_top, bar_w, track_h, track_h * 0.5f,
                       nvgRGBA(255, 255, 255, (int)(52 * a)));
 
     float knob_x = bar_x;
@@ -886,47 +993,50 @@ void MPVPlayerView::drawHud(NVGcontext* vg, float x, float y, float width, float
         const float active_w = bar_w * progress;
         knob_x = bar_x + active_w;
 
-        ui::fillRoundRect(vg, bar_x, bar_top, std::max(active_w, osd::BAR_H),
-                          osd::BAR_H, osd::BAR_H * 0.5f,
-                          nvgRGBA(255, 159, 69, (int)(255 * a)));
+        ui::fillRoundRect(vg, bar_x, track_top, std::max(active_w, track_h),
+                          track_h, track_h * 0.5f,
+                          nvgRGBA(26, 159, 255, (int)(255 * a)));
 
-        // 滑块：静止时是小圆点，拖动时放大并加一圈柔光。
-        // 只在拖动时画滑块，静止画面更干净（电视端的做法）。
-        if (seek_dragging_) {
-            ui::fillCircle(vg, knob_x, bar_cy, osd::KNOB_R_DRAG + 6.0f,
-                           nvgRGBA(255, 159, 69, (int)(60 * a)));
+        // 滑块原点：普通状态为细腻白点；手柄聚焦或拖动时原点放大并带光晕指示
+        if (seek_dragging_ || is_bar_focused) {
+            ui::fillCircle(vg, knob_x, bar_cy, osd::KNOB_R_DRAG + 5.0f,
+                           nvgRGBA(26, 159, 255, (int)(110 * a)));
+            ui::fillCircle(vg, knob_x, bar_cy, osd::KNOB_R_DRAG + 2.5f,
+                           nvgRGBA(102, 192, 244, (int)(220 * a)));
             ui::fillCircle(vg, knob_x, bar_cy, osd::KNOB_R_DRAG,
                            nvgRGBA(255, 255, 255, (int)(255 * a)));
+        } else {
+            ui::fillCircle(vg, knob_x, bar_cy, 4.0f,
+                           nvgRGBA(255, 255, 255, (int)(220 * a)));
         }
     }
 
-    // 拖动时在滑块上方显示目标时间气泡——手指会挡住滑块，
-    // 气泡放在上方才看得见，这是触屏拖动的必要条件。
-    if (seek_dragging_) {
+    // 拖动或手柄聚焦进度条时，在滑块上方显示精致紧凑的目标时间胶囊，
+    // 高度与位置严格经过几何计算，绝不与上方主控按钮重叠遮挡。
+    if (seek_dragging_ || is_bar_focused) {
         const std::string label = MediaScanner::formatDuration((int64_t)shown_pos);
-        const float tw = ui::textWidth(vg, 15.0f, label);
-        const float pw = tw + 28.0f;
+        const float tw = ui::tabularTextWidth(vg, 12.0f, label);
+        const float pw = tw + 16.0f;
+        const float ph = 22.0f;
         float px = std::clamp(knob_x - pw * 0.5f, x + m, x + width - m - pw);
-        const float py = bar_cy - 56.0f;
-        ui::fillRoundRect(vg, px, py, pw, 34.0f, 17.0f,
-                          nvgRGBA(20, 22, 26, (int)(240 * a)));
-        ui::strokeRoundRect(vg, px, py, pw, 34.0f, 17.0f,
-                            nvgRGBA(255, 159, 69, (int)(120 * a)));
-        ui::text(vg, px + pw * 0.5f, py + 17.5f, 15.0f,
-                 nvgRGBA(255, 255, 255, (int)(255 * a)),
-                 NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, label);
+        const float py = bar_cy - 33.0f;
+        ui::fillRoundRect(vg, px, py, pw, ph, ph * 0.5f,
+                          nvgRGBA(18, 20, 24, (int)(240 * a)));
+        ui::strokeRoundRect(vg, px, py, pw, ph, ph * 0.5f,
+                          nvgRGBA(26, 159, 255, (int)(180 * a)));
+        ui::tabularText(vg, px + pw * 0.5f, py + ph * 0.5f, 12.0f,
+                        nvgRGBA(255, 255, 255, (int)(255 * a)),
+                        NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, label);
     }
 
-    // 时间：与进度条同一条基线。左侧已播、右侧总时长。
+    // 时间：与进度条同一条基线。等宽数字排版，秒数流逝平滑无抖。
     const float time_cy = bar_cy;
-    ui::text(vg, bar_x, time_cy, osd::FONT_TIME,
-             nvgRGBA(255, 255, 255, (int)(232 * a)),
-             NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE,
-             MediaScanner::formatDuration((int64_t)shown_pos));
-    ui::text(vg, bar_x + bar_w, time_cy, osd::FONT_TIME,
-             nvgRGBA(255, 255, 255, (int)(130 * a)),
-             NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE,
-             MediaScanner::formatDuration((int64_t)shown_total));
+    ui::tabularText(vg, x + m, time_cy, osd::FONT_TIME,
+                    nvgRGBA(255, 255, 255, (int)(232 * a)),
+                    NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, pos_str);
+    ui::tabularText(vg, x + width - m, time_cy, osd::FONT_TIME,
+                    nvgRGBA(255, 255, 255, (int)(150 * a)),
+                    NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE, total_str);
 
     // 图标按钮行（主控 + 设置），同时登记触摸命中区
     drawTouchControls(vg, x, y, width, height, bot_slide);
@@ -988,14 +1098,22 @@ void MPVPlayerView::drawTouchControls(NVGcontext* vg, float x, float y,
     // 早期版本用「半透明白底 8%」，在亮画面上等于没画——控件直接糊进视频里，
     // 只能靠图标的白线勉强辨认。压暗底色后图标才有稳定对比度。
     auto ghost = [&](float cx, float cy, float d, ui::Icon ic, float iconSize,
-                     TouchAction ac) {
+                     TouchAction ac, OsdFocusItem f_item = OsdFocusItem::None) {
         const bool p = pressed(ac);
-        ui::drawIconButton(
-            vg, ic, cx, cy, d, iconSize,
-            nvgRGBA(8, 10, 14, (int)((p ? 214 : 156) * a)),
-            nvgRGBA(255, 255, 255, (int)((p ? 255 : 238) * a)),
-            nvgRGBA(255, 159, 69, (int)((p ? 200 : 40) * a)),
-            p ? 1.6f : 1.0f);
+        const bool f = (osd_focus_ == f_item);
+
+        NVGcolor bg = f ? nvgRGBA(26, 159, 255, (int)(65 * a))
+                        : nvgRGBA(8, 10, 14, (int)((p ? 214 : 156) * a));
+        NVGcolor border = f ? nvgRGBA(26, 159, 255, (int)(255 * a))
+                            : nvgRGBA(26, 159, 255, (int)((p ? 200 : 40) * a));
+        float stroke_w = f ? 2.5f : (p ? 1.6f : 1.0f);
+
+        if (f) {
+            ui::strokeCircle(vg, cx, cy, d * 0.5f + 3.0f,
+                             nvgRGBA(102, 192, 244, (int)(140 * a)), 2.5f);
+        }
+
+        ui::drawIconButton(vg, ic, cx, cy, d, iconSize, bg, white, border, stroke_w);
         hit(cx, cy, d, ac);
     };
 
@@ -1004,50 +1122,70 @@ void MPVPlayerView::drawTouchControls(NVGcontext* vg, float x, float y,
         const float cx = x + m + 19.0f;
         const float cy = y + 44.0f + top_slide;
         const bool p = pressed(TouchAction::Back);
+        const bool f = (osd_focus_ == OsdFocusItem::Back);
+
+        NVGcolor bg = f ? nvgRGBA(26, 159, 255, (int)(65 * a))
+                        : nvgRGBA(8, 10, 14, (int)((p ? 214 : 156) * a));
+        NVGcolor border = f ? nvgRGBA(26, 159, 255, (int)(255 * a))
+                            : nvgRGBA(255, 255, 255, (int)((p ? 120 : 40) * a));
+        float stroke_w = f ? 2.5f : 1.0f;
+
+        if (f) {
+            ui::strokeCircle(vg, cx, cy, 22.0f,
+                             nvgRGBA(102, 192, 244, (int)(140 * a)), 2.5f);
+        }
+
         ui::drawIconButton(vg, ui::Icon::Back, cx, cy, 38.0f, 19.0f,
-                           nvgRGBA(8, 10, 14, (int)((p ? 214 : 156) * a)), white,
-                           nvgRGBA(255, 255, 255, (int)((p ? 120 : 40) * a)));
+                           bg, white, border, stroke_w);
         hit_rects_.push_back({cx - 23.0f, cy - 23.0f, 46.0f, 46.0f,
                               TouchAction::Back});
     }
 
-    // ── 主控块：左缘贴 m，块内播放按钮居中 ──
-    // 它的左缘与进度条起点、右下设置块的右缘构成两条竖向对齐线。
-    const float tcx = osd::transportCenterX(x, m);
+    // ── 主控块：水平居中对齐画面中心，播放按钮位于正中 ──
+    const float tcx = osd::transportCenterX(x, width);
     const float tcy = osd::toolCenterY(y, height) + dy;
 
-    ghost(tcx - 122.0f, tcy, osd::SKIP_D, ui::Icon::Prev, 20.0f, TouchAction::Prev);
+    ghost(tcx - 122.0f, tcy, osd::SKIP_D, ui::Icon::Prev, 20.0f, TouchAction::Prev, OsdFocusItem::Prev);
     ghost(tcx - 67.0f, tcy, osd::SIDE_D, ui::Icon::SeekBack, 21.0f,
-          TouchAction::SeekBack);
+          TouchAction::SeekBack, OsdFocusItem::SeekBack);
 
     // 播放/暂停：整屏唯一的实心强调色，视线自然落在它上面
     {
         const bool p = pressed(TouchAction::PlayPause);
-        const NVGcolor fill = p ? nvgRGBA(255, 184, 110, (int)(255 * a))
-                                : nvgRGBA(255, 159, 69, (int)(255 * a));
+        const bool f = (osd_focus_ == OsdFocusItem::PlayPause);
+        const NVGcolor fill = p ? nvgRGBA(70, 185, 255, (int)(255 * a))
+                                : nvgRGBA(26, 159, 255, (int)(255 * a));
+
+        if (f) {
+            ui::strokeCircle(vg, tcx, tcy, osd::TRANSPORT_D * 0.5f + 4.0f,
+                             nvgRGBA(102, 192, 244, (int)(230 * a)), 3.0f);
+            ui::strokeCircle(vg, tcx, tcy, osd::TRANSPORT_D * 0.5f + 7.5f,
+                             nvgRGBA(26, 159, 255, (int)(110 * a)), 2.5f);
+        }
+
         ui::fillCircle(vg, tcx, tcy, osd::TRANSPORT_D * 0.5f, fill);
         ui::drawIcon(vg, is_playing_ ? ui::Icon::Pause : ui::Icon::Play, tcx, tcy,
-                     28.0f, nvgRGBA(20, 14, 8, (int)(255 * a)), 2.2f);
+                     28.0f, nvgRGBA(10, 22, 36, (int)(255 * a)), 2.2f);
         hit(tcx, tcy, osd::TRANSPORT_D, TouchAction::PlayPause);
     }
 
     ghost(tcx + 67.0f, tcy, osd::SIDE_D, ui::Icon::SeekForward, 21.0f,
-          TouchAction::SeekForward);
-    ghost(tcx + 122.0f, tcy, osd::SKIP_D, ui::Icon::Next, 20.0f, TouchAction::Next);
+          TouchAction::SeekForward, OsdFocusItem::SeekForward);
+    ghost(tcx + 122.0f, tcy, osd::SKIP_D, ui::Icon::Next, 20.0f, TouchAction::Next, OsdFocusItem::Next);
 
     // ── 设置块：右对齐 w − m，与主控块同一条轴 ──
     const float scy = tcy;
     float right = x + width - m;
 
-    auto place = [&](ui::Icon ic, TouchAction ac, float iconSize) {
+    auto place = [&](ui::Icon ic, TouchAction ac, float iconSize, OsdFocusItem f_item) {
         const float cx = right - osd::SETTINGS_D * 0.5f;
-        ghost(cx, scy, osd::SETTINGS_D, ic, iconSize, ac);
+        ghost(cx, scy, osd::SETTINGS_D, ic, iconSize, ac, f_item);
         right = cx - osd::SETTINGS_D * 0.5f - 12.0f;
     };
 
-    place(ui::Icon::Lock, TouchAction::Lock, 18.0f);
-    place(ui::Icon::Playlist, TouchAction::Playlist, 19.0f);
-    place(ui::Icon::Aspect, TouchAction::Aspect, 19.0f);
+    place(ui::Icon::Lock, TouchAction::Lock, 18.0f, OsdFocusItem::Lock);
+    place(ui::Icon::Playlist, TouchAction::Playlist, 19.0f, OsdFocusItem::Playlist);
+    place(ui::Icon::Aspect, TouchAction::Aspect, 19.0f, OsdFocusItem::Aspect);
 
     // 倍速胶囊：数值本身就是信息，做成胶囊比做成图标更直观
     {
@@ -1062,15 +1200,26 @@ void MPVPlayerView::drawTouchControls(NVGcontext* vg, float x, float y,
         const float pill_h = 34.0f;
         const float px = right - pill_w;
         const bool p = pressed(TouchAction::Speed);
-        // 与其它玻璃按钮同一套底色：亮画面上只有压暗才能稳住对比度
+        const bool f = (osd_focus_ == OsdFocusItem::Speed);
+
+        NVGcolor bg = f ? nvgRGBA(26, 159, 255, (int)(65 * a))
+                        : nvgRGBA(8, 10, 14, (int)((p ? 214 : 156) * a));
+        NVGcolor border = f ? nvgRGBA(26, 159, 255, (int)(255 * a))
+                            : nvgRGBA(26, 159, 255, (int)((p ? 200 : 90) * a));
+        float stroke_w = f ? 2.5f : 1.0f;
+
+        if (f) {
+            ui::strokeRoundRect(vg, px - 3.0f, scy - pill_h * 0.5f - 3.0f,
+                                pill_w + 6.0f, pill_h + 6.0f, (pill_h + 6.0f) * 0.5f,
+                                nvgRGBA(102, 192, 244, (int)(140 * a)), 2.5f);
+        }
+
         ui::fillRoundRect(vg, px, scy - pill_h * 0.5f, pill_w, pill_h,
-                          pill_h * 0.5f,
-                          nvgRGBA(8, 10, 14, (int)((p ? 214 : 156) * a)));
+                          pill_h * 0.5f, bg);
         ui::strokeRoundRect(vg, px, scy - pill_h * 0.5f, pill_w, pill_h,
-                            pill_h * 0.5f,
-                            nvgRGBA(255, 159, 69, (int)((p ? 200 : 90) * a)));
+                            pill_h * 0.5f, border, stroke_w);
         ui::drawIcon(vg, ui::Icon::Speed, px + 18.0f, scy, 16.0f,
-                     nvgRGBA(255, 159, 69, (int)(240 * a)), 1.8f);
+                     nvgRGBA(26, 159, 255, (int)(240 * a)), 1.8f);
         ui::text(vg, px + 32.0f, scy + 0.5f, 14.0f,
                  nvgRGBA(255, 255, 255, (int)(240 * a)),
                  NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, spd);
@@ -1079,10 +1228,10 @@ void MPVPlayerView::drawTouchControls(NVGcontext* vg, float x, float y,
         right = px - 12.0f;
     }
 
-    place(ui::Icon::Audio, TouchAction::AudioTrack, 19.0f);
+    place(ui::Icon::Audio, TouchAction::AudioTrack, 19.0f, OsdFocusItem::AudioTrack);
     const bool subs_on = selected_sid_ > 0;
     place(subs_on ? ui::Icon::Subtitles : ui::Icon::SubtitlesOff,
-          TouchAction::SubtitleTrack, 19.0f);
+          TouchAction::SubtitleTrack, 19.0f, OsdFocusItem::SubtitleTrack);
 }
 
 // 屏幕 x 坐标 → 目标播放时间（秒）。
@@ -1261,7 +1410,6 @@ void MPVPlayerView::setupGestures() {
                     toggleTouchLock();
                     osd_visible_ = true;
                     last_user_action_time_ = now;
-                    showHUD("lock_open", "触控已解锁");
                 } else {
                     gesture_double_tap_pending_ = true;
                     last_touch_down_time_ = now;
@@ -1276,7 +1424,7 @@ void MPVPlayerView::setupGestures() {
                 // 注意第一次单击已经切换过 OSD 了，这里把它切回来，
                 // 否则双击会在控制栏上闪现一下（观感很毛）。
                 gesture_double_tap_pending_ = false;
-                osd_visible_ = !osd_visible_;   // 抵消第一次单击的效果
+                toggleOSD();   // 抵消第一次单击的效果
                 togglePlayPause();
                 last_user_action_time_ = now;
             } else {
@@ -1284,8 +1432,7 @@ void MPVPlayerView::setupGestures() {
                 gesture_double_tap_pending_ = true;
                 last_touch_down_time_ = now;
                 last_touch_pos_ = status.position;
-                osd_visible_ = !osd_visible_;
-                last_user_action_time_ = now;
+                toggleOSD();
             }
         }));
 
@@ -1484,9 +1631,9 @@ void MPVPlayerView::initMPV() {
     // glEGLImageTargetTexture2DOES 等扩展函数，通过 eglGetProcAddress
     // 取到的指针在部分驱动上是空/无效的，表现为**花屏**。
     // 用环境变量可临时关闭以定位问题；默认仍启用硬解。
-    if (std::getenv("DECKPLAYER_NO_HWDEC")) {
+    if (std::getenv("MUVIK_NO_HWDEC")) {
         mpv_set_option_string(mpv_, "hwdec", "no");
-        brls::Logger::info("MPVPlayerView: 硬解已禁用（DECKPLAYER_NO_HWDEC）");
+        brls::Logger::info("MPVPlayerView: 硬解已禁用（MUVIK_NO_HWDEC）");
     } else {
         mpv_set_option_string(mpv_, "hwdec", "auto-safe");
     }
@@ -1516,21 +1663,34 @@ void MPVPlayerView::initMPV() {
         brls::Logger::info("字幕字号: {}（屏高 {:.0f} 的 5.5%）", sub_size, logical_h);
     }
 
-    // 字幕默认贴在画面最底部，会被底部 OSD 控制栏遮住
-    // （实测有 OSD 时字幕白像素从 3676 掉到 236，基本不可读）。
-    // 抬高位置并留底部边距，使其始终位于控制栏之上。
-    mpv_set_option_string(mpv_, "sub-pos", "80");
-    mpv_set_option_string(mpv_, "sub-margin-y", "36");
-    // 描边/阴影同样按比例，否则小屏上描边会吃掉字形、大屏上又看不见。
+    // 字幕定位与排版：
+    // sub-pos 设为 100 沉在画面最底部，配合合理的 sub-margin-y 避免顶边；
+    // 允许在黑边中渲染字幕（sub-use-margins）。
+    mpv_set_option_string(mpv_, "sub-pos", "100");
+    mpv_set_option_string(mpv_, "sub-margin-y", "28");
+    mpv_set_option_string(mpv_, "sub-use-margins", "yes");
+
+    // ASS 特效字幕：仅按屏幕缩放，禁止强制覆盖 ASS 自带的排版坐标、样式与特效
+    mpv_set_option_string(mpv_, "sub-ass-override", "scale");
+    mpv_set_option_string(mpv_, "sub-ass-force-margins", "no");
+    mpv_set_option_string(mpv_, "sub-ass-vsfilter-aspect-compat", "yes");
+
+    // SRT 纯文本字幕：纯白文字 + 粗黑描边 + 柔和阴影，确保在任何复杂背景画面中清晰易读
+    mpv_set_option_string(mpv_, "sub-color", "#FFFFFFFF");
+    mpv_set_option_string(mpv_, "sub-border-color", "#FF000000");
+    mpv_set_option_string(mpv_, "sub-shadow-color", "#80000000");
+    mpv_set_option_string(mpv_, "sub-shadow-offset", "1.2");
+    mpv_set_option_string(mpv_, "sub-codepage", "auto");
+
+    // 描边同样按比例微调
     {
         const float logical_h = brls::Application::contentHeight > 0.0f
                                     ? brls::Application::contentHeight : 906.0f;
         char buf[16];
         std::snprintf(buf, sizeof(buf), "%.1f",
-                      std::clamp(logical_h * 0.0028f, 1.0f, 6.0f));
+                      std::clamp(logical_h * 0.003f, 2.0f, 6.0f));
         mpv_set_option_string(mpv_, "sub-border-size", buf);
     }
-    mpv_set_option_string(mpv_, "sub-shadow-offset", "1.5");
     mpv_set_option_string(mpv_, "ytdl", "no");
 
     if (mpv_initialize(mpv_) < 0) {
@@ -1577,6 +1737,13 @@ void MPVPlayerView::destroyMPV() {
 }
 
 void MPVPlayerView::openFile(const std::string& path, const std::string& title, int64_t resume_position) {
+    if (!current_file_path_.empty() && current_position_ > 0) {
+        PlaybackHistory::getInstance().updateProgress(
+            current_file_path_, current_position_, total_duration_,
+            selected_sid_, selected_aid_
+        );
+    }
+    last_saved_position_ = resume_position;
     current_file_path_ = path;
     video_title_ = title.empty() ? std::filesystem::path(path).filename().string() : title;
     if (!mpv_) return;
@@ -1600,15 +1767,20 @@ void MPVPlayerView::openFile(const std::string& path, const std::string& title, 
         selected_aid_ = 1;
     }
 
+    pending_resume_position_ = resume_position;
+    if (resume_position > 0) {
+        std::string pos_str = std::to_string(resume_position);
+        mpv_set_property_string(mpv_, "start", pos_str.c_str());
+        brls::Logger::info("MPVPlayerView: 设置断点续播 start={}", pos_str);
+    } else {
+        mpv_set_property_string(mpv_, "start", "none");
+    }
+
     last_eof_time_ = std::chrono::steady_clock::now();  // 为防抖窗口起点
     const char* cmd[] = {"loadfile", path.c_str(), nullptr};
     int rc = mpv_command_async(mpv_, 0, cmd);
     brls::Logger::info("MPVPlayerView: loadfile 返回 {}", rc);
 
-    if (resume_position > 0) {
-        seekTo(resume_position);
-        showHUD("replay", "已自动接续播放: " + MediaScanner::formatDuration(resume_position));
-    }
     is_playing_ = true;
 }
 
@@ -1619,6 +1791,13 @@ void MPVPlayerView::togglePlayPause() {
     is_playing_ = !is_playing_;
     last_user_action_time_ = std::chrono::steady_clock::now();
     showHUD(is_playing_ ? "play" : "pause", is_playing_ ? "播放" : "暂停");
+    if (!is_playing_ && !current_file_path_.empty() && current_position_ > 0) {
+        last_saved_position_ = current_position_;
+        PlaybackHistory::getInstance().updateProgress(
+            current_file_path_, current_position_, total_duration_,
+            selected_sid_, selected_aid_
+        );
+    }
 }
 
 void MPVPlayerView::play() {
@@ -1635,6 +1814,159 @@ void MPVPlayerView::pause() {
     mpv_set_property(mpv_, "pause", MPV_FORMAT_FLAG, &pause_val);
     is_playing_ = false;
     last_user_action_time_ = std::chrono::steady_clock::now();
+    if (!current_file_path_.empty() && current_position_ > 0) {
+        last_saved_position_ = current_position_;
+        PlaybackHistory::getInstance().updateProgress(
+            current_file_path_, current_position_, total_duration_,
+            selected_sid_, selected_aid_
+        );
+    }
+}
+
+void MPVPlayerView::showOSD(bool show) {
+    osd_visible_ = show;
+    if (show) {
+        last_user_action_time_ = std::chrono::steady_clock::now();
+    }
+}
+
+void MPVPlayerView::toggleOSD() {
+    auto now = std::chrono::steady_clock::now();
+    constexpr int64_t kOsdIdleTimeoutMs = 4500;
+    const auto idle_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(now - last_user_action_time_).count();
+    const bool currently_shown = osd_visible_ && idle_ms < kOsdIdleTimeoutMs;
+    if (currently_shown) {
+        showOSD(false);
+    } else {
+        showOSD(true);
+        osd_focus_ = OsdFocusItem::PlayPause;
+    }
+}
+
+bool MPVPlayerView::isOsdActive() const {
+    if (touch_locked_) return false;
+    auto now = std::chrono::steady_clock::now();
+    constexpr int64_t kOsdIdleTimeoutMs = 4500;
+    const auto idle_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(now - last_user_action_time_).count();
+    return osd_visible_ && idle_ms < kOsdIdleTimeoutMs && osd_alpha_ > 0.05f;
+}
+
+void MPVPlayerView::navigateOsdFocus(brls::FocusDirection direction) {
+    static const std::vector<OsdFocusItem> kBottomRow = {
+        OsdFocusItem::Prev,
+        OsdFocusItem::SeekBack,
+        OsdFocusItem::PlayPause,
+        OsdFocusItem::SeekForward,
+        OsdFocusItem::Next,
+        OsdFocusItem::SubtitleTrack,
+        OsdFocusItem::AudioTrack,
+        OsdFocusItem::Speed,
+        OsdFocusItem::Aspect,
+        OsdFocusItem::Playlist,
+        OsdFocusItem::Lock
+    };
+
+    switch (direction) {
+        case brls::FocusDirection::LEFT: {
+            if (osd_focus_ == OsdFocusItem::ProgressBar) {
+                seek(-10);
+            } else if (osd_focus_ == OsdFocusItem::Back) {
+                // 保持
+            } else {
+                auto it = std::find(kBottomRow.begin(), kBottomRow.end(), osd_focus_);
+                if (it != kBottomRow.end() && it != kBottomRow.begin()) {
+                    osd_focus_ = *(it - 1);
+                } else if (it == kBottomRow.end()) {
+                    osd_focus_ = OsdFocusItem::PlayPause;
+                }
+            }
+            break;
+        }
+        case brls::FocusDirection::RIGHT: {
+            if (osd_focus_ == OsdFocusItem::ProgressBar) {
+                seek(10);
+            } else if (osd_focus_ == OsdFocusItem::Back) {
+                // 保持
+            } else {
+                auto it = std::find(kBottomRow.begin(), kBottomRow.end(), osd_focus_);
+                if (it != kBottomRow.end() && (it + 1) != kBottomRow.end()) {
+                    osd_focus_ = *(it + 1);
+                } else if (it == kBottomRow.end()) {
+                    osd_focus_ = OsdFocusItem::PlayPause;
+                }
+            }
+            break;
+        }
+        case brls::FocusDirection::UP: {
+            if (osd_focus_ == OsdFocusItem::ProgressBar) {
+                osd_focus_ = OsdFocusItem::PlayPause;
+            } else if (osd_focus_ == OsdFocusItem::Back) {
+                // 已经在顶部返回按钮，保持
+            } else {
+                osd_focus_ = OsdFocusItem::Back;
+            }
+            break;
+        }
+        case brls::FocusDirection::DOWN: {
+            if (osd_focus_ == OsdFocusItem::Back) {
+                osd_focus_ = OsdFocusItem::PlayPause;
+            } else if (osd_focus_ == OsdFocusItem::ProgressBar) {
+                // 已经在底部进度条，保持
+            } else {
+                osd_focus_ = OsdFocusItem::ProgressBar;
+            }
+            break;
+        }
+    }
+}
+
+void MPVPlayerView::activateOsdFocus() {
+    switch (osd_focus_) {
+        case OsdFocusItem::Back:
+            brls::Application::popActivity(brls::TransitionAnimation::NONE);
+            break;
+        case OsdFocusItem::ProgressBar:
+            togglePlayPause();
+            break;
+        case OsdFocusItem::Prev:
+            performTouchAction(TouchAction::Prev);
+            break;
+        case OsdFocusItem::SeekBack:
+            performTouchAction(TouchAction::SeekBack);
+            break;
+        case OsdFocusItem::PlayPause:
+            performTouchAction(TouchAction::PlayPause);
+            break;
+        case OsdFocusItem::SeekForward:
+            performTouchAction(TouchAction::SeekForward);
+            break;
+        case OsdFocusItem::Next:
+            performTouchAction(TouchAction::Next);
+            break;
+        case OsdFocusItem::SubtitleTrack:
+            performTouchAction(TouchAction::SubtitleTrack);
+            break;
+        case OsdFocusItem::AudioTrack:
+            performTouchAction(TouchAction::AudioTrack);
+            break;
+        case OsdFocusItem::Speed:
+            performTouchAction(TouchAction::Speed);
+            break;
+        case OsdFocusItem::Aspect:
+            performTouchAction(TouchAction::Aspect);
+            break;
+        case OsdFocusItem::Playlist:
+            performTouchAction(TouchAction::Playlist);
+            break;
+        case OsdFocusItem::Lock:
+            performTouchAction(TouchAction::Lock);
+            break;
+        case OsdFocusItem::None:
+            togglePlayPause();
+            break;
+    }
 }
 
 void MPVPlayerView::seek(int64_t seconds_offset) {
@@ -1763,7 +2095,11 @@ void MPVPlayerView::setAspectRatio(AspectRatioMode mode) {
 
 void MPVPlayerView::toggleTouchLock() {
     touch_locked_ = !touch_locked_;
-    showHUD(touch_locked_ ? "lock" : "lock_open", touch_locked_ ? "触控已锁定 (防误触)" : "触控已解锁");
+    if (touch_locked_) {
+        showHUD("lock", i18n::tr("player.lock_hint", "屏幕已锁定 · 连按两次 A 键或双击屏幕解锁"));
+    } else {
+        showHUD("lock_open", i18n::tr("player.unlocked", "屏幕已解锁"));
+    }
 }
 
 void MPVPlayerView::setVolume(int volume) {
@@ -1843,7 +2179,7 @@ std::vector<TrackInfo> MPVPlayerView::getTracks(const std::string& type) {
     return tracks;
 }
 
-void MPVPlayerView::selectTrack(const std::string& type, int track_id) {
+void MPVPlayerView::selectTrack(const std::string& type, int track_id, bool show_hud) {
     if (!mpv_) return;
     std::string prop = (type == "audio") ? "aid" : "sid";
 
@@ -1853,20 +2189,24 @@ void MPVPlayerView::selectTrack(const std::string& type, int track_id) {
 
     if (track_id <= 0) {
         mpv_set_property_string(mpv_, prop.c_str(), "no");
-        showHUD("subtitles_off", type == "audio" ? "静音" : "关闭字幕");
+        if (show_hud) {
+            showHUD("subtitles_off", type == "audio" ? "静音" : "关闭字幕");
+        }
     } else {
         std::string val = std::to_string(track_id);
         mpv_set_property_string(mpv_, prop.c_str(), val.c_str());
 
-        // 从轨道列表里取显示名，比裸轨道号友好
-        std::string label = (type == "audio" ? "已选音轨: " : "已选字幕: ");
-        for (const auto& t : getTracks(type)) {
-            if (t.id == track_id) {
-                label += t.displayName();
-                break;
+        if (show_hud) {
+            // 从轨道列表里取显示名，比裸轨道号友好
+            std::string label = (type == "audio" ? "已选音轨: " : "已选字幕: ");
+            for (const auto& t : getTracks(type)) {
+                if (t.id == track_id) {
+                    label += t.displayName();
+                    break;
+                }
             }
+            showHUD("subtitles", label);
         }
-        showHUD("subtitles", label);
     }
 
     // 立即落盘当前进度与轨道选择，避免退出时丢失
@@ -1929,6 +2269,89 @@ void MPVPlayerView::promptLoadExternalSubtitle() {
 
 
 
+void MPVPlayerView::updateFormatBadges() {
+    format_badges_.clear();
+    if (!mpv_) return;
+
+    // 1. 分辨率徽标（4K / 1080P / 720P / 自定义）
+    if (video_w_ >= 3800 || video_h_ >= 2100) {
+        format_badges_.push_back({"4K", true});
+    } else if (video_w_ >= 1900 || video_h_ >= 1060) {
+        format_badges_.push_back({"1080P", false});
+    } else if (video_w_ >= 1260 || video_h_ >= 700) {
+        format_badges_.push_back({"720P", false});
+    } else if (video_w_ > 0 && video_h_ > 0) {
+        format_badges_.push_back({std::to_string(video_w_) + "×" + std::to_string(video_h_), false});
+    }
+
+    // 2. HDR / 色彩空间 / 10-BIT
+    char* gamma = mpv_get_property_string(mpv_, "video-params/gamma");
+    char* prim = mpv_get_property_string(mpv_, "video-params/primaries");
+    char* pixfmt = mpv_get_property_string(mpv_, "video-params/pixelformat");
+    bool is_hdr = false;
+    if (gamma) {
+        std::string g(gamma);
+        if (g == "pq" || g == "hlg") is_hdr = true;
+    }
+    if (prim && std::string(prim).find("bt.2020") != std::string::npos) is_hdr = true;
+    if (is_hdr) {
+        format_badges_.push_back({"HDR", true});
+    } else if (pixfmt) {
+        std::string pf(pixfmt);
+        if (pf.find("10") != std::string::npos || pf.find("12") != std::string::npos) {
+            format_badges_.push_back({"10-BIT", false});
+        }
+    }
+    if (gamma) mpv_free(gamma);
+    if (prim) mpv_free(prim);
+    if (pixfmt) mpv_free(pixfmt);
+
+    // 3. 视频编码
+    char* vcodec = mpv_get_property_string(mpv_, "video-format");
+    if (!vcodec) vcodec = mpv_get_property_string(mpv_, "video-codec");
+    if (vcodec) {
+        std::string vc(vcodec);
+        std::transform(vc.begin(), vc.end(), vc.begin(), ::toupper);
+        if (vc == "H265" || vc == "HEVC") vc = "HEVC";
+        else if (vc == "H264" || vc == "AVC" || vc == "AVC1") vc = "AVC";
+        else if (vc.find("PRORES") != std::string::npos) vc = "PRORES";
+        if (!vc.empty()) {
+            format_badges_.push_back({vc, false});
+        }
+        mpv_free(vcodec);
+    }
+
+    // 4. 帧率
+    double fps = 0.0;
+    if (mpv_get_property(mpv_, "container-fps", MPV_FORMAT_DOUBLE, &fps) < 0 || fps <= 0.0) {
+        mpv_get_property(mpv_, "estimated-vf-fps", MPV_FORMAT_DOUBLE, &fps);
+    }
+    if (fps >= 115.0) {
+        format_badges_.push_back({"120 FPS", false});
+    } else if (fps >= 55.0) {
+        format_badges_.push_back({"60 FPS", false});
+    } else if (fps >= 48.0 && fps < 55.0) {
+        format_badges_.push_back({"50 FPS", false});
+    } else if (fps >= 23.5 && fps <= 24.5) {
+        format_badges_.push_back({"24 FPS", false});
+    }
+
+    // 5. 声道数
+    int64_t ach = 0;
+    if (mpv_get_property(mpv_, "audio-params/channel-count", MPV_FORMAT_INT64, &ach) >= 0) {
+        if (ach == 6) format_badges_.push_back({"5.1 CH", false});
+        else if (ach >= 8) format_badges_.push_back({"7.1 CH", false});
+        else if (ach == 2) format_badges_.push_back({"STEREO", false});
+    }
+
+    // 6. 硬解加速
+    if (hwdec_active_) {
+        format_badges_.push_back({"HW ACCEL", true});
+    } else {
+        format_badges_.push_back({"SW", false});
+    }
+}
+
 void MPVPlayerView::checkMPVEvents() {
     if (!mpv_) return;
 
@@ -1959,6 +2382,15 @@ void MPVPlayerView::checkMPVEvents() {
                 }
             } else if (std::string(prop->name) == "time-pos" && prop->data) {
                 current_position_ = (int64_t)*(double*)prop->data;
+                // 每播放 5 秒或进度发生跳变时自动持久化历史进度，防止异常退出时丢失
+                if (!current_file_path_.empty() && total_duration_ > 0 &&
+                    std::abs(current_position_ - last_saved_position_) >= 5) {
+                    last_saved_position_ = current_position_;
+                    PlaybackHistory::getInstance().updateProgress(
+                        current_file_path_, current_position_, total_duration_,
+                        selected_sid_, selected_aid_
+                    );
+                }
             } else if (std::string(prop->name) == "duration" && prop->data) {
                 total_duration_ = (int64_t)*(double*)prop->data;
             } else if (std::string(prop->name) == "pause" && prop->data) {
@@ -1978,6 +2410,7 @@ void MPVPlayerView::checkMPVEvents() {
             char* hwdec = mpv_get_property_string(mpv_, "hwdec-current");
             hwdec_active_ = hwdec && *hwdec && std::string(hwdec) != "no";
             if (hwdec) mpv_free(hwdec);
+            updateFormatBadges();
             eof_fired_ = false;  // 新文件确认加载，允许后续再次触发连播
 
             // keep-open=yes 在播放结束后会把 pause 置为 yes（停在最后一帧）。
@@ -1985,10 +2418,18 @@ void MPVPlayerView::checkMPVEvents() {
             // 表现为「连播卡在第 2 集，时间永远是 0.0」。
             // 必须在 FILE_LOADED 之后清，太早会被 loadfile 覆盖。
             mpv_set_property_string(mpv_, "pause", "no");
+
+            // 处理断点接续：在文件真正加载完毕后下发定位，并弹出 HUD 提示
+            if (pending_resume_position_ > 0) {
+                seekTo(pending_resume_position_);
+                showHUD("replay", i18n::tr("player.resumed_at", "已自动接续播放: ") + MediaScanner::formatDuration(pending_resume_position_));
+                pending_resume_position_ = 0;
+                mpv_set_property_string(mpv_, "start", "none");
+            }
             // 音频：mpv 默认用第一条音轨。这里支持强制指定，便于验证
             // 「能否切换到非默认音轨」（多音轨文件在掌机上很常见，
             // 例如双语 BDRip 需要选日语或国语）。
-            if (const char* fa = std::getenv("DECKPLAYER_FORCE_AID")) {
+            if (const char* fa = std::getenv("MUVIK_FORCE_AID")) {
                 const int want_aid = std::atoi(fa);
                 auto audios = getTracks("audio");
                 bool found = false;
@@ -1996,7 +2437,7 @@ void MPVPlayerView::checkMPVEvents() {
                     if (t.id == want_aid) { found = true; break; }
                 }
                 if (found) {
-                    selectTrack("audio", want_aid);
+                    selectTrack("audio", want_aid, false);
                     // 关键：报告 mpv 的**实际属性**，而不是「我刚请求了什么」。
                     // 否则测试只能证明代码被执行过，证明不了真的切过去了。
                     char* actual = mpv_get_property_string(mpv_, "aid");
@@ -2012,17 +2453,17 @@ void MPVPlayerView::checkMPVEvents() {
             // mpv 默认不选中任何字幕轨（sid=no），需要显式选第一条。
             // 若不处理，内嵌字幕永远不会显示。
             // 测试用：强制不选字幕，便于脚本做「有/无字幕」对照
-            const bool subtitle_off = std::getenv("DECKPLAYER_SUBTITLE_OFF") != nullptr;
+            const bool subtitle_off = std::getenv("MUVIK_SUBTITLE_OFF") != nullptr;
             if (subtitle_off) {
                 mpv_set_property_string(mpv_, "sid", "no");
                 subtitle_chosen_ = true;
             } else if (selected_sid_ > 0 && !subtitle_chosen_) {
                 auto subs = getTracks("sub");
                 if (!subs.empty()) {
-                    // 测试用：DECKPLAYER_FORCE_SUB_SID=N 强制选指定轨，
+                    // 测试用：MUVIK_FORCE_SUB_SID=N 强制选指定轨，
                     // 用于验证「选过的字幕轨是否被记住」。
                     int want = subs.front().id;
-                    if (const char* f = std::getenv("DECKPLAYER_FORCE_SUB_SID")) {
+                    if (const char* f = std::getenv("MUVIK_FORCE_SUB_SID")) {
                         want = std::atoi(f);
                         brls::Logger::info("测试：强制选择字幕轨 #{}", want);
                     } else if (selected_sid_ > 0 && selected_sid_ != 1) {
@@ -2031,7 +2472,7 @@ void MPVPlayerView::checkMPVEvents() {
                             if (t.id == selected_sid_) { want = t.id; break; }
                         }
                     }
-                    selectTrack("sub", want);
+                    selectTrack("sub", want, false);
                     subtitle_chosen_ = true;
                     brls::Logger::info("MPVPlayerView: 自动选中字幕轨 #{}", want);
                 }
@@ -2040,6 +2481,11 @@ void MPVPlayerView::checkMPVEvents() {
             brls::Logger::info("MPVPlayerView: 视频重配置");
         } else if (event->event_id == MPV_EVENT_END_FILE) {
             mpv_event_end_file* ef = (mpv_event_end_file*)event->data;
+
+            if (ef->reason == MPV_END_FILE_REASON_ERROR) {
+                brls::Logger::error("MPVPlayerView: 播放失败 (error code={})", ef->error);
+                showHUD("alert", "播放失败: 无法打开文件");
+            }
 
             // 只有 EOF 才代表「真的播完了」。
             // reason=STOP(2) 是我们自己 loadfile 替换旧文件造成的，
@@ -2110,4 +2556,4 @@ void MPVPlayerView::draw(NVGcontext* vg, float x, float y, float width, float he
     Box::draw(vg, x, y, width, height, style, ctx);
 }
 
-} // namespace deck_player
+} // namespace muvik

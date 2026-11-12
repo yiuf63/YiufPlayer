@@ -4,7 +4,7 @@
 #include <string>
 #include <cstdint>
 
-namespace deck_player {
+namespace muvik {
 
 // 从媒体文件名推断用于刮削的搜索词与年份。
 //
@@ -26,4 +26,4 @@ public:
     static std::string queryFromFilename(const std::string& filename);
 };
 
-} // namespace deck_player
+} // namespace muvik

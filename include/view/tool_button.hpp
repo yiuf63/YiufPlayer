@@ -17,7 +17,7 @@
 
 #include "ui/icons.hpp"
 
-namespace deck_player {
+namespace muvik {
 
 class ToolButton : public brls::Box {
 public:
@@ -51,4 +51,4 @@ public:
                           bool compact);
 };
 
-} // namespace deck_player
+} // namespace muvik

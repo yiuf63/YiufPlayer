@@ -60,7 +60,7 @@ import java.util.Locale;
 public class SDLActivity extends Activity implements View.OnSystemUiVisibilityChangeListener {
     private static final String TAG = "SDL";
     private static final int SDL_MAJOR_VERSION = 2;
-    // DeckPlayer：这里必须与实际链接的 libSDL2.so 版本严格一致。
+    // Muvik：这里必须与实际链接的 libSDL2.so 版本严格一致。
     // SDLActivity 启动时会用 nativeGetVersion() 与这三个常量比对，
     // 不一致就把 mBrokenLibraries 置 true —— 于是 native 线程永不启动，
     // 且**不打印任何错误日志**（只有一个 AlertDialog），极难排查。
@@ -708,7 +708,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
 
         // Try a transition to resumed state
         if (mNextNativeState == NativeState.RESUMED) {
-            // DeckPlayer 诊断：打印三个条件，定位 native 线程为何不启动
+            // Muvik 诊断：打印三个条件，定位 native 线程为何不启动
             Log.v("SDL", "state check: surfaceReady=" + (mSurface != null && mSurface.mIsSurfaceReady)
                     + " hasFocus=" + mHasFocus
                     + " resumedCalled=" + mIsResumedCalled

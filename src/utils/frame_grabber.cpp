@@ -16,7 +16,7 @@
 // glad 已经在 borealis 内部被引入；这里直接使用它的 GL 函数指针。
 #include <borealis/extern/glad/glad.h>
 
-namespace deck_player {
+namespace muvik {
 
 namespace {
 
@@ -35,8 +35,8 @@ int  g_start      = kGrabAfterFrames;  // 首次抓帧的起始帧
 // 「播放后第 N 秒」没有稳定映射——这正是 verify_ui 里
 // 「时序相关像素检查偶发失败」的根源之一。
 // 按墙钟毫秒锚定才是确定性的。
-int  g_start_ms    = -1;    // DECKPLAYER_FRAMEGRAB_AT_MS，<0 = 帧号模式
-int  g_interval_ms = -1;    // DECKPLAYER_FRAMEGRAB_INTERVAL_MS
+int  g_start_ms    = -1;    // MUVIK_FRAMEGRAB_AT_MS，<0 = 帧号模式
+int  g_interval_ms = -1;    // MUVIK_FRAMEGRAB_INTERVAL_MS
 std::chrono::steady_clock::time_point g_t0{};
 bool g_t0_set = false;
 
@@ -49,18 +49,18 @@ int envInt(const char* name, int fallback) {
 
 bool isEnabled() {
     static const bool enabled = []() {
-        const char* env = std::getenv("DECKPLAYER_FRAMEGRAB");
+        const char* env = std::getenv("MUVIK_FRAMEGRAB");
         if (!env || !*env) return false;
         g_path = env;
-        g_count = envInt("DECKPLAYER_FRAMEGRAB_COUNT", 1);
+        g_count = envInt("MUVIK_FRAMEGRAB_COUNT", 1);
         if (g_count < 1) g_count = 1;
-        g_interval = envInt("DECKPLAYER_FRAMEGRAB_INTERVAL", 30);
+        g_interval = envInt("MUVIK_FRAMEGRAB_INTERVAL", 30);
         if (g_interval < 1) g_interval = 1;
-        g_exit_after = envInt("DECKPLAYER_FRAMEGRAB_EXIT", 1) != 0;
-        g_start = envInt("DECKPLAYER_FRAMEGRAB_START", kGrabAfterFrames);
+        g_exit_after = envInt("MUVIK_FRAMEGRAB_EXIT", 1) != 0;
+        g_start = envInt("MUVIK_FRAMEGRAB_START", kGrabAfterFrames);
         if (g_start < 0) g_start = 0;
-        g_start_ms    = envInt("DECKPLAYER_FRAMEGRAB_AT_MS", -1);
-        g_interval_ms = envInt("DECKPLAYER_FRAMEGRAB_INTERVAL_MS", -1);
+        g_start_ms    = envInt("MUVIK_FRAMEGRAB_AT_MS", -1);
+        g_interval_ms = envInt("MUVIK_FRAMEGRAB_INTERVAL_MS", -1);
         return true;
     }();
     return enabled;
@@ -164,4 +164,4 @@ bool FrameGrabber::tick(int frame_index) {
     return false;
 }
 
-} // namespace deck_player
+} // namespace muvik

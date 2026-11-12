@@ -14,7 +14,7 @@
 #include <memory>
 #include <thread>
 
-namespace deck_player {
+namespace muvik {
 
 PluginBrowserActivity::PluginBrowserActivity(std::string plugin_path,
                                              std::string plugin_name)
@@ -150,7 +150,7 @@ void PluginBrowserActivity::render() {
 
             // 返回上一级
             if (!path.empty() && path != "/") {
-                auto* up = new MediaCell(ui::Icon::Back, "返回上一级", path);
+                auto* up = new MediaCell(ui::Icon::Back, "..");
                 up->setChevron(true);
                 up->registerClickAction([this](brls::View*) {
                     navigateUp();
@@ -212,4 +212,4 @@ void PluginBrowserActivity::render() {
     }).detach();
 }
 
-} // namespace deck_player
+} // namespace muvik

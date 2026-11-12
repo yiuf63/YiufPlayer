@@ -1,6 +1,6 @@
 # 第三方组件声明 / Third-Party Notices
 
-**DeckPlayer 自身以 GNU GPL-3.0 分发**（全文见根目录 `LICENSE`；
+**Muvik 自身以 GNU GPL-3.0 分发**（全文见根目录 `LICENSE`；
 2026-10 之前是闭源专有，本文件的对应表述已随之更新）。
 
 本文件列出随本产品一同分发的开源组件及其许可证，并说明合规义务的履行方式。
@@ -13,7 +13,7 @@
 
 - **用途**：音视频解码与渲染内核。
 - **许可证**：GNU Lesser General Public License, version 2.1 or later。
-- **合规方式**：**动态链接**。DeckPlayer 通过 `libmpv.2.dylib`（macOS）/
+- **合规方式**：**动态链接**。Muvik 通过 `libmpv.2.dylib`（macOS）/
   `libmpv.so.2`（Linux）在运行时加载，不将 mpv 代码静态编译进本产品可执行文件。
   用户可自由使用自行编译或修改过的 libmpv 替换随附版本，本产品不对该动态库做
   任何完整性校验或签名限制。
@@ -45,12 +45,19 @@
 
 ## 4. libcurl（MIT/X 风格）
 
-- **用途**：为插件系统提供 HTTP 请求能力（`deck_host_api::http_request`）。
+- **用途**：为插件系统提供 HTTP 请求能力（`muvik_host_api::http_request`）。
 - **许可证**：MIT/X 派生许可，允许商业使用与闭源分发，仅需保留版权声明。
 - **合规方式**：动态链接；许可证全文见 `licenses/LICENSE-curl-MIT.txt`。
 - **源码获取**：https://curl.se/
 
-## 5. 其它随 Borealis 分发的组件
+## 5. QuickJS（MIT）
+
+- **用途**：为插件系统提供轻量级 JavaScript 脚本执行环境与沙箱运行时（`external/quickjs`）。
+- **许可证**：MIT License（Copyright (c) 2019-2024 Fabrice Bellard and Charlie Gordon）。
+- **合规方式**：源码级静态编译，保留原始版权声明，见 `licenses/LICENSE-MIT-quickjs.txt`。
+- **源码获取**：https://bellard.org/quickjs/
+
+## 6. 其它随 Borealis 分发的组件
 
 | 组件 | 许可证 | 位置 |
 | :--- | :--- | :--- |
@@ -97,7 +104,7 @@
 `--enable-gpl` 组件时才做。
 
 ```bash
-./scripts/build-lgpl-libmpv.sh ~/.local/deckplayer-lgpl
+./scripts/build-lgpl-libmpv.sh ~/.local/muvik-lgpl
 ```
 
 脚本会：
@@ -109,8 +116,8 @@
 构建完成后：
 
 ```bash
-cmake -B build -DMPV_ROOT=$HOME/.local/deckplayer-lgpl \
-      -DCMAKE_PREFIX_PATH=$HOME/.local/deckplayer-lgpl
+cmake -B build -DMPV_ROOT=$HOME/.local/muvik-lgpl \
+      -DCMAKE_PREFIX_PATH=$HOME/.local/muvik-lgpl
 cmake --build build
 ```
 
@@ -121,7 +128,7 @@ cmake --build build
 
 发布前逐项确认：
 
-- [ ] **DeckPlayer 自身源码可获取**（GPL-3.0 §6）：公开仓库，或随二进制附完整源码
+- [ ] **Muvik 自身源码可获取**（GPL-3.0 §6）：公开仓库，或随二进制附完整源码
 - [ ] 已用 `python3 tests/tools/license_audit.py` 记录产物实际链接的 FFmpeg 构建，
       并在本文件第 2 节如实声明（GPL 或 LGPL）
 - [ ] libmpv 以动态库形式随包分发，未被静态链接进主程序

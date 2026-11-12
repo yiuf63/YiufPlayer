@@ -1,6 +1,6 @@
 #pragma once
 
-// DeckPlayer 视觉设计系统（design tokens + 绘制基元）。
+// Muvik 视觉设计系统（design tokens + 绘制基元）。
 //
 // 为什么要有这一层：
 //   重构前每个界面各自写颜色字面量、字号字面量、圆角字面量，
@@ -22,7 +22,7 @@
 #include <borealis/core/theme.hpp>
 #include <borealis/extern/nanovg/nanovg.h>
 
-namespace deck_player::ui {
+namespace muvik::ui {
 
 // ── 色板 ────────────────────────────────────────────────────────────────
 // 字段按用途命名，而不是按颜色命名 —— 换配色时只改 cpp 里的常量。
@@ -45,6 +45,13 @@ struct Palette {
 };
 
 const Palette& palette();
+void setPalette(const Palette& p);
+void resetPalette();
+
+// 获取内置三种标准色板
+const Palette& getBuiltinDarkPalette();
+const Palette& getBuiltinOledPalette();
+const Palette& getBuiltinLightPalette();
 
 // ── 尺度 ────────────────────────────────────────────────────────────────
 namespace space {
@@ -76,6 +83,7 @@ constexpr float caption = 12.5f; // 最小说明文字
 NVGcolor rgba(NVGcolor c, float alpha);
 NVGcolor mix(NVGcolor a, NVGcolor b, float t);
 NVGcolor hex(unsigned int rgb, float alpha = 1.0f);
+NVGcolor hex(const std::string& hexStr, float defaultAlpha = 1.0f);
 
 // ── 绘制基元 ────────────────────────────────────────────────────────────
 void fillRoundRect(NVGcontext* vg, float x, float y, float w, float h,
@@ -95,6 +103,12 @@ float drawPill(NVGcontext* vg, float x, float y, const std::string& label,
                float fontSize, NVGcolor bg, NVGcolor fg, float padX = 12.0f,
                float height = 28.0f);
 
+// ── 呼吸式氛围光晕（Focus Engine）───────────────────────────────────────
+// 针对 Steam Deck 与 OLED 屏幕调校的多层柔光漫射，
+// 赋予获焦卡片如 Apple TV 般的硬件级悬浮与发光质感。
+void drawFocusGlow(NVGcontext* vg, float x, float y, float w, float h, float r,
+                   NVGcolor accent, float strength = 1.0f);
+
 // ── 文本 ────────────────────────────────────────────────────────────────
 // 所有文字绘制都走这里：统一字体、统一对齐语义，避免漏设字体导致整块空白
 // （历史 bug：nvgFontFace("sans") 未注册，文字全部不绘制）。
@@ -107,4 +121,11 @@ std::string ellipsize(NVGcontext* vg, float size, const std::string& s, float ma
 float textClipped(NVGcontext* vg, float x, float y, float size, NVGcolor color,
                   int align, const std::string& s, float maxW);
 
-} // namespace deck_player::ui
+// ── 等宽数字（Tabular Figures）──────────────────────────────────────────
+// 时间与倒计时专用：所有数字按固定字间距槽位排版，
+// 彻底消除秒数变化时因字符宽度不等带来的横向抖动。
+float tabularTextWidth(NVGcontext* vg, float size, const std::string& s);
+void tabularText(NVGcontext* vg, float x, float y, float size, NVGcolor color,
+                 int align, const std::string& s);
+
+} // namespace muvik::ui

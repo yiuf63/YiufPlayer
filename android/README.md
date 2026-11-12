@@ -1,6 +1,6 @@
 # Android 构建
 
-目标：把 DeckPlayer 装到 Android 设备（平板、Android TV 盒子、掌机）。
+目标：把 Muvik 装到 Android 设备（平板、Android TV 盒子、掌机）。
 
 ## 前置条件
 
@@ -43,13 +43,13 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 启动：
 
 ```bash
-adb shell am start -n org.deckplayer.android/.DeckPlayerActivity
+adb shell am start -n org.muvik.android/.MuvikActivity
 ```
 
 看日志：
 
 ```bash
-adb logcat -s DeckPlayer SDL borealis
+adb logcat -s Muvik SDL borealis
 ```
 
 ## 已知限制（首版）

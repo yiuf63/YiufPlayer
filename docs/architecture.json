@@ -1,0 +1,311 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Muvik 播放器系统架构",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [1180, 660],
+    "views": [
+      {
+        "id": "ui-interaction",
+        "label": "UI 与大屏交互主线",
+        "focus": ["devices", "borealis_ui", "activity_stack", "mpv_video", "audio_player"],
+        "note": "手柄、遥控器与触屏输入经由 Borealis Flexbox 布局驱动页面单栈与双播放视图。"
+      },
+      {
+        "id": "dual-engine",
+        "label": "双播放引擎隔离与持久化",
+        "focus": ["activity_stack", "mpv_video", "audio_player", "media_library", "metadata_history"],
+        "note": "视频引擎绑定页面生命周期，音频引擎全局单例常驻并抑制 App Nap，进度原子写入。"
+      },
+      {
+        "id": "quickjs-sandbox",
+        "label": "QuickJS 插件沙箱体系",
+        "focus": ["activity_stack", "plugin_installer", "js_runtime", "host_bridge", "unified_providers", "remote_sources"],
+        "note": "嵌入式 QuickJS 16MB 内存受限沙箱，三合一 Provider 规范整合流媒体解析与网盘挂载。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "devices",
+      "type": "external",
+      "label": "跨平台输入与设备",
+      "sublabel": "Steam Deck / TV / 掌机",
+      "tag": "手柄与触控",
+      "pos": [40, 240],
+      "size": [136, 62]
+    },
+    {
+      "id": "borealis_ui",
+      "type": "frontend",
+      "label": "Borealis UI 架构",
+      "sublabel": "Yoga Flexbox + NanoVG",
+      "tag": "多分辨率自适应",
+      "pos": [230, 140],
+      "size": [144, 62]
+    },
+    {
+      "id": "activity_stack",
+      "type": "frontend",
+      "label": "Activity 页面调度",
+      "sublabel": "页面流转与焦点管理",
+      "tag": "单活动栈",
+      "pos": [230, 340],
+      "size": [144, 62]
+    },
+    {
+      "id": "mpv_video",
+      "type": "backend",
+      "label": "MPVPlayerView",
+      "sublabel": "libmpv GL FBO 视频渲染",
+      "tag": "ASS / 403换链",
+      "pos": [480, 90],
+      "size": [148, 62]
+    },
+    {
+      "id": "audio_player",
+      "type": "backend",
+      "label": "AudioPlayer 单例",
+      "sublabel": "全局独立纯音频引擎",
+      "tag": "App Nap 抑制",
+      "pos": [480, 230],
+      "size": [148, 62]
+    },
+    {
+      "id": "media_library",
+      "type": "database",
+      "label": "MediaLibrary 扫描器",
+      "sublabel": "格式白名单与外挂字幕",
+      "tag": "异步扫描",
+      "pos": [480, 370],
+      "size": [148, 62]
+    },
+    {
+      "id": "metadata_history",
+      "type": "database",
+      "label": "Metadata & History",
+      "sublabel": "影视刮削与断点进度",
+      "tag": "原子持久化",
+      "pos": [480, 510],
+      "size": [148, 62]
+    },
+    {
+      "id": "unified_providers",
+      "type": "backend",
+      "label": "三合一 Provider 规范",
+      "sublabel": "流媒体 / 网盘挂载 / 刮削",
+      "tag": "动态扩展",
+      "pos": [740, 90],
+      "size": [152, 62]
+    },
+    {
+      "id": "js_runtime",
+      "type": "security",
+      "label": "JSRuntimeHost 沙箱",
+      "sublabel": "QuickJS C99 引擎沙箱",
+      "tag": "16MB 配额 / Promise",
+      "pos": [740, 230],
+      "size": [152, 62]
+    },
+    {
+      "id": "host_bridge",
+      "type": "security",
+      "label": "Host Bridge 宿主桥",
+      "sublabel": "libcurl / 独立存储 / 日志",
+      "tag": "私有配置隔离",
+      "pos": [740, 370],
+      "size": [152, 62]
+    },
+    {
+      "id": "plugin_installer",
+      "type": "backend",
+      "label": "PluginInstaller",
+      "sublabel": "ZIP 安全解压与包管理",
+      "tag": "Zip Slip 防护",
+      "pos": [740, 510],
+      "size": [152, 62]
+    },
+    {
+      "id": "remote_sources",
+      "type": "external",
+      "label": "外部网络与媒体源",
+      "sublabel": "WebDAV / Alist / 在线流",
+      "tag": "Headers 透传",
+      "pos": [990, 370],
+      "size": [144, 62]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "UI 交互与大屏适配层 (Borealis)",
+      "wraps": ["borealis_ui", "activity_stack"],
+      "pad": 16
+    },
+    {
+      "kind": "region",
+      "label": "双播放引擎隔离 (libmpv 内核)",
+      "wraps": ["mpv_video", "audio_player"],
+      "pad": 16
+    },
+    {
+      "kind": "region",
+      "label": "本地存储与媒体索引",
+      "wraps": ["media_library", "metadata_history"],
+      "pad": 16
+    },
+    {
+      "kind": "security-group",
+      "label": "QuickJS 插件沙箱与 Provider 扩展",
+      "wraps": ["unified_providers", "js_runtime", "host_bridge", "plugin_installer"],
+      "pad": 16
+    }
+  ],
+  "connections": [
+    {
+      "id": "input-to-borealis",
+      "from": "devices",
+      "to": "borealis_ui",
+      "label": "手柄/触控事件",
+      "variant": "emphasis"
+    },
+    {
+      "id": "borealis-to-activity",
+      "from": "borealis_ui",
+      "to": "activity_stack",
+      "label": "页面路由与焦点",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 20
+    },
+    {
+      "id": "activity-to-video",
+      "from": "activity_stack",
+      "to": "mpv_video",
+      "label": "挂载播放与OSD",
+      "variant": "emphasis",
+      "fromSide": "top",
+      "toSide": "left"
+    },
+    {
+      "id": "activity-to-audio",
+      "from": "activity_stack",
+      "to": "audio_player",
+      "label": "后台音乐控制",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDx": -20
+    },
+    {
+      "id": "activity-to-library",
+      "from": "activity_stack",
+      "to": "media_library",
+      "label": "媒体库文件浏览",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "library-to-metadata",
+      "from": "media_library",
+      "to": "metadata_history",
+      "label": "元数据与历史持久化",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 20
+    },
+    {
+      "id": "providers-to-video",
+      "from": "unified_providers",
+      "to": "mpv_video",
+      "label": "直链解析与403重试",
+      "variant": "emphasis",
+      "fromSide": "left",
+      "toSide": "right"
+    },
+    {
+      "id": "runtime-to-providers",
+      "from": "js_runtime",
+      "to": "unified_providers",
+      "label": "驱动 Provider 逻辑",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelDy": -20
+    },
+    {
+      "id": "runtime-to-host",
+      "from": "js_runtime",
+      "to": "host_bridge",
+      "label": "安全宿主调用",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 20
+    },
+    {
+      "id": "installer-to-bridge",
+      "from": "plugin_installer",
+      "to": "host_bridge",
+      "label": "解压校验并注册",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "labelDy": -20
+    },
+    {
+      "id": "activity-to-installer",
+      "from": "activity_stack",
+      "to": "plugin_installer",
+      "label": "插件配置与安装",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "bottom",
+      "via": [[302, 610], [816, 610]],
+      "labelAt": [559, 600]
+    },
+    {
+      "id": "host-to-remote",
+      "from": "host_bridge",
+      "to": "remote_sources",
+      "label": "libcurl / HTTP请求",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "大屏与手柄全驱动 UI",
+      "items": [
+        "Borealis 框架结合 Yoga Flexbox 布局与 NanoVG 矢量渲染，自适应 1080P/4K、Deck 及开源掌机",
+        "统一 Activity 栈管理，完备的手柄、遥控器焦点导航与自绘触控 OSD 控制条"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "双播放引擎严格隔离",
+      "items": [
+        "视频引擎 MPVPlayerView 绑定页面生命周期，支持 ASS 字幕与 403 签名过期热重试换链",
+        "音频引擎 AudioPlayer 全局单例常驻，macOS App Nap 抑制，支持纯音频后台无损连播"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "QuickJS 轻量脚本沙箱",
+      "items": [
+        "嵌入式 C99 QuickJS 引擎，16MB 内存硬限制保护，<2MB 轻量占用适配 512MB 低配掌机",
+        "宿主安全桥接暴露 host.http/storage/crypto/log，原生驱动 Promise/async 异步执行"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "三合一扩展与安全防护",
+      "items": [
+        "统一规范整合 MediaStreamProvider 流解析、StorageProvider 网盘挂载与 ScraperProvider 刮削",
+        "PluginInstaller 实现标准 ZIP 安装与 Zip Slip 路径穿越防御，原生动态库默认隔离"
+      ]
+    }
+  ]
+}

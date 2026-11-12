@@ -16,7 +16,7 @@
 
 #include "model/media_item.hpp"
 
-namespace deck_player {
+namespace muvik {
 
 enum class LibraryGroup {
     Folder,   // 先看文件夹卡片，进去再看内容
@@ -81,4 +81,4 @@ struct LibraryViewOptions {
 // 纯字典序会把 10 排到 2 前面，而媒体文件名几乎都是这种编号开头。
 bool naturalLess(const std::string& a, const std::string& b);
 
-} // namespace deck_player
+} // namespace muvik

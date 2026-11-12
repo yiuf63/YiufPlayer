@@ -38,7 +38,7 @@
 #include "model/media_library.hpp"
 #include "utils/app_paths.hpp"
 
-namespace deck_player {
+namespace muvik {
 
 namespace {
 
@@ -66,16 +66,16 @@ size_t stackDepth() {
 } // namespace
 
 void runFunctionalSmoke() {
-    const char* env = std::getenv("DECKPLAYER_SMOKE");
+    const char* env = std::getenv("MUVIK_SMOKE");
 #if defined(ANDROID)
     // Android 上无法从 adb 直接给 Activity 传环境变量，
-    // 因此额外读取系统属性：adb shell setprop debug.deckplayer.smoke 1
+    // 因此额外读取系统属性：adb shell setprop debug.muvik.smoke 1
     // 这样实机也能跑同一套交互自检。
     if (!env) {
         // Android 上无法从 adb 给 Activity 传环境变量，
-        // 额外读系统属性：adb shell setprop debug.deckplayer.smoke 1
+        // 额外读系统属性：adb shell setprop debug.muvik.smoke 1
         char prop[PROP_VALUE_MAX] = {0};
-        if (__system_property_get("debug.deckplayer.smoke", prop) > 0 && prop[0] == '1') {
+        if (__system_property_get("debug.muvik.smoke", prop) > 0 && prop[0] == '1') {
             env = prop;
         }
     }
@@ -111,7 +111,7 @@ void runFunctionalSmoke() {
     steps.push_back({300, "切到媒体库", []() {
         auto* act = brls::Application::getTopActivity();
         if (!act) { check("找到活动", false, "getTopActivity 返回空"); return; }
-        auto* fb = dynamic_cast<deck_player::FileBrowserActivity*>(act);
+        auto* fb = dynamic_cast<muvik::FileBrowserActivity*>(act);
         check("顶层是 FileBrowserActivity", fb != nullptr,
               fb ? "ok" : "类型不符");
         if (fb) fb->selectTabForTest(0);   // 0 = 媒体库
@@ -122,7 +122,7 @@ void runFunctionalSmoke() {
     //    第二下 A 才是「播放」。少这一步，后面的「按 A 播放」必然失败 ——
     //    但那是测试没跟上信息架构，不是产品坏了。
     steps.push_back({300, "按 A 进入文件夹", []() {
-        auto* fb = dynamic_cast<deck_player::FileBrowserActivity*>(
+        auto* fb = dynamic_cast<muvik::FileBrowserActivity*>(
             brls::Application::getTopActivity());
         const bool before = fb && fb->libraryInFolderForTest();
         brls::Application::injectButton(brls::BUTTON_A);
@@ -164,7 +164,7 @@ void runFunctionalSmoke() {
         size_t before = stackDepth();
         brls::Application::injectButton(brls::BUTTON_B);
         // 播放器的 B 键行为是 popActivity，深度应当减少
-        check("按 B 之后返回了上一页", stackDepth() <= before,
+        check("按 B 之后返回了上一页", stackDepth() < before,
               "栈深 " + std::to_string(before) + " -> " + std::to_string(stackDepth()));
     }});
 
@@ -173,7 +173,7 @@ void runFunctionalSmoke() {
     //    用户从文件夹里退出去会直接关掉整个界面。
     steps.push_back({400, "再按 B", []() {
         size_t before = stackDepth();
-        auto* fb = dynamic_cast<deck_player::FileBrowserActivity*>(
+        auto* fb = dynamic_cast<muvik::FileBrowserActivity*>(
             brls::Application::getTopActivity());
         brls::Application::injectButton(brls::BUTTON_B);
         const bool still_in_folder = fb && fb->libraryInFolderForTest();
@@ -213,4 +213,4 @@ void runFunctionalSmoke() {
     }).detach();
 }
 
-} // namespace deck_player
+} // namespace muvik

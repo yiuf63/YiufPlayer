@@ -10,15 +10,15 @@
 #include <fstream>
 #include <filesystem>
 
-using namespace deck_player;
+using namespace muvik;
 namespace fs = std::filesystem;
 
 namespace {
 
 // 生成一个正常插件包（内含假的动态库文件）
 bool makeGoodZip(const std::string& zip_path) {
-    std::string dir = "/tmp/deckplayer_test_zip/good";
-    std::system("rm -rf /tmp/deckplayer_test_zip && mkdir -p /tmp/deckplayer_test_zip/good");
+    std::string dir = "/tmp/muvik_test_zip/good";
+    std::system("rm -rf /tmp/muvik_test_zip && mkdir -p /tmp/muvik_test_zip/good");
     std::ofstream(dir + "/demo_plugin.dylib") << "fake dylib content";
     std::ofstream(dir + "/README.txt") << "plugin readme";
     std::string cmd = "cd " + dir + " && zip -q " + zip_path +
@@ -30,17 +30,17 @@ bool makeGoodZip(const std::string& zip_path) {
 bool makeRealZip(const std::string& zip_path) {
     namespace fs = std::filesystem;
     const char* cands[] = {
-        "/Users/yiuf/.config/deck-player/plugins/demo_plugin.dylib",
+        "/Users/yiuf/.config/muvik/plugins/demo_plugin.dylib",
     };
     for (const char* c : cands) {
         if (!fs::exists(c)) continue;
-        std::system("rm -rf /tmp/deckplayer_test_zip/real && "
-                    "mkdir -p /tmp/deckplayer_test_zip/real");
+        std::system("rm -rf /tmp/muvik_test_zip/real && "
+                    "mkdir -p /tmp/muvik_test_zip/real");
         std::error_code ec;
-        fs::copy_file(c, "/tmp/deckplayer_test_zip/real/demo_plugin.dylib",
+        fs::copy_file(c, "/tmp/muvik_test_zip/real/demo_plugin.dylib",
                       fs::copy_options::overwrite_existing, ec);
         if (ec) continue;
-        std::string cmd = "cd /tmp/deckplayer_test_zip/real && zip -q " +
+        std::string cmd = "cd /tmp/muvik_test_zip/real && zip -q " +
                           zip_path + " demo_plugin.dylib";
         return std::system(cmd.c_str()) == 0;
     }
@@ -49,9 +49,9 @@ bool makeRealZip(const std::string& zip_path) {
 
 // 生成一个不含动态库的包
 bool makeNoLibZip(const std::string& zip_path) {
-    std::system("rm -rf /tmp/deckplayer_test_zip/nolib && mkdir -p /tmp/deckplayer_test_zip/nolib");
-    std::ofstream("/tmp/deckplayer_test_zip/nolib/note.txt") << "no library here";
-    std::string cmd = "cd /tmp/deckplayer_test_zip/nolib && zip -q " + zip_path + " note.txt";
+    std::system("rm -rf /tmp/muvik_test_zip/nolib && mkdir -p /tmp/muvik_test_zip/nolib");
+    std::ofstream("/tmp/muvik_test_zip/nolib/note.txt") << "no library here";
+    std::string cmd = "cd /tmp/muvik_test_zip/nolib && zip -q " + zip_path + " note.txt";
     return std::system(cmd.c_str()) == 0;
 }
 
@@ -61,18 +61,19 @@ bool makeSlipZip(const std::string& zip_path) {
         "import zipfile\n"
         "z = zipfile.ZipFile('" + zip_path + "', 'w')\n"
         "z.writestr('ok.dylib', 'x')\n"
-        "z.writestr('../../../tmp/DECKPLAYER_PWNED.txt', 'malicious')\n"
+        "z.writestr('../../../tmp/MUVIK_PWNED.txt', 'malicious')\n"
         "z.close()\n";
-    std::ofstream("/tmp/deckplayer_test_zip/mk.py") << py;
-    return std::system("python3 /tmp/deckplayer_test_zip/mk.py") == 0;
+    std::ofstream("/tmp/muvik_test_zip/mk.py") << py;
+    return std::system("python3 /tmp/muvik_test_zip/mk.py") == 0;
 }
 
 } // namespace
 
 int main() {
-    setenv("XDG_CONFIG_HOME", "/tmp/deckplayer_test_installer", 1);
-    std::system("rm -rf /tmp/deckplayer_test_installer /tmp/DECKPLAYER_PWNED.txt "
-                "/tmp/deckplayer_test_zip /tmp/good_plugin.zip /tmp/nolib.zip /tmp/slip.zip");
+    setenv("MUVIK_ENABLE_NATIVE_PLUGINS", "1", 1);
+    setenv("XDG_CONFIG_HOME", "/tmp/muvik_test_installer", 1);
+    std::system("rm -rf /tmp/muvik_test_installer /tmp/MUVIK_PWNED.txt "
+                "/tmp/muvik_test_zip /tmp/good_plugin.zip /tmp/nolib.zip /tmp/slip.zip");
 
     CHECK_TRUE(makeGoodZip("/tmp/good_plugin.zip"), "构造正常插件包");
     CHECK_TRUE(makeNoLibZip("/tmp/nolib.zip"), "构造无动态库的包");
@@ -87,7 +88,7 @@ int main() {
     auto slip = PluginInstaller::installFromZip("/tmp/slip.zip");
     CHECK_FALSE(slip.ok, "路径穿越包被拒绝");
     CHECK_CONTAINS(slip.message, std::string("穿越"), "错误信息指明路径穿越");
-    CHECK_FALSE(fs::exists("/tmp/DECKPLAYER_PWNED.txt"),
+    CHECK_FALSE(fs::exists("/tmp/MUVIK_PWNED.txt"),
                 "恶意文件未被写到插件目录之外");
 
     TEST_BEGIN("安装器 / 内容校验");
@@ -170,7 +171,7 @@ int main() {
     }
 
     TEST_END();
-    std::system("rm -rf /tmp/deckplayer_test_zip /tmp/good_plugin.zip "
-                "/tmp/nolib.zip /tmp/slip.zip /tmp/deckplayer_test_installer");
+    std::system("rm -rf /tmp/muvik_test_zip /tmp/good_plugin.zip "
+                "/tmp/nolib.zip /tmp/slip.zip /tmp/muvik_test_installer");
     return TEST_SUMMARY();
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """最小 WebDAV 测试服务端。
 
-只实现 PROPFIND（Depth: 1），用于验证 DeckPlayer 的 WebDAV 插件。
+只实现 PROPFIND（Depth: 1），用于验证 Muvik 的 WebDAV 插件。
 不实现 PROPPATCH / PUT / DELETE 等写操作——本插件只需要读。
 
 用法：

@@ -16,7 +16,7 @@
 
 #include "utils/app_paths.hpp"
 
-#ifdef DECKPLAYER_HAVE_FFMPEG
+#ifdef MUVIK_HAVE_FFMPEG
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
@@ -25,7 +25,7 @@ extern "C" {
 }
 #endif
 
-namespace deck_player {
+namespace muvik {
 
 namespace {
 
@@ -81,7 +81,7 @@ std::set<std::string> g_failed;
 // 绘制层每帧都会问一次，不记忆就是一屏十几张卡每帧十几次 open(2)。
 std::unordered_map<std::string, std::string> g_memo;
 
-#ifdef DECKPLAYER_HAVE_FFMPEG
+#ifdef MUVIK_HAVE_FFMPEG
 
 bool writeRgba(const std::string& out, int w, int h, const uint8_t* rgba) {
     std::ofstream f(out, std::ios::binary | std::ios::trunc);
@@ -195,7 +195,7 @@ bool extractFrame(const std::string& media, const std::string& out) {
 
 bool extractFrame(const std::string&, const std::string&) { return false; }
 
-#endif // DECKPLAYER_HAVE_FFMPEG
+#endif // MUVIK_HAVE_FFMPEG
 
 } // namespace
 
@@ -205,7 +205,7 @@ ThumbnailCache& ThumbnailCache::getInstance() {
 }
 
 bool ThumbnailCache::enabled() const {
-#ifdef DECKPLAYER_HAVE_FFMPEG
+#ifdef MUVIK_HAVE_FFMPEG
     return true;
 #else
     return false;
@@ -297,13 +297,20 @@ void ThumbnailCache::clear() {
     // 只删 .rgba：这个目录归本类独占，但仍然按后缀过滤，
     // 避免以后往这里放别的东西时被误删
     std::error_code ec;
-    for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
-        const std::string name = entry.path().filename().string();
-        if (name.size() > 5 && name.compare(name.size() - 5, 5, ".rgba") == 0) {
-            std::error_code rm_ec;
-            std::filesystem::remove(entry.path(), rm_ec);
+    try {
+        std::filesystem::directory_iterator it(dir, std::filesystem::directory_options::skip_permission_denied, ec);
+        std::filesystem::directory_iterator end;
+        while (!ec && it != end) {
+            try {
+                const std::string name = it->path().filename().string();
+                if (name.size() > 5 && name.compare(name.size() - 5, 5, ".rgba") == 0) {
+                    std::error_code rm_ec;
+                    std::filesystem::remove(it->path(), rm_ec);
+                }
+            } catch (...) {}
+            it.increment(ec);
         }
-    }
+    } catch (...) {}
 }
 
-} // namespace deck_player
+} // namespace muvik

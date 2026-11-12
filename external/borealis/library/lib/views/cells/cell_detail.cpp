@@ -35,6 +35,7 @@ const std::string detailCellXML = R"xml(
             width="auto"
             height="auto"
             grow="1"
+            singleLine="true"
             fontSize="@style/brls/sidebar/item_font_size"
             marginRight="@style/brls/listitem/descriptionIndent" />
 
@@ -44,6 +45,7 @@ const std::string detailCellXML = R"xml(
             maxWidth="300"
             height="auto"
             shrink="0"
+            singleLine="true"
             fontSize="@style/brls/sidebar/item_font_size"
             textColor="@theme/brls/list/listItem_value_color"/>
 

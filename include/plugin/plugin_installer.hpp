@@ -6,7 +6,7 @@
 #include <vector>
 #include <functional>
 
-namespace deck_player {
+namespace muvik {
 
 // 插件包安装器：支持从本地 ZIP 包安装插件。
 //
@@ -37,4 +37,4 @@ private:
     static bool validateZipEntries(const std::string& zip_path, std::string& err);
 };
 
-} // namespace deck_player
+} // namespace muvik

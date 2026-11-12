@@ -18,10 +18,12 @@ limitations under the License.
 #include <borealis/core/logger.hpp>
 #include <borealis/platforms/desktop/steam_deck.hpp>
 
+#include <vector>
+#include <cstdlib>
+
 namespace brls
 {
 
-#define STEAM_CLIENT_PIPE_PATH "/home/deck/.steam/steam.pipe"
 #define STEAM_DECK_BACKLIGHT_PATH "/sys/class/backlight/amdgpu_bl0/brightness"
 #define STEAM_DECK_MAX_BRIGHTNESS 4095
 
@@ -29,21 +31,42 @@ void runSteamDeckCommand(const std::string& cmd)
 {
     if (!isSteamDeck())
         return ;
-    int fd = open(STEAM_CLIENT_PIPE_PATH, O_WRONLY | O_NONBLOCK);
-    if (fd < 0)
-    {
-        Logger::warning("Cannot open steam.pipe");
+
+    std::vector<std::string> pipe_candidates;
+    if (const char* home = std::getenv("HOME")) {
+        pipe_candidates.push_back(std::string(home) + "/.steam/steam.pipe");
+        pipe_candidates.push_back(std::string(home) + "/.local/share/Steam/steam.pipe");
     }
-    else
-    {
-        write(fd, cmd.c_str(), cmd.size());
-        close(fd);
+    pipe_candidates.push_back("/home/deck/.steam/steam.pipe");
+    pipe_candidates.push_back("/tmp/steam.pipe");
+
+    bool sent = false;
+    for (const auto& path : pipe_candidates) {
+        int fd = open(path.c_str(), O_WRONLY | O_NONBLOCK);
+        if (fd >= 0) {
+            write(fd, cmd.c_str(), cmd.size());
+            close(fd);
+            sent = true;
+            break;
+        }
+    }
+
+    if (!sent) {
+        Logger::warning("Cannot open steam.pipe, falling back to steam command");
+        std::string safe_cmd = cmd;
+        for (char& c : safe_cmd) if (c == '\n' || c == '\r') c = ' ';
+        std::string sys_cmd = "steam \"" + safe_cmd + "\" >/dev/null 2>&1 &";
+        int rc = system(sys_cmd.c_str());
+        (void)rc;
     }
 }
 
 bool isSteamDeck() {
-    static bool isSteamDeck = getenv("SteamDeck");
-    return isSteamDeck;
+    static bool isDeck = (std::getenv("SteamDeck") != nullptr ||
+                          std::getenv("STEAM_DECK") != nullptr ||
+                          std::getenv("SteamGamepadUI") != nullptr ||
+                          std::getenv("STEAM_BIG_PICTURE") != nullptr);
+    return isDeck;
 }
 
 bool isSteamDeckBrightnessSupported() {

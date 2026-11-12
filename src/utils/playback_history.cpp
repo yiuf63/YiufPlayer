@@ -14,7 +14,7 @@
 
 namespace fs = std::filesystem;
 
-namespace deck_player {
+namespace muvik {
 
 PlaybackHistory& PlaybackHistory::getInstance() {
     static PlaybackHistory instance;
@@ -78,7 +78,7 @@ void PlaybackHistory::save() {
     std::ofstream outfile(filepath, std::ios::trunc);
     if (!outfile.is_open()) return;
 
-    outfile << "# DeckPlayer Playback History\n";
+    outfile << "# Muvik Playback History\n";
     for (const auto& [path, rec] : records_) {
         outfile << rec.path << "|"
                 << rec.position << "|"
@@ -151,4 +151,4 @@ std::vector<HistoryRecord> PlaybackHistory::getRecentList(size_t limit) const {
     return list;
 }
 
-} // namespace deck_player
+} // namespace muvik

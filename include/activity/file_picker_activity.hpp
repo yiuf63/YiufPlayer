@@ -6,7 +6,7 @@
 
 #include <borealis.hpp>
 
-namespace deck_player {
+namespace muvik {
 
 // 通用「选目录 / 选文件」界面。
 //
@@ -69,4 +69,4 @@ private:
     brls::Box* list_ = nullptr;
 };
 
-} // namespace deck_player
+} // namespace muvik

@@ -68,7 +68,7 @@ bool DesktopFontLoader::loadFont(const std::string& name, const std::string& pat
         }
         catch (const std::exception& e)
         {
-            // DeckPlayer 诊断：原来这里是 catch(...) 静默吞掉，
+            // Muvik 诊断：原来这里是 catch(...) 静默吞掉，
             // 导致「资源嵌入了却读不到」完全没有任何线索。
             brls::Logger::error("[font] romfs 读取失败 {}: {}", path.substr(5), e.what());
         }
@@ -111,7 +111,7 @@ void DesktopFontLoader::loadFonts()
     std::vector<std::string> koreanFonts = {
         "/System/Library/Fonts/AppleSDGothicNeo",
     };
-    // DeckPlayer 补丁：恢复中文字体回退。
+    // Muvik 补丁：恢复中文字体回退。
     // 上游这里整段被注释掉，只保留韩文回退，导致简体中文在 macOS 上
     // 没有任何字体可供 fontstash 回退 —— 界面中文全部显示为乱码/方块。
     // 实测系统上这些字体均存在。

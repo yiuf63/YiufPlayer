@@ -1,6 +1,6 @@
 #pragma once
 
-namespace deck_player {
+namespace muvik {
 
 // macOS 专属：抑制 App Nap，使应用在窗口失焦或被隐藏时仍能持续进行音频解码，
 // 否则系统会降低进程优先级，导致后台音乐播放卡顿或进度停滞。
@@ -18,4 +18,4 @@ public:
     static bool isActive();
 };
 
-} // namespace deck_player
+} // namespace muvik

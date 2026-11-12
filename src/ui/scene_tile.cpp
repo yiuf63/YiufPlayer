@@ -11,7 +11,7 @@
 #include "ui/design.hpp"
 #include "ui/icons.hpp"
 
-namespace deck_player::ui {
+namespace muvik::ui {
 
 namespace {
 
@@ -95,14 +95,6 @@ void hillShape(NVGcontext* vg, float x, float y, float w, float h,
     nvgLineTo(vg, x, y + h);
     nvgClosePath(vg);
     nvgFillColor(vg, color);
-    nvgFill(vg);
-}
-
-void roundedVarying(NVGcontext* vg, float x, float y, float w, float h,
-                    float tl, float tr, float br, float bl, NVGcolor c) {
-    nvgBeginPath(vg);
-    nvgRoundedRectVarying(vg, x, y, w, h, tl, tr, br, bl);
-    nvgFillColor(vg, c);
     nvgFill(vg);
 }
 
@@ -199,4 +191,4 @@ void drawScene(NVGcontext* vg, float x, float y, float w, float h,
     }
 }
 
-} // namespace deck_player::ui
+} // namespace muvik::ui

@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "deck-player-android"
+rootProject.name = "muvik-android"
 include(":app")

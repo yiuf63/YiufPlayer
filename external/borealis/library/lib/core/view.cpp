@@ -64,7 +64,7 @@ AppletFrameItem::~AppletFrameItem()
 
 View::View()
 {
-    // DeckPlayer 补丁：地址复用会使死亡登记表出现假阳性（详见
+    // Muvik 补丁：地址复用会使死亡登记表出现假阳性（详见
     // application.hpp isViewDead 的注释）—— 新对象构造时把自己的地址
     // 从表里摘掉，登记表重新自洽。必须放在最前面：构造过程中任何
     // giveFocus / isViewDead 查询看到的都应当是「活着的自己」。
@@ -1517,7 +1517,7 @@ std::string View::getCustomNavigationRouteId(FocusDirection direction)
 
 View::~View()
 {
-    // DeckPlayer 补丁：登记已销毁地址，供 Application::giveFocus 判定野指针。
+    // Muvik 补丁：登记已销毁地址，供 Application::giveFocus 判定野指针。
     // 手势识别器按值捕获 View*，界面切换后回调仍可能触发，
     // 此时该指针已失效（详见 application.hpp 中 deadViews 的说明）。
     Application::markViewDead(this);

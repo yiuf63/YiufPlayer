@@ -7,7 +7,7 @@
 
 ## 项目是什么
 
-**DeckPlayer** —— 面向 Steam Deck 与通用掌机/桌面的音视频播放器。
+**Muvik** —— 面向 Steam Deck 与通用掌机/桌面的音视频播放器。
 
 - **技术栈**：C++17 + [Borealis](https://github.com/xfangfang/borealis) UI 框架 + libmpv 解码内核
 - **分发形态**：**GPL-3.0 开源**（2026-10 起从闭源改为 GPL-3.0，见「许可证」一节）
@@ -22,7 +22,7 @@
 # 本地开发（链接系统 mpv）
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(sysctl -n hw.ncpu 2>/dev/null || nproc)
-./build/deck-player
+./build/muvik
 ```
 
 构建时 `license_probe` 会打印所用 FFmpeg 的版本与许可证，**不会阻断构建**
@@ -35,8 +35,8 @@ cmake --build build -j$(sysctl -n hw.ncpu 2>/dev/null || nproc)
 
 ```bash
 # Linux / SteamOS：容器构建（推荐，产物落 build-linux/）
-docker build --platform linux/amd64 -f Dockerfile.linux -t deckplayer-linux .
-docker run --rm -v "$PWD:/src" -w /src deckplayer-linux
+docker build --platform linux/amd64 -f Dockerfile.linux -t muvik-linux .
+docker run --rm -v "$PWD:/src" -w /src muvik-linux
 # 或 Linux 主机上直接：./scripts/build-linux.sh（见 docs/LINUX-BUILD.md）
 # Linux 必须 -DUSE_SYSTEM_GLFW=OFF：borealis 用的是定制 GLFW 分支，
 # 系统 libglfw3 没有 GLFW_SOFT_FULLSCREEN / GLFW_TOUCH / GLFW_IME 符号。
@@ -241,11 +241,11 @@ for (auto& f : alive_flags_) if (f) f->store(false);
 **已实测**：插件按旧版结构体编译、主程序升级后新增一个字段，
 运行时直接 `Bus error` 并产生无限循环。
 
-`include/plugin/deck_plugin_abi.h` 里的规则不可协商：
+`include/plugin/muvik_plugin_abi.h` 里的规则不可协商：
 
 - 只用 C 类型（`const char*`、`int64_t`、纯 C 结构体）
 - 禁止 `std::string` / `std::vector` / 类 / 模板 / 异常跨 SO 边界
-- 固定入口符号 `deck_player_plugin_entry_v1`
+- 固定入口符号 `muvik_plugin_entry_v1`
 - `abi_version` 不匹配直接拒绝加载
 - 结构体只允许在**尾部追加**字段
 
@@ -256,7 +256,7 @@ for (auto& f : alive_flags_) if (f) f->store(false);
 宿主的 `g_config` 曾经是一个**从未被填充的空表**，导致 `init()` 永远收到
 `nullptr`，插件只能靠环境变量配置。
 
-现状：配置存在 `PluginConfigStore`（`~/.config/deck-player/plugin_config.dat`），
+现状：配置存在 `PluginConfigStore`（`~/.config/muvik/plugin_config.dat`），
 加载插件时以 JSON 形式传给 `init()`，同时 `host->get_config` 也会转发过去。
 
 **新插件应优先读 `config_json`**，环境变量只作为调试后备。
@@ -288,17 +288,17 @@ for (auto& f : alive_flags_) if (f) f->store(false);
 崩溃（退出码 / ASan）和渲染（抓帧）都过了，仍然可能出现「按 A 打不开视频」——
 65 项自动检查全绿而功能全废，本项目真的发生过。
 
-功能层必须有**注入操作 + 断言状态变化**的检查：`DECKPLAYER_SMOKE=1` 走
+功能层必须有**注入操作 + 断言状态变化**的检查：`MUVIK_SMOKE=1` 走
 `Application::injectButton()` 全链路，断言 activity 栈深度变化，失败以退出码 1 结束。
 新增这类检查后，要故意改坏源码确认它会红。
 
 ### 11. 测试钩子环境变量很多，别硬背
 
-界面与播放的可验证性全靠 `DECKPLAYER_*` 钩子（抓帧、注入按键、指定起始标签、
+界面与播放的可验证性全靠 `MUVIK_*` 钩子（抓帧、注入按键、指定起始标签、
 打开对话框/播放列表/插件页、强制音轨字幕轨、模拟手势……）。完整清单以代码为准：
 
 ```bash
-grep -rho 'getenv("DECKPLAYER_[A-Z_]*")' src | sort -u
+grep -rho 'getenv("MUVIK_[A-Z_]*")' src | sort -u
 ```
 
 ### 12. TapGestureRecognizer 不派发 START（按下是 UNSURE）
@@ -318,7 +318,7 @@ stdin 不关闭就**永久阻塞**（CPU 0%，像死锁）。`verify_ui.py` 曾�
 
 OSD 自动隐藏要 8 秒，半透明渐变会压在字幕上，把纯白像素压到 200 上下，
 导致「>245」判据在 OSD 显示期间必挂。判「字幕是否渲染」时两组抓帧都加
-`DECKPLAYER_OSD_OFF=1`，只比「字幕开/关」。UI 时序依赖是像素检查最大的不稳定源。
+`MUVIK_OSD_OFF=1`，只比「字幕开/关」。UI 时序依赖是像素检查最大的不稳定源。
 
 ### 15. `NVGcolor` 是 0..1 的浮点，不是 0..255
 
@@ -367,8 +367,8 @@ borealis 的 `deadViews` 原来只增不减：View 销毁后地址登记还在�
 ### 21. 持锁调内部会再锁同一把 mutex 的函数 = 死锁
 
 `ThumbnailCache::requestBatch` 持有 `g_mutex` 时调 `filePath()`，而后者也锁
-同一把**非递归** mutex —— 启动即挂死，且 `pkill -f "build/deck-player"`
-杀不掉（进程名是 `./deck-player`，要 `pkill -x`）。
+同一把**非递归** mutex —— 启动即挂死，且 `pkill -f "build/muvik"`
+杀不掉（进程名是 `./muvik`，要 `pkill -x`）。
 修复：`filePathUnlocked()` 无锁版供持锁路径使用。写缓存类代码时，
 **持锁状态下只能调标记为 Unlocked 的内部函数**。
 
@@ -399,9 +399,19 @@ borealis 的 `deadViews` 原来只增不减：View 销毁后地址登记还在�
 
 ### 26. 抓帧/杀进程的两个小坑
 
-- `DECKPLAYER_FRAMEGRAB` 默认在启动早期抓帧，想抓「打开浮层/切页/播放后」
-  的画面要加 `DECKPLAYER_FRAMEGRAB_AT_MS=<毫秒>`（如 2500）。
+- `MUVIK_FRAMEGRAB` 默认在启动早期抓帧，想抓「打开浮层/切页/播放后」
+  的画面要加 `MUVIK_FRAMEGRAB_AT_MS=<毫秒>`（如 2500）。
 - 抓帧产物是 **PPM** 不是 PNG，`ViewImage`/预览前要 `ffmpeg -i x.ppm x.png` 转一下。
+
+### 27. macOS 大小写不敏感文件系统下 `VERSION` 冲突 `<version>`
+
+在引入第三方库（如 QuickJS）时，若库根目录下存在全大写的 `VERSION` 文件，一旦该目录加入 include 路径，macOS / Windows 编译器会把 C++ 标准库的 `#include <version>` 误匹配为该文件，导致 STL 编译崩溃报 `expected unqualified-id`。
+对策：第三方库的 `VERSION` 一律重命名为 `VERSION.txt`。
+
+### 28. C++ Raw String 遇到 `)"` 会提前闭合
+
+在 C++ 单元测试中构造内嵌 JS 脚本时，如果脚本包含括号后接引号（如 `format: "ass" })`），默认的 `R"( ... )"` 会把 `)"` 当作字面量结束符，导致后续 JS 代码被当成 C++ 代码编译并报大片语法错误。
+对策：必须使用带自定义标签的原始字符串字面量，如 `R"JS( ... )JS"`。
 
 ---
 
@@ -410,7 +420,7 @@ borealis 的 `deadViews` 原来只增不减：View 销毁后地址登记还在�
 - **缩进 4 空格**，无 tab
 - **命名**：类型 `PascalCase`，函数/变量 `camelCase`，私有成员 `trailing_underscore_`，
   常量 `UPPER_SNAKE`（见现有代码）
-- **命名空间**：全部业务代码在 `namespace deck_player`，文件系统别名 `namespace fs`
+- **命名空间**：全部业务代码在 `namespace muvik`，文件系统别名 `namespace fs`
 - **注释用中文**，与代码库保持一致
 - 头文件用 `#pragma once`
 - 新模块放在 `include/<层>/` 与 `src/<层>/` 对应位置
@@ -464,7 +474,7 @@ borealis 的 `deadViews` 原来只增不减：View 销毁后地址登记还在�
 **已验证界面能正常渲染。** 方法是读 GL 帧缓冲，绕开系统截图限制：
 
 ```bash
-DECKPLAYER_FRAMEGRAB=/tmp/grab.ppm ./build/deck-player
+MUVIK_FRAMEGRAB=/tmp/grab.ppm ./build/muvik
 python3 tests/tools/analyze_framegrab.py /tmp/grab.ppm
 ```
 
@@ -496,11 +506,11 @@ python3 tests/tools/analyze_framegrab.py /tmp/grab.ppm
 **视频能正常播放并渲染到屏幕。**
 
 ```bash
-./build/deck-player /tmp/vtest.mp4        # 命令行直接播放
-DECKPLAYER_FRAMEGRAB=/tmp/f.ppm \
-DECKPLAYER_FRAMEGRAB_COUNT=4 \
-DECKPLAYER_FRAMEGRAB_INTERVAL=100 \
-DECKPLAYER_FRAMEGRAB_START=300 ./build/deck-player /tmp/vtest.mp4
+./build/muvik /tmp/vtest.mp4        # 命令行直接播放
+MUVIK_FRAMEGRAB=/tmp/f.ppm \
+MUVIK_FRAMEGRAB_COUNT=4 \
+MUVIK_FRAMEGRAB_INTERVAL=100 \
+MUVIK_FRAMEGRAB_START=300 ./build/muvik /tmp/vtest.mp4
 ```
 
 实测（testsrc2 彩条视频，640x480）：
@@ -608,10 +618,10 @@ this->registerAction("hints/ok", BUTTON_A, [](View* view) {
 
 修法：`selectTab` 里内容加载后把焦点继续交给 `activeTab->getDefaultFocus()`。
 
-#### 新增：`DECKPLAYER_SMOKE` 功能冒烟
+#### 新增：`MUVIK_SMOKE` 功能冒烟
 
 ```bash
-DECKPLAYER_SMOKE=1 DECKPLAYER_START_TAB=1 ./build/deck-player
+MUVIK_SMOKE=1 MUVIK_START_TAB=1 ./build/muvik
 echo $?    # 0=全通过，1=有断言失败
 ```
 
@@ -836,10 +846,10 @@ a_on < a_off * 0.6 and c_on > c_off   # 边缘变暗 且 中心变亮
 #### 新增测试钩子
 
 ```bash
-DECKPLAYER_OPEN_PLAYLIST=1     # 播放器：打开播放列表
-DECKPLAYER_OPEN_DIALOG=folder_options   # 文件浏览器：文件夹选项
-DECKPLAYER_OPEN_DIALOG=media_info       # 文件浏览器：影片信息
-DECKPLAYER_OPEN_DIALOG=1                # 插件管理页：插件目录
+MUVIK_OPEN_PLAYLIST=1     # 播放器：打开播放列表
+MUVIK_OPEN_DIALOG=folder_options   # 文件浏览器：文件夹选项
+MUVIK_OPEN_DIALOG=media_info       # 文件浏览器：影片信息
+MUVIK_OPEN_DIALOG=1                # 插件管理页：插件目录
 ```
 
 钩子内部统一用「后台线程 sleep + brls::sync」，且**延迟必须很短**：
@@ -1030,7 +1040,7 @@ python3 tests/tools/release_check.py --keep   # 保留安装目录供检查
 ```cmake
 install(FILES resources/icon/icon.png
         DESTINATION share/icons/hicolor/512x512/apps   # ← 声明 512
-        RENAME org.deckplayer.DeckPlayer.png)
+        RENAME org.muvik.Muvik.png)
 ```
 
 而 `icon.png` 实际是 **256×256**。按 freedesktop 规范，目录名必须与
@@ -1128,7 +1138,7 @@ alive_flag_ = alive;   // 每次刷新都覆盖，先前任务的标志永远为
 
 ```bash
 python3 tests/tools/verify_ui.py --only soak    # 默认 12 轮
-DECKPLAYER_SOAK_ROUNDS=50 python3 tests/tools/verify_ui.py --only soak
+MUVIK_SOAK_ROUNDS=50 python3 tests/tools/verify_ui.py --only soak
 ```
 
 #### 长时间单次播放：内存稳定
@@ -1181,9 +1191,9 @@ sources_container_ = new DynamicBox([this]() {
 已经是野指针。ASan 堆栈：
 
 ```
-deck_player::FileBrowserActivity::createSourcesView()::$_0::operator()()
+muvik::FileBrowserActivity::createSourcesView()::$_0::operator()()
   <- std::function<void()>::operator()()
-  <- deck_player::DynamicBox::~DynamicBox()
+  <- muvik::DynamicBox::~DynamicBox()
 ```
 
 **修复**：回调只捕获「指针槽位的 shared_ptr」，不捕获 Activity。
@@ -1242,7 +1252,7 @@ ASAN_OPTIONS="fast_unwind_on_fatal=1:symbolize=0"
 拿到裸地址后用 `atos` 手动符号化：
 
 ```bash
-atos -o build-asan/deck-player -arch arm64 0x10008ebcc 0x10008eb0c ...
+atos -o build-asan/muvik -arch arm64 0x10008ebcc 0x10008eb0c ...
 ```
 
 ### 性能与 CPU 占用：已验证并修复严重缺陷（第 30 轮）
@@ -1279,7 +1289,7 @@ swapInterval=0 -> 3615 FPS
 #### 修复：主动限帧
 
 ```cpp
-const char* fps_env = std::getenv("DECKPLAYER_FPS");
+const char* fps_env = std::getenv("MUVIK_FPS");
 const int target_fps = fps_env ? std::max(1, atoi(fps_env)) : 60;
 const auto frame_budget = std::chrono::microseconds(1000000 / target_fps);
 
@@ -1301,7 +1311,7 @@ while (mainLoop()) {
 | 空闲内存 | 165 MB | 155 MB |
 | 播放内存 | 205 MB | 188 MB |
 
-降低约 **20 倍**。用户还可用 `DECKPLAYER_FPS=30` 进一步省电。
+降低约 **20 倍**。用户还可用 `MUVIK_FPS=30` 进一步省电。
 
 #### 内存：2 分钟无泄漏
 
@@ -1326,10 +1336,10 @@ while (mainLoop()) {
 
 **界面布局与分辨率无关，视频宽高比在任何屏幕比例下都正确。**
 
-新增 `DECKPLAYER_WINDOW=宽x高` 可强制窗口尺寸，便于验证：
+新增 `MUVIK_WINDOW=宽x高` 可强制窗口尺寸，便于验证：
 
 ```bash
-DECKPLAYER_WINDOW=1280x800 ./build/deck-player   # Steam Deck 原生分辨率
+MUVIK_WINDOW=1280x800 ./build/muvik   # Steam Deck 原生分辨率
 ```
 
 实测五种尺寸（640×360 / 1024×600 / 1280×720 / 1280×800 / 1920×1080）：
@@ -1474,7 +1484,7 @@ mpv_set_option_string(mpv_, "sub-margin-y", "36");
 
 这样破坏渲染后测试立刻变红（0.0% vs 基线 1.4%）。
 
-字幕检查同理：加了 `DECKPLAYER_SUBTITLE_OFF` 开关做对照组，
+字幕检查同理：加了 `MUVIK_SUBTITLE_OFF` 开关做对照组，
 有字幕 3890 / 关闭 210，两者相差近 20 倍才算通过。
 
 **教训**：验证脚本必须自己也能失败。写完一定要故意破坏被测功能，
@@ -1566,10 +1576,10 @@ list_items('/电影') -> status=0 count=1
 但浏览目录走的 `listVideoSourceItems()` 只做了 `create`，**没有 init**：
 
 ```cpp
-deck_video_source* vs = desc->create_video_source();
+muvik_video_source* vs = desc->create_video_source();
 if (!vs) return false;
 // ← 这里少了 init，插件拿不到 base_url
-if (vs->list_items) { ... }   // 永远返回 DECK_ERR_NOT_AVAILABLE
+if (vs->list_items) { ... }   // 永远返回 MUVIK_ERR_NOT_AVAILABLE
 ```
 
 表现：插件管理页能看到插件、显示"已配置"，但点进去永远空白。
@@ -1581,9 +1591,9 @@ if (vs->init) {
     const std::string plugin_id = fs::path(p.path).stem().string();
     const std::string cfg = PluginConfigStore::getInstance().toJson(plugin_id);
     g_current_plugin_id = plugin_id;
-    deck_status st = vs->init(vs->impl, cfg.c_str(), &g_host_api);
+    muvik_status st = vs->init(vs->impl, cfg.c_str(), &g_host_api);
     g_current_plugin_id.clear();
-    if (st != DECK_OK) { ...; return false; }
+    if (st != MUVIK_OK) { ...; return false; }
 }
 ```
 
@@ -1678,8 +1688,8 @@ mpv_set_property_string(mpv_, "pause", "no");
 验证方式是用环境变量指定启动标签，逐个抓帧对比：
 
 ```bash
-DECKPLAYER_START_TAB=1 DECKPLAYER_FRAMEGRAB=/tmp/t1.ppm \
-DECKPLAYER_FRAMEGRAB_START=120 ./build/deck-player
+MUVIK_START_TAB=1 MUVIK_FRAMEGRAB=/tmp/t1.ppm \
+MUVIK_FRAMEGRAB_START=120 ./build/muvik
 ```
 
 四个页面的两两差异为 6.0%–10.3%，确认内容确实不同（不是同一屏）。
@@ -1729,7 +1739,7 @@ sidebar->addItem(label, [this, creator](brls::View* view) {
 验证方式是注入触摸事件直接驱动手势识别器，无需人工点击：
 
 ```bash
-DECKPLAYER_GESTURE_TEST=1 ./build/deck-player /path/to/video.mp4
+MUVIK_GESTURE_TEST=1 ./build/muvik /path/to/video.mp4
 ```
 
 ```
@@ -1834,7 +1844,7 @@ macOS: 已抑制 App Nap，后台音频可继续播放
 
 ```
 Foundation: _NSSwiftProcessInfo.endActivity(_:)
-deck_player: BackgroundPlayback::end()
+muvik: BackgroundPlayback::end()
 ```
 
 根因：本项目**未启用 ARC**，静态 `id g_activity` 是裸指针。

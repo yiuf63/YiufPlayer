@@ -6,7 +6,7 @@
 
 #include "ui/design.hpp"
 
-namespace deck_player {
+namespace muvik {
 
 namespace {
 
@@ -82,16 +82,17 @@ void ToolButton::draw(NVGcontext* vg, float x, float y, float width, float heigh
     const float r = height * 0.5f;
 
     NVGcolor bg = active_ ? ui::rgba(pal.accent, 0.16f) : ui::rgba(pal.surfaceRaised, 0.9f);
-    if (focused) bg = ui::mix(bg, pal.accent, active_ ? 0.18f : 0.10f);
+    if (focused) bg = ui::mix(bg, pal.accent, 0.28f);
     ui::fillRoundRect(vg, x, y, width, height, r, bg);
 
     if (focused) {
-        ui::strokeRoundRect(vg, x, y, width, height, r, ui::rgba(pal.accent, 0.92f), 1.8f);
+        ui::strokeRoundRect(vg, x - 1.5f, y - 1.5f, width + 3.0f, height + 3.0f, r + 1.5f, ui::rgba(pal.accent, 0.38f), 3.0f);
+        ui::strokeRoundRect(vg, x, y, width, height, r, pal.accent, 2.2f);
     } else if (!active_) {
         ui::strokeRoundRect(vg, x, y, width, height, r, ui::rgba(pal.outline, 0.8f), 1.0f);
     }
 
-    const NVGcolor fg = active_ ? pal.accent : (focused ? pal.text : pal.textDim);
+    const NVGcolor fg = focused ? ui::hex(0xFFFFFF) : (active_ ? pal.accent : pal.textDim);
     const float cy = y + height * 0.5f;
     float cx = x + padXOf(compact_);
 
@@ -114,4 +115,4 @@ void ToolButton::draw(NVGcontext* vg, float x, float y, float width, float heigh
     }
 }
 
-} // namespace deck_player
+} // namespace muvik

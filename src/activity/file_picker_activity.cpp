@@ -13,7 +13,7 @@
 
 namespace fs = std::filesystem;
 
-namespace deck_player {
+namespace muvik {
 
 namespace {
 
@@ -217,7 +217,7 @@ void FilePickerActivity::renderRoot() {
 
 void FilePickerActivity::renderDirectory() {
     // 返回上一级
-    auto* up = new MediaCell(ui::Icon::Back, "返回上一级", current_path_);
+    auto* up = new MediaCell(ui::Icon::Back, "..");
     up->setChevron(true);
     up->registerClickAction([this](brls::View*) {
         navigateUp();
@@ -242,29 +242,32 @@ void FilePickerActivity::renderDirectory() {
     std::vector<std::string> dirs;
     std::vector<std::string> files;
     std::error_code ec;
-    fs::directory_iterator it(fs::path(current_path_),
-                              fs::directory_options::skip_permission_denied, ec);
-    if (!ec) {
-        for (const auto& entry : it) {
-            std::error_code e2;
-            std::string name = entry.path().filename().string();
-            if (name.empty() || name[0] == '.') continue;
-
-            if (entry.is_directory(e2)) {
-                dirs.push_back(entry.path().string());
-                continue;
-            }
-            if (!isFileMode() || !entry.is_regular_file(e2)) continue;
-
-            if (!extensions_.empty()) {
-                const std::string ext = extOf(name);
-                if (std::find(extensions_.begin(), extensions_.end(), ext) == extensions_.end()) {
-                    continue;
+    try {
+        fs::directory_iterator it(fs::path(current_path_),
+                                  fs::directory_options::skip_permission_denied, ec);
+        fs::directory_iterator end;
+        while (!ec && it != end) {
+            try {
+                std::error_code e2;
+                std::string name = it->path().filename().string();
+                if (!name.empty() && name[0] != '.') {
+                    if (it->is_directory(e2)) {
+                        dirs.push_back(it->path().string());
+                    } else if (isFileMode() && it->is_regular_file(e2)) {
+                        if (extensions_.empty()) {
+                            files.push_back(it->path().string());
+                        } else {
+                            const std::string ext = extOf(name);
+                            if (std::find(extensions_.begin(), extensions_.end(), ext) != extensions_.end()) {
+                                files.push_back(it->path().string());
+                            }
+                        }
+                    }
                 }
-            }
-            files.push_back(entry.path().string());
+            } catch (...) {}
+            it.increment(ec);
         }
-    }
+    } catch (...) {}
     std::sort(dirs.begin(), dirs.end());
 
     // 匹配片名的排最前，其余按文件名
@@ -331,4 +334,4 @@ void FilePickerActivity::renderDirectory() {
     }
 }
 
-} // namespace deck_player
+} // namespace muvik

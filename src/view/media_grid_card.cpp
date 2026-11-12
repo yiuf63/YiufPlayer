@@ -9,7 +9,7 @@
 #include "ui/scene_tile.hpp"
 #include "view/media_thumb.hpp"
 
-namespace deck_player {
+namespace muvik {
 
 namespace {
 
@@ -50,7 +50,7 @@ void MediaGridCard::draw(NVGcontext* vg, float x, float y, float width, float he
     const float thumbH = ch - CAPTION_H;
 
     ui::fillRoundRect(vg, cx, cy, cw, ch, r,
-                      focused ? pal.surfaceRaised : pal.surface);
+                      focused ? ui::mix(pal.surfaceRaised, pal.accent, 0.16f) : pal.surface);
 
     ui::drawScene(vg, cx, cy, cw, thumbH, r, r, 0.0f, 0.0f, sceneSpecFor(item_));
 
@@ -84,18 +84,16 @@ void MediaGridCard::draw(NVGcontext* vg, float x, float y, float width, float he
 
     const float tx = cx + 12.0f;
     const float maxW = cw - 24.0f;
-    ui::textClipped(vg, tx, cy + thumbH + 20.0f, ui::font::body, pal.text,
+    ui::textClipped(vg, tx, cy + thumbH + 20.0f, ui::font::body, focused ? ui::hex(0xFFFFFF) : pal.text,
                     NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, title_, maxW);
-    ui::textClipped(vg, tx, cy + thumbH + 39.0f, ui::font::caption, pal.textMute,
+    ui::textClipped(vg, tx, cy + thumbH + 39.0f, ui::font::caption, focused ? pal.text : pal.textMute,
                     NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, subtitle_, maxW);
 
     if (focused) {
-        ui::strokeRoundRect(vg, cx - 2.0f, cy - 2.0f, cw + 4.0f, ch + 4.0f, r + 2.0f,
-                            ui::rgba(pal.accent, 0.20f), 3.0f);
-        ui::strokeRoundRect(vg, cx, cy, cw, ch, r, ui::rgba(pal.accent, 0.9f), 1.8f);
+        ui::drawFocusGlow(vg, cx, cy, cw, ch, r, pal.accent);
     } else {
         ui::strokeRoundRect(vg, cx, cy, cw, ch, r, ui::rgba(pal.outline, 0.75f), 1.0f);
     }
 }
 
-} // namespace deck_player
+} // namespace muvik

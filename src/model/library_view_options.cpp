@@ -6,9 +6,10 @@
 #include <sstream>
 
 #include "utils/app_paths.hpp"
+#include "utils/i18n.hpp"
 #include "utils/playback_history.hpp"
 
-namespace deck_player {
+namespace muvik {
 
 namespace {
 
@@ -160,7 +161,7 @@ void LibraryViewOptions::save() const {
     AppPaths::ensureDir(AppPaths::configDir());
     std::ofstream out(AppPaths::configFile("library_view.conf"), std::ios::trunc);
     if (!out.is_open()) return;
-    out << "# DeckPlayer library view v1\n";
+    out << "# Muvik library view v1\n";
     out << "# key=value\n";
     out << "group=" << groupKey(group) << "\n";
     out << "content=" << contentKey(content) << "\n";
@@ -179,19 +180,20 @@ void LibraryViewOptions::reset() {
 }
 
 std::string LibraryViewOptions::summary() const {
-    const char* g = (group == LibraryGroup::Flat) ? "全部平铺" : "按文件夹";
-    const char* s = "名称";
+    std::string g = (group == LibraryGroup::Flat) ? i18n::tr("view_sheet.group_flat", "全部平铺")
+                                                  : i18n::tr("view_sheet.group_folder", "按文件夹");
+    std::string s = i18n::tr("view_sheet.sort_name", "名称");
     switch (sort) {
-        case LibrarySort::Recent: s = "最近添加"; break;
-        case LibrarySort::Size: s = "大小"; break;
-        case LibrarySort::Progress: s = "进度"; break;
+        case LibrarySort::Recent: s = i18n::tr("view_sheet.sort_recent", "最近添加"); break;
+        case LibrarySort::Size: s = i18n::tr("view_sheet.sort_size", "大小"); break;
+        case LibrarySort::Progress: s = i18n::tr("view_sheet.sort_progress", "进度"); break;
         default: break;
     }
-    std::string out = std::string(g) + " · " + s;
-    if (content == LibraryContent::VideoOnly) out += " · 仅视频";
-    else if (content == LibraryContent::AudioOnly) out += " · 仅音乐";
-    if (filter == LibraryFilter::Unfinished) out += " · 未看完";
-    else if (filter == LibraryFilter::Finished) out += " · 已看完";
+    std::string out = g + " · " + s;
+    if (content == LibraryContent::VideoOnly) out += " · " + i18n::tr("view_sheet.content_video", "仅视频");
+    else if (content == LibraryContent::AudioOnly) out += " · " + i18n::tr("view_sheet.content_audio", "仅音乐");
+    if (filter == LibraryFilter::Unfinished) out += " · " + i18n::tr("view_sheet.filter_unfinished", "未看完");
+    else if (filter == LibraryFilter::Finished) out += " · " + i18n::tr("view_sheet.filter_finished", "已看完");
     return out;
 }
 
@@ -254,4 +256,4 @@ std::vector<MediaItem> LibraryViewOptions::apply(std::vector<MediaItem> items,
     return items;
 }
 
-} // namespace deck_player
+} // namespace muvik

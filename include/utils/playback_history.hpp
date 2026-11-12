@@ -12,7 +12,7 @@
 #include <unordered_map>
 #include <chrono>
 
-namespace deck_player {
+namespace muvik {
 
 struct HistoryRecord {
     std::string path;
@@ -59,4 +59,4 @@ private:
     std::unordered_map<std::string, HistoryRecord> records_;
 };
 
-} // namespace deck_player
+} // namespace muvik

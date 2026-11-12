@@ -145,6 +145,8 @@ void Button::onFocusGained()
     Box::onFocusGained();
 
     this->setShadowVisibility(false);
+    if (this->label)
+        this->label->setTextColor(nvgRGB(255, 255, 255));
 }
 
 void Button::onFocusLost()
@@ -152,6 +154,7 @@ void Button::onFocusLost()
     Box::onFocusLost();
 
     this->setShadowVisibility(true);
+    this->applyStyle();
 }
 
 void Button::setStyle(const ButtonStyle* style)

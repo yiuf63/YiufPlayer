@@ -1,6 +1,6 @@
 # UI 与交互设计规格
 
-本文件是 DeckPlayer 界面的**唯一视觉标准**。新增界面必须引用设计 token，
+本文件是 Muvik 界面的**唯一视觉标准**。新增界面必须引用设计 token，
 不得再写字面量颜色 / 字号 / 圆角 —— 那正是重构前「一屏五种字号、三种边距、
 方括号前缀加 emoji」的拼装观感来源。
 
@@ -195,13 +195,13 @@ B 键在这一层是「退回总览」，不会退出界面。
 | `surfaceRaised` | `#21252C` | 二级表面（悬停 / 选中 / 弹层） |
 | `surfaceSunken` | `#2A2F37` | 凹陷（进度轨道底、图标占位块） |
 | `outline` | `rgba(255,255,255,0.08)` | 细描边 |
-| `outlineStrong` | `rgba(255,159,69,0.55)` | 选中态描边 |
+| `outlineStrong` | `rgba(26,159,255,0.55)` | 选中态描边 |
 | `text` | `#F3F4F6` | 主文字 |
 | `textDim` | `#A8AFBA` | 副文字 |
 | `textMute` | `#717884` | 辅助信息（时间、路径、分组标题） |
-| `accent` | `#FF9F45` | 唯一强调色 |
-| `accentInk` | `#1A1206` | 强调色上的文字（深色） |
-| `accentSoft` | `rgba(255,159,69,0.16)` | 图标底、胶囊底 |
+| `accent` | `#1A9FFF` | 唯一强调色（SteamOS 蓝） |
+| `accentInk` | `#0A1624` | 强调色上的文字（深蓝黑） |
+| `accentSoft` | `rgba(26,159,255,0.16)` | 图标底、胶囊底 |
 | `danger` | `#F0616D` | 错误 |
 | `scrim` | `#000000` | 视频遮罩底色（配 alpha） |
 
@@ -231,12 +231,12 @@ Steam Deck OLED、TrimUI Smart Pro 等 AMOLED 设备上，`#000000` 的像素完
 | `surfaceSunken` | `#E9E7E2` | 凹陷、选中底 |
 | `text` | `#1B1A18` | 近黑暖调 |
 | `textDim` / `textMute` | `#5F5C56` / `#6E6A63` | |
-| `accent` | `#C4650F` | **加深为焦橙**：`#FF9F45` 在白底对比度不足 2:1，按钮文字不可读 |
-| `accentInk` | `#FFFFFF` | 深橙底上用白字 |
+| `accent` | `#0E73B9` | **加深为深蓝**：`#1A9FFF` 在白底对比度不足，加深至 `#0E73B9` 符合无障碍规范 |
+| `accentInk` | `#FFFFFF` | 深蓝底上用白字 |
 | `danger` | `#C0392B` | |
 | `scrim` | `#E2DFD9` (alpha 0.68) | 浅色下浮层是「蒙白」不是「压黑」 |
 
-切换方式（与深色 / OLED 同一机制）：`DECKPLAYER_THEME=light` 环境变量，
+切换方式（与深色 / OLED 同一机制）：`MUVIK_THEME=light` 环境变量，
 或设置页「外观 → 主题」写入 `<configDir>/theme` 文件（重启生效）。
 播放器 OSD **永远保持暗色**：它叠在视频画面上，与页面主题无关。
 
@@ -283,7 +283,7 @@ Steam Deck OLED、TrimUI Smart Pro 等 AMOLED 设备上，`#000000` 的像素完
 所以 40px 和 20px 的图标看起来是同一条线的粗细。所有端点 `NVG_ROUND`。
 
 **新增图标**：加进 `enum class Icon`，在 `drawIcon()` 的 `switch` 里写路径。
-画完用 `DECKPLAYER_FRAMEGRAB` 抓帧，在**目标尺寸**下看一眼 —— 24×24 里好看的
+画完用 `MUVIK_FRAMEGRAB` 抓帧，在**目标尺寸**下看一眼 —— 24×24 里好看的
 到 20px 可能糊成一团（`Aspect` 最初画成「外框 + 内条」，20px 下像银行卡，
 改成双层同心描边才对）。
 
@@ -671,7 +671,7 @@ borealis 默认是白色 4px / 0.3 alpha，看起来像一条来路不明的分�
 
 | 方式 | 用法 | 场景 |
 | :--- | :--- | :--- |
-| 环境变量 | `DECKPLAYER_THEME=oled` | 临时 / CI / 抓帧 |
+| 环境变量 | `MUVIK_THEME=oled` | 临时 / CI / 抓帧 |
 | 配置文件 | `<configDir>/theme` 写入一行 `oled` | 持久化，设置 UI 使用 |
 
 `brls::Theme::addColor()` 写入的是内部 map，`operator[]` 返回**值拷贝**，

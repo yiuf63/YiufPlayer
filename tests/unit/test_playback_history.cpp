@@ -5,11 +5,11 @@
 #include "test_framework.hpp"
 #include <cstdlib>
 
-using namespace deck_player;
+using namespace muvik;
 
 int main() {
-    setenv("XDG_CONFIG_HOME", "/tmp/deckplayer_test_history", 1);
-    std::system("rm -rf /tmp/deckplayer_test_history");
+    setenv("XDG_CONFIG_HOME", "/tmp/muvik_test_history", 1);
+    std::system("rm -rf /tmp/muvik_test_history");
 
     auto& h = PlaybackHistory::getInstance();
 

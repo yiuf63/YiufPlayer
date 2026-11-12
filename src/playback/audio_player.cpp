@@ -14,7 +14,7 @@
 
 namespace fs = std::filesystem;
 
-namespace deck_player {
+namespace muvik {
 
 AudioPlayer& AudioPlayer::getInstance() {
     static AudioPlayer instance;
@@ -410,4 +410,4 @@ void AudioPlayer::tick() {
     }
 }
 
-} // namespace deck_player
+} // namespace muvik

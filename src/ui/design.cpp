@@ -4,18 +4,20 @@
 #include <cmath>
 #include <vector>
 
+#ifndef TESTING_WITHOUT_BOREALIS
 #include <borealis/core/application.hpp>
+#endif
 
-#include "theme/deck_theme.hpp"
+#include "theme/muvik_theme.hpp"
 
-namespace deck_player::ui {
+namespace muvik::ui {
 
 namespace {
 
 // NVGcolor 的四个分量都是 0..1 的 float，不能直接塞 0..255 的整数，
 // 否则 0x18 会变成 18.0f（远超 1.0），颜色全部溢出成纯白。
 constexpr NVGcolor c8(unsigned r, unsigned g, unsigned b, float a = 1.0f) {
-    return NVGcolor{r / 255.0f, g / 255.0f, b / 255.0f, a};
+    return NVGcolor{{{r / 255.0f, g / 255.0f, b / 255.0f, a}}};
 }
 
 // 标准深色：中性偏冷的三级表面。
@@ -31,9 +33,9 @@ constexpr Palette kDark = {
     /* text          */ c8(0xF3, 0xF4, 0xF6),
     /* textDim       */ c8(0xA8, 0xAF, 0xBA),
     /* textMute      */ c8(0x71, 0x78, 0x84),
-    /* accent        */ c8(0xFF, 0x9F, 0x45),
-    /* accentInk     */ c8(0x1A, 0x12, 0x08),
-    /* accentSoft    */ c8(0xFF, 0x9F, 0x45, 0.16f),
+    /* accent        */ c8(0x1A, 0x9F, 0xFF),
+    /* accentInk     */ c8(0x0A, 0x16, 0x24),
+    /* accentSoft    */ c8(0x1A, 0x9F, 0xFF, 0.16f),
     /* danger        */ c8(0xFF, 0x6B, 0x6B),
     /* scrim         */ c8(0x00, 0x00, 0x00),
     /* scrimAlpha    */ 0.55f,
@@ -52,9 +54,9 @@ constexpr Palette kOled = {
     /* text          */ c8(0xF3, 0xF4, 0xF6),
     /* textDim       */ c8(0xA8, 0xAF, 0xBA),
     /* textMute      */ c8(0x6C, 0x73, 0x7E),
-    /* accent        */ c8(0xFF, 0x9F, 0x45),
-    /* accentInk     */ c8(0x1A, 0x12, 0x08),
-    /* accentSoft    */ c8(0xFF, 0x9F, 0x45, 0.16f),
+    /* accent        */ c8(0x1A, 0x9F, 0xFF),
+    /* accentInk     */ c8(0x0A, 0x16, 0x24),
+    /* accentSoft    */ c8(0x1A, 0x9F, 0xFF, 0.16f),
     /* danger        */ c8(0xFF, 0x6B, 0x6B),
     /* scrim         */ c8(0x00, 0x00, 0x00),
     /* scrimAlpha    */ 0.55f,
@@ -73,38 +75,56 @@ constexpr Palette kLight = {
     /* text          */ c8(0x1B, 0x1A, 0x18),
     /* textDim       */ c8(0x5F, 0x5C, 0x56),
     /* textMute      */ c8(0x6E, 0x6A, 0x63),
-    /* accent        */ c8(0xC4, 0x65, 0x0F),
+    /* accent        */ c8(0x0E, 0x73, 0xB9),
     /* accentInk     */ c8(0xFF, 0xFF, 0xFF),
-    /* accentSoft    */ c8(0xC4, 0x65, 0x0F, 0.14f),
+    /* accentSoft    */ c8(0x0E, 0x73, 0xB9, 0.14f),
     /* danger        */ c8(0xC0, 0x39, 0x2B),
     /* scrim         */ c8(0xE2, 0xDF, 0xD9),
     /* scrimAlpha    */ 0.68f,
 };
 
-// 主题只在启动时解析一次，之后保持不变。
-// 色板只跟着 resolveThemeKind() 走，不读 borealis 的 ThemeVariant：
-// applyDeckTheme 会用同一套色覆盖深/浅两个 borealis 主题，
-// 系统「浅色模式」不会把界面染成 Switch 风格，也不会出现
-// 自绘色板与 borealis 主题各说各话的错位。
-const Palette& cachedPalette() {
-    static const Palette& p = []() -> const Palette& {
-        switch (resolveThemeKind()) {
-            case ThemeKind::Oled:  return kOled;
-            case ThemeKind::Light: return kLight;
-            default:               return kDark;
-        }
-    }();
-    return p;
-}
-
 int fontId(NVGcontext* vg) {
     (void)vg;
+#ifndef TESTING_WITHOUT_BOREALIS
     return brls::Application::getDefaultFont();
+#else
+    return 0;
+#endif
 }
 
 } // namespace
 
-const Palette& palette() { return cachedPalette(); }
+static Palette g_currentPalette = kDark;
+static bool g_paletteInitialized = false;
+
+const Palette& getBuiltinDarkPalette() { return kDark; }
+const Palette& getBuiltinOledPalette() { return kOled; }
+const Palette& getBuiltinLightPalette() { return kLight; }
+
+void setPalette(const Palette& p) {
+    g_currentPalette = p;
+    g_paletteInitialized = true;
+}
+
+void resetPalette() {
+    g_paletteInitialized = false;
+}
+
+const Palette& palette() {
+    if (!g_paletteInitialized) {
+        switch (resolveThemeKind()) {
+            case ThemeKind::Oled:  g_currentPalette = kOled; break;
+            case ThemeKind::Light: g_currentPalette = kLight; break;
+            default:               g_currentPalette = kDark; break;
+        }
+        g_paletteInitialized = true;
+    }
+    return g_currentPalette;
+}
+
+inline NVGcolor cfloat(float r, float g, float b, float a = 1.0f) {
+    return NVGcolor{{{r, g, b, a}}};
+}
 
 NVGcolor rgba(NVGcolor c, float alpha) {
     c.a = std::clamp(alpha, 0.0f, 1.0f);
@@ -113,15 +133,42 @@ NVGcolor rgba(NVGcolor c, float alpha) {
 
 NVGcolor mix(NVGcolor a, NVGcolor b, float t) {
     t = std::clamp(t, 0.0f, 1.0f);
-    return nvgRGBAf(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t,
-                    a.b + (b.b - a.b) * t, a.a + (b.a - a.a) * t);
+    return cfloat(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t,
+                  a.b + (b.b - a.b) * t, a.a + (b.a - a.a) * t);
 }
 
 NVGcolor hex(unsigned int rgb, float alpha) {
-    return nvgRGBA((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF,
-                   (unsigned char)std::clamp(alpha * 255.0f, 0.0f, 255.0f));
+    return c8((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF,
+              std::clamp(alpha, 0.0f, 1.0f));
 }
 
+NVGcolor hex(const std::string& hexStr, float defaultAlpha) {
+    std::string s = hexStr;
+    if (!s.empty() && s[0] == '#') s = s.substr(1);
+    if (s.size() == 3) {
+        std::string exp;
+        for (char c : s) { exp += c; exp += c; }
+        s = exp;
+    }
+    if (s.size() == 6) {
+        try {
+            unsigned int v = std::stoul(s, nullptr, 16);
+            return hex(v, defaultAlpha);
+        } catch (...) {}
+    } else if (s.size() == 8) {
+        try {
+            unsigned long v = std::stoul(s, nullptr, 16);
+            unsigned char r = (v >> 24) & 0xFF;
+            unsigned char g = (v >> 16) & 0xFF;
+            unsigned char b = (v >> 8) & 0xFF;
+            unsigned char a = v & 0xFF;
+            return c8(r, g, b, a / 255.0f);
+        } catch (...) {}
+    }
+    return hex(0xFFFFFF, defaultAlpha);
+}
+
+#ifndef TESTING_WITHOUT_BOREALIS
 void fillRoundRect(NVGcontext* vg, float x, float y, float w, float h,
                    float r, NVGcolor color) {
     if (w <= 0.0f || h <= 0.0f) return;
@@ -265,4 +312,80 @@ float drawPill(NVGcontext* vg, float x, float y, const std::string& label,
     return w;
 }
 
-} // namespace deck_player::ui
+void drawFocusGlow(NVGcontext* vg, float x, float y, float w, float h, float r,
+                   NVGcolor accent, float strength) {
+    if (w <= 0.0f || h <= 0.0f || strength <= 0.0f) return;
+    // 外层环境柔光晕染（Apple TV / OLED 硬件级悬浮质感）
+    fillRoundRect(vg, x - 5.0f, y - 5.0f, w + 10.0f, h + 10.0f, r + 5.0f,
+                  rgba(accent, 0.08f * strength));
+    // 中层柔光光环
+    strokeRoundRect(vg, x - 2.5f, y - 2.5f, w + 5.0f, h + 5.0f, r + 2.5f,
+                    rgba(accent, 0.28f * strength), 4.0f);
+    // 内层高亮定边
+    strokeRoundRect(vg, x, y, w, h, r, accent, 2.2f);
+}
+
+float tabularTextWidth(NVGcontext* vg, float size, const std::string& s) {
+    if (s.empty()) return 0.0f;
+    float max_d = 0.0f;
+    for (char c = '0'; c <= '9'; ++c) {
+        max_d = std::max(max_d, textWidth(vg, size, std::string(1, c)));
+    }
+    const float colon_w = textWidth(vg, size, ":");
+    const float slash_w = textWidth(vg, size, "/");
+    const float dot_w   = textWidth(vg, size, ".");
+    const float space_w = textWidth(vg, size, " ");
+
+    float total = 0.0f;
+    for (size_t i = 0; i < s.size(); ++i) {
+        char c = s[i];
+        if (c >= '0' && c <= '9') total += max_d;
+        else if (c == ':') total += colon_w;
+        else if (c == '/') total += slash_w;
+        else if (c == '.') total += dot_w;
+        else if (c == ' ') total += space_w;
+        else total += textWidth(vg, size, std::string(1, c));
+    }
+    return total;
+}
+
+void tabularText(NVGcontext* vg, float x, float y, float size, NVGcolor color,
+                 int align, const std::string& s) {
+    if (s.empty()) return;
+    const float total_w = tabularTextWidth(vg, size, s);
+    float cur_x = x;
+    if (align & NVG_ALIGN_RIGHT) {
+        cur_x -= total_w;
+    } else if (align & NVG_ALIGN_CENTER) {
+        cur_x -= total_w * 0.5f;
+    }
+
+    const int vert_align = align & (NVG_ALIGN_TOP | NVG_ALIGN_MIDDLE | NVG_ALIGN_BOTTOM | NVG_ALIGN_BASELINE);
+
+    float max_d = 0.0f;
+    for (char c = '0'; c <= '9'; ++c) {
+        max_d = std::max(max_d, textWidth(vg, size, std::string(1, c)));
+    }
+    const float colon_w = textWidth(vg, size, ":");
+    const float slash_w = textWidth(vg, size, "/");
+    const float dot_w   = textWidth(vg, size, ".");
+    const float space_w = textWidth(vg, size, " ");
+
+    for (size_t i = 0; i < s.size(); ++i) {
+        char c = s[i];
+        float slot_w = 0.0f;
+        if (c >= '0' && c <= '9') slot_w = max_d;
+        else if (c == ':') slot_w = colon_w;
+        else if (c == '/') slot_w = slash_w;
+        else if (c == '.') slot_w = dot_w;
+        else if (c == ' ') slot_w = space_w;
+        else slot_w = textWidth(vg, size, std::string(1, c));
+
+        text(vg, cur_x + slot_w * 0.5f, y, size, color,
+             NVG_ALIGN_CENTER | vert_align, std::string(1, c));
+        cur_x += slot_w;
+    }
+}
+#endif
+
+} // namespace muvik::ui

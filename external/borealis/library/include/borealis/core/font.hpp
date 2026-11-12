@@ -40,7 +40,7 @@ typedef std::unordered_map<std::string, int> FontStash;
 class FontLoader
 {
   public:
-    // DeckPlayer 补丁：
+    // Muvik 补丁：
     //  1. 主字体与图标回退到仓库里实际存在的文件名（switch_font / switch_icons），
     //     否则每次启动都先打印两条 warning 才回退，日志噪音大。
     //  2. USER_EMOJI_PATH 上游为空，导致 emoji.ttf 永远不会被加载，

@@ -1,0 +1,16 @@
+{
+  "id": "com.community.demo-js-plugin",
+  "name": "示例 JS 视频源与刮削插件",
+  "version": "1.0.0",
+  "author": "Community",
+  "description": "展示 QuickJS 驱动的流媒体、网盘与刮削三合一能力",
+  "capabilities": ["media_stream", "storage", "scraper"],
+  "settings": [
+    {
+      "key": "api_url",
+      "label": "API 服务地址",
+      "type": "string",
+      "default": "https://api.example.com"
+    }
+  ]
+}

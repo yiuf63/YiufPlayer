@@ -11,7 +11,7 @@
 #include <optional>
 #include <mutex>
 
-namespace deck_player {
+namespace muvik {
 
 // 刮削得到的媒体元数据。
 // 独立于 MediaItem 存储：媒体库缓存只记录文件事实（路径/大小），
@@ -76,4 +76,4 @@ private:
     std::unordered_map<std::string, MediaMetadata> records_;
 };
 
-} // namespace deck_player
+} // namespace muvik

@@ -35,7 +35,7 @@
     <uses-feature android:name="android.software.leanback" android:required="false" />
 
     <application
-        android:label="DeckPlayer"
+        android:label="Muvik"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="true"
         android:hardwareAccelerated="true"
@@ -44,7 +44,7 @@
         android:banner="@mipmap/ic_launcher">
 
         <activity
-            android:name=".DeckPlayerActivity"
+            android:name=".MuvikActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="sensorLandscape"
