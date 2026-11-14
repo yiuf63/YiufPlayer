@@ -112,6 +112,11 @@ private:
     brls::Box* recent_list_ = nullptr;
     std::shared_ptr<brls::Box*> recent_slot_;
 
+    // 设置视图重建入口
+    void renderSettingsContent();
+    brls::Box* settings_list_ = nullptr;
+    std::shared_ptr<brls::Box*> settings_slot_;
+
     // 媒体库整页（工具行 + 列表），createLibraryView 返回的就是它
     brls::Box* library_root_ = nullptr;
     ToolButton* library_view_btn_ = nullptr;

@@ -196,7 +196,7 @@ jobs:
           mkdir -p package/Muvik
           cp build-trimui/muvik package/Muvik/
           cp -r resources package/Muvik/
-          cp steam/grid/capsule.png package/Muvik/icon.png
+          cp resources/icon/icon-300.png package/Muvik/icon.png 2>/dev/null || cp resources/icon/icon-512.png package/Muvik/icon.png
           cat > package/Muvik/config.json << 'EOF'
           {
             "label": "Muvik",

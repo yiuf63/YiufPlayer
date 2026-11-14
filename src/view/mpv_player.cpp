@@ -1642,6 +1642,23 @@ void MPVPlayerView::initMPV() {
     } else {
         mpv_set_option_string(mpv_, "hwdec", "auto-safe");
     }
+
+    // 针对掌机与嵌入式多核 CPU (如 Cortex-A53 / x86) 开启多线程软解
+    const int cpu_threads = std::clamp((int)std::thread::hardware_concurrency(), 2, 8);
+    mpv_set_option_string(mpv_, "vd-lavc-threads", std::to_string(cpu_threads).c_str());
+
+    // 影音同步机制：以音频时钟为主，避免因视频解码丢帧导致音频断续爆音
+    mpv_set_option_string(mpv_, "video-sync", "audio");
+
+    // 软解性能缓冲：在低功耗核心面临高码率突发时允许丢弃非关键帧追赶时钟，保证播放平滑
+    mpv_set_option_string(mpv_, "framedrop", "decoder");
+
+    // 快速解码模式：允许跳过非关键去块效应滤波，大幅减轻低算力芯片解码压力
+    mpv_set_option_string(mpv_, "vd-lavc-fast", "yes");
+
+    // 缓冲区大小上限：32MiB 防止 1GB 内存掌机（如 TrimUI Smart Pro）OOM，兼顾预读平滑
+    mpv_set_option_string(mpv_, "demuxer-max-bytes", "33554432");
+
     mpv_set_option_string(mpv_, "vo", "libmpv");
     mpv_set_option_string(mpv_, "keep-open", "yes");
     mpv_set_option_string(mpv_, "sub-auto", "fuzzy");

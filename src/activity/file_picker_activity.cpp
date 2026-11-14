@@ -203,8 +203,10 @@ void FilePickerActivity::renderRoot() {
                     return;
                 }
                 if (file_mode && fs::is_regular_file(text, ec)) {
-                    if (on_pick_) on_pick_(text);
-                    brls::Application::popActivity();
+                    auto cb = on_pick_;
+                    brls::Application::popActivity(brls::TransitionAnimation::FADE, [cb, text]() {
+                        if (cb) cb(text);
+                    });
                     return;
                 }
                 brls::Application::notify("路径不存在");
@@ -231,8 +233,10 @@ void FilePickerActivity::renderDirectory() {
                                         "将整个 " + currentTitle() + " 加入媒体库");
         std::string here = current_path_;
         pick_here->registerClickAction([this, here](brls::View*) {
-            if (on_pick_) on_pick_(here);
-            brls::Application::popActivity();
+            auto cb = on_pick_;
+            brls::Application::popActivity(brls::TransitionAnimation::FADE, [cb, here]() {
+                if (cb) cb(here);
+            });
             return true;
         });
         list_->addView(pick_here);
@@ -317,8 +321,10 @@ void FilePickerActivity::renderDirectory() {
                                            matched ? "与当前片名匹配" : "字幕文件");
                 if (matched) cell->setBadge("同名");
                 cell->registerClickAction([this, f](brls::View*) {
-                    if (on_pick_) on_pick_(f);
-                    brls::Application::popActivity();
+                    auto cb = on_pick_;
+                    brls::Application::popActivity(brls::TransitionAnimation::FADE, [cb, f]() {
+                        if (cb) cb(f);
+                    });
                     return true;
                 });
                 list_->addView(cell);

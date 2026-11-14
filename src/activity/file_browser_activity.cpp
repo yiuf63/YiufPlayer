@@ -1066,11 +1066,17 @@ void FileBrowserActivity::openFolder(const std::string& path) {
 }
 
 void FileBrowserActivity::renderLibraryContent() {
+    // 与 renderSourcesContent() 保持一致：以 slot 为准同步一次。
+    // DynamicBox 析构置空 slot 发生在 deletionPool drain，
+    // 比 removeView 晚一帧；不同步就会在那一帧里对已删除的 Box 调 clearViews()。
+    if (library_slot_) library_list_ = *library_slot_;
+    if (!library_list_) return;
+
     // 重建会把列表项连同焦点一起销毁。先记下「焦点原本在第几项」，
     // 重建完按索引接回去 —— 记住指针没用，那个对象马上就没了。
     brls::View* prev = brls::Application::getCurrentFocus();
     int prev_idx = -1;
-    if (prev && library_list_) {
+    if (prev) {
         std::vector<brls::View*> before;
         collectFocusables(library_list_, before);
         for (size_t i = 0; i < before.size(); ++i) {
@@ -1082,11 +1088,6 @@ void FileBrowserActivity::renderLibraryContent() {
     }
     const bool focus_was_lost = (prev == nullptr) || brls::Application::isViewDead(prev);
 
-    // 与 renderSourcesContent() 保持一致：以 slot 为准同步一次。
-    // DynamicBox 析构置空 slot 发生在 deletionPool drain，
-    // 比 removeView 晚一帧；不同步就会在那一帧里对已删除的 Box 调 clearViews()。
-    if (library_slot_) library_list_ = *library_slot_;
-    if (!library_list_) return;
     library_list_->clearViews();
 
     auto& lib = MediaLibrary::getInstance();
@@ -1184,17 +1185,19 @@ void FileBrowserActivity::renderLibraryContent() {
         renderLibraryOverview(filtered);
     }
 
-    // 焦点接回
-    std::vector<brls::View*> items;
-    collectFocusables(library_list_, items);
-    if (!items.empty()) {
-        if (prev_idx >= 0) {
-            // 原来在哪一项就还给哪一项（越界时退到最后一项）
-            const int idx = std::min(prev_idx, static_cast<int>(items.size()) - 1);
-            brls::Application::giveFocus(items[idx]);
-        } else if (focus_was_lost || ((prev == library_search_btn_ || prev == library_view_btn_) && library_query_.empty())) {
-            // 列表初次填充或失去焦点时，首个卡片获得焦点；若用户未主动搜索，默认焦点切回卡片
-            brls::Application::giveFocus(items[0]);
+    // 焦点接回：只有当当前 Tab 处于媒体库时才接回焦点，避免切到其他 Tab（如设置、文件）时将焦点错误抢回不可见的媒体库
+    if (!tab_frame_ || tab_frame_->getActiveIndex() == 0) {
+        std::vector<brls::View*> items;
+        collectFocusables(library_list_, items);
+        if (!items.empty()) {
+            if (prev_idx >= 0) {
+                // 原来在哪一项就还给哪一项（越界时退到最后一项）
+                const int idx = std::min(prev_idx, static_cast<int>(items.size()) - 1);
+                brls::Application::giveFocus(items[idx]);
+            } else if (focus_was_lost || ((prev == library_search_btn_ || prev == library_view_btn_) && library_query_.empty())) {
+                // 列表初次填充或失去焦点时，首个卡片获得焦点；若用户未主动搜索，默认焦点切回卡片
+                brls::Application::giveFocus(items[0]);
+            }
         }
     }
 }
@@ -1460,10 +1463,23 @@ brls::View* FileBrowserActivity::createSettingsView() {
     scroller->setMarginRight(CONTENT_SAFE_MARGIN);
     styleScrollingFrame(scroller);
 
-    auto* list = new brls::Box();
-    list->setAxis(brls::Axis::COLUMN);
-    list->setPaddingBottom(28.0f);
+    settings_slot_ = DynamicBox::makeSlot();
+    settings_list_ = new DynamicBox(settings_slot_);
+    *settings_slot_ = settings_list_;
+    settings_list_->setAxis(brls::Axis::COLUMN);
+    settings_list_->setPaddingBottom(28.0f);
+    scroller->setContentView(settings_list_);
 
+    renderSettingsContent();
+    return scroller;
+}
+
+void FileBrowserActivity::renderSettingsContent() {
+    if (settings_slot_) settings_list_ = *settings_slot_;
+    if (!settings_list_) return;
+    settings_list_->clearViews();
+
+    auto* list = settings_list_;
     auto& lib = MediaLibrary::getInstance();
 
     // ── 媒体库 ──
@@ -1656,9 +1672,6 @@ brls::View* FileBrowserActivity::createSettingsView() {
         return true;
     });
     list->addView(exit_cell);
-
-    scroller->setContentView(list);
-    return scroller;
 }
 
 void FileBrowserActivity::showExitDialog() {
@@ -2093,7 +2106,10 @@ void FileBrowserActivity::showDeleteNetworkSourceDialog(const NetworkSource& sou
 }
 
 void FileBrowserActivity::promptAddFolder() {
-    auto picker = FilePickerActivity::folders([this](const std::string& path) {
+    auto alive = std::make_shared<std::atomic<bool>>(true);
+    alive_flags_.push_back(alive);
+    auto picker = FilePickerActivity::folders([this, alive](const std::string& path) {
+        if (!alive->load()) return;
         auto& lib = MediaLibrary::getInstance();
         if (lib.hasFolder(path)) {
             brls::Application::notify(i18n::tr("library.folder_exists", "该文件夹已在媒体库中"));
@@ -2103,6 +2119,7 @@ void FileBrowserActivity::promptAddFolder() {
             lib.save();
             brls::Application::notify(i18n::tr("library.folder_added_scanning", "已添加，正在扫描…"));
             startLibraryScan();
+            refresh();
         } else {
             brls::Application::notify(i18n::tr("library.folder_add_failed", "添加失败：路径不可用或已存在"));
         }
@@ -2413,9 +2430,9 @@ void FileBrowserActivity::showMediaInfo(const std::string& path, const std::stri
 
 void FileBrowserActivity::refresh() {
     renderSourcesContent();
-    // 扫描完成时用户可能正停在媒体库上：不重画的话，新扫出来的片子
-    // 要切一次标签才出现，看起来像扫描没生效。
     renderLibraryContent();
+    renderSettingsContent();
+    renderRecentContent();
 }
 
 } // namespace muvik
