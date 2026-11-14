@@ -147,7 +147,7 @@ namespace brls
         // 更新输入法条位置
         dialog->getLayoutEvent()->subscribe([scale](Point p) {
 #ifndef PS4
-            const SDL_Rect rect = {(int)(p.x* scale), (int)(p.y * scale), 100, 20};
+            SDL_Rect rect = {(int)(p.x* scale), (int)(p.y * scale), 100, 20};
             SDL_SetTextInputRect(&rect);
 #endif
         });

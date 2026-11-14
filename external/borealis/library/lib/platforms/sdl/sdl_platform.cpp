@@ -76,6 +76,8 @@ SDLPlatform::SDLPlatform()
     // override local
     if (Platform::APP_LOCALE_DEFAULT == LOCALE_AUTO)
     {
+#include <SDL2/SDL_version.h>
+#if SDL_VERSION_ATLEAST(2, 0, 14)
         SDL_Locale* locales = SDL_GetPreferredLocales();
         if (locales != nullptr && locales->language != nullptr)
         {
@@ -102,6 +104,7 @@ SDLPlatform::SDLPlatform()
             brls::Logger::info("Set app locale: {}", this->locale);
             SDL_free(locales);
         }
+#endif
     }
 }
 
@@ -119,7 +122,11 @@ void SDLPlatform::restoreWindow()
 
 void SDLPlatform::setWindowAlwaysOnTop(bool enable)
 {
+#if SDL_VERSION_ATLEAST(2, 0, 16)
     SDL_SetWindowAlwaysOnTop(this->videoContext->getSDLWindow(), enable ? SDL_TRUE : SDL_FALSE);
+#else
+    (void)enable;
+#endif
 }
 
 void SDLPlatform::setWindowSize(uint32_t windowWidth, uint32_t windowHeight)
@@ -212,12 +219,15 @@ bool SDLPlatform::processEvent(SDL_Event* event)
         if (manager)
             manager->updateMouseWheel(event->wheel);
     }
+#include <SDL2/SDL_version.h>
+#if SDL_VERSION_ATLEAST(2, 0, 14)
     else if (event->type == SDL_CONTROLLERSENSORUPDATE)
     {
         auto* manager = this->inputManager;
         if (manager)
             manager->updateControllerSensorsUpdate(event->csensor);
     }
+#endif
 #if defined(IOS) || defined(ANDROID)
     else if (event->type == SDL_APP_WILLENTERBACKGROUND)
     {
@@ -229,7 +239,11 @@ bool SDLPlatform::processEvent(SDL_Event* event)
 
     }
 #endif
+#if SDL_VERSION_ATLEAST(2, 0, 18)
     else if (event->type != SDL_POLLSENTINEL)
+#else
+    else
+#endif
     {
         // 其它没有处理的事件
         this->otherEvent.fire(event);

@@ -25,20 +25,12 @@
 #include <chrono>
 #include <thread>
 #include <algorithm>
-#if !defined(ANDROID)
-// GLFW 只在桌面平台可用；Android 走 SDL2，没有这个头文件。
-#include <borealis/platforms/glfw/glfw_video.hpp>
-#endif
 #if defined(ANDROID)
-// Android 上 SDL 的 Java 层通过 nativeRunMain(lib, "SDL_main") 启动程序，
-// 所以必须导出 **SDL_main** 而不是 main。
-// SDL_main.h 里 `#define main SDL_main` 正是做这件事。
-//
-// 不做这一步的症状：Activity 正常创建、窗口也建好了，
-// 但 native 侧的 main() 永远不执行，日志一片空白，
-// Activity 在 1.5 秒后自己 finish（SDLActivity 认为 main 返回了）。
 #include <SDL2/SDL_main.h>
+#elif defined(__SDL2__)
+#include <SDL2/SDL.h>
 #else
+#include <borealis/platforms/glfw/glfw_video.hpp>
 #include <GLFW/glfw3.h>
 #endif
 #include <algorithm>
@@ -109,10 +101,8 @@ int main(int argc, char* argv[]) {
     if (const char* spec = std::getenv("MUVIK_WINDOW")) {
         unsigned int w = 0, h = 0;
         if (std::sscanf(spec, "%ux%u", &w, &h) == 2 && w >= 320 && h >= 200) {
-#if defined(ANDROID)
-            // Android 上没有 GLFW 窗口；尺寸由设备决定，
-            // MUVIK_WINDOW 在此平台无效（保留变量以免脚本报错）。
-            brls::Logger::info("Android：忽略 MUVIK_WINDOW={}（尺寸由设备决定）", spec);
+#if defined(ANDROID) || defined(__SDL2__)
+            brls::Logger::info("忽略 MUVIK_WINDOW={}（尺寸由设备决定）", spec);
 #else
             auto* vc = dynamic_cast<brls::GLFWVideoContext*>(
                 brls::Application::getPlatform()->getVideoContext());

@@ -162,10 +162,74 @@ jobs:
           path: muvik-android-arm64.apk
           retention-days: 7
 
-  # ── 4. 发布 GitHub Release ──
+  # ── 4. TrimUI Smart Pro 构建（Linux aarch64 / SDL2）──
+  build-trimui:
+    name: 构建 TrimUI Smart Pro (tg5040 aarch64)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: 准备 QEMU 与 Docker 环境
+        uses: docker/setup-qemu-action@v3
+      - name: 编译 aarch64 二进制
+        run: |
+          docker run --rm --platform linux/arm64 -v "$PWD:/src" -w /src ubuntu:20.04 bash -c '
+            set -e
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update && apt-get install -y --no-install-recommends \
+              build-essential cmake ninja-build pkg-config git \
+              python3 python3-pip \
+              libsdl2-dev libgles2-mesa-dev libegl1-mesa-dev \
+              libmpv-dev libavutil-dev libavformat-dev libavcodec-dev libswscale-dev \
+              libcurl4-openssl-dev libfontconfig1-dev libfreetype6-dev
+            pip3 install cmake
+            cmake -B build-trimui -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DPLATFORM_DESKTOP=ON \
+              -DUSE_SDL2=ON \
+              -DUSE_SYSTEM_SDL2=ON \
+              -DMUVIK_USE_GLES3=ON \
+              -DMUVIK_USE_EGL=ON
+            cmake --build build-trimui -j$(nproc)
+          '
+      - name: 打包 TrimUI 安装包
+        run: |
+          mkdir -p package/Muvik
+          cp build-trimui/muvik package/Muvik/
+          cp -r resources package/Muvik/
+          cp steam/grid/capsule.png package/Muvik/icon.png
+          cat > package/Muvik/config.json << 'EOF'
+          {
+            "label": "Muvik",
+            "label.ch.lang": "Muvik 播放器",
+            "icon": "icon.png",
+            "launch": "launch.sh",
+            "description": "手柄优先的媒体播放器 (libmpv + Borealis)"
+          }
+          EOF
+          cat > package/Muvik/launch.sh << 'EOF'
+          #!/bin/sh
+          BIN_PATH=$(dirname "$0")
+          cd "$BIN_PATH"
+          export PATH="/mnt/SDCARD/System/bin:/usr/trimui/bin:$PATH"
+          export LD_LIBRARY_PATH="$BIN_PATH/lib:/usr/lib64:/lib64:/mnt/SDCARD/System/lib:/usr/trimui/lib:$LD_LIBRARY_PATH"
+          export XDG_CONFIG_HOME="$BIN_PATH/config"
+          export MUVIK_RESOURCES="$BIN_PATH/resources"
+          mkdir -p "$BIN_PATH/config"
+          ./muvik >> log.txt 2>&1
+          sync
+          EOF
+          chmod +x package/Muvik/launch.sh package/Muvik/muvik
+          cd package && tar -czf ../muvik-tg5040-aarch64.tar.gz Muvik
+      - name: 上传 TrimUI 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-trimui
+          path: muvik-tg5040-aarch64.tar.gz
+
+  # ── 5. 发布 GitHub Release ──
   publish-release:
     name: 发布 GitHub Release
-    needs: [build-linux, build-macos, build-android]
+    needs: [build-linux, build-macos, build-android, build-trimui]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -181,6 +245,7 @@ jobs:
           cp artifacts/release-linux/muvik-linux-x86_64.tar.gz dist/
           cp artifacts/release-macos/muvik-macos-arm64.zip dist/
           cp artifacts/release-android/muvik-android-arm64.apk dist/
+          cp artifacts/release-trimui/muvik-tg5040-aarch64.tar.gz dist/
           echo "=== 待发布文件列表 ==="
           ls -lh dist/
 

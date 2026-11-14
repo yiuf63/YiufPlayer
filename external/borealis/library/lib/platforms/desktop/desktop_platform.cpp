@@ -25,7 +25,10 @@
 #include <sstream>
 
 #ifdef __SDL2__
+#include <SDL2/SDL_version.h>
+#if SDL_VERSION_ATLEAST(2, 0, 14)
 #include <SDL2/SDL_misc.h>
+#endif
 #endif
 
 #ifdef _WIN32
@@ -950,7 +953,12 @@ void DesktopPlatform::openBrowser(std::string url)
 {
     brls::Logger::debug("open url: {}", url);
 #if __SDL2__
+#if SDL_VERSION_ATLEAST(2, 0, 14)
     SDL_OpenURL(url.c_str());
+#else
+    std::string cmd = "xdg-open \"" + url + "\"";
+    system(cmd.c_str());
+#endif
 #elif __APPLE__
     std::string cmd = "open \"" + url + "\"";
     system(cmd.c_str());

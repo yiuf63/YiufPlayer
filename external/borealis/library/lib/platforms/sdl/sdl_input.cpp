@@ -642,6 +642,8 @@ void SDLInputManager::updateMouseMotion(SDL_MouseMotionEvent event)
 
 void SDLInputManager::updateMouseWheel(SDL_MouseWheelEvent event)
 {
+#include <SDL2/SDL_version.h>
+#if SDL_VERSION_ATLEAST(2, 0, 18)
 #if defined(_WIN32) || defined(__linux__)
     this->scrollOffset.x += event.preciseX * 30;
     this->scrollOffset.y += event.preciseY * 30;
@@ -649,10 +651,20 @@ void SDLInputManager::updateMouseWheel(SDL_MouseWheelEvent event)
     this->scrollOffset.x += event.preciseX * 10;
     this->scrollOffset.y += event.preciseY * 10;
 #endif
+#else
+#if defined(_WIN32) || defined(__linux__)
+    this->scrollOffset.x += event.x * 30;
+    this->scrollOffset.y += event.y * 30;
+#else
+    this->scrollOffset.x += event.x * 10;
+    this->scrollOffset.y += event.y * 10;
+#endif
+#endif
 
     this->getMouseScrollOffsetChanged()->fire(Point(event.x, event.y));
 }
 
+#if SDL_VERSION_ATLEAST(2, 0, 14)
 void SDLInputManager::updateControllerSensorsUpdate(SDL_ControllerSensorEvent event)
 {
     auto id = event.which;
@@ -672,6 +684,7 @@ void SDLInputManager::updateControllerSensorsUpdate(SDL_ControllerSensorEvent ev
             break;
     }
 }
+#endif
 
 void SDLInputManager::updateKeyboardState(SDL_KeyboardEvent event)
 {

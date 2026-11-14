@@ -11,7 +11,11 @@
 #include <unistd.h>
 
 #if !defined(TESTING_WITHOUT_BOREALIS)
+#if defined(__SDL2__) || defined(ANDROID)
+#include <SDL2/SDL.h>
+#else
 #include <GLFW/glfw3.h>
+#endif
 #include <nanovg.h>
 #include <borealis/core/application.hpp>
 #include <borealis/core/assets.hpp>
@@ -105,6 +109,41 @@ KeymapStyle Keymap::resolveActiveStyle() {
     }
 
 #if !defined(TESTING_WITHOUT_BOREALIS)
+#if defined(__SDL2__) || defined(ANDROID)
+    int num_joysticks = SDL_NumJoysticks();
+    for (int jid = 0; jid < num_joysticks && jid < 16; ++jid) {
+        const char* name = SDL_JoystickNameForIndex(jid);
+        if (name) {
+            std::string s(name);
+            std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });
+
+            if (s.find("playstation") != std::string::npos ||
+                s.find("dualshock") != std::string::npos ||
+                s.find("dualsense") != std::string::npos ||
+                s.find("ps4") != std::string::npos ||
+                s.find("ps5") != std::string::npos ||
+                s.find("sony") != std::string::npos) {
+                return KeymapStyle::PlayStation;
+            }
+
+            if (s.find("switch") != std::string::npos ||
+                s.find("joy-con") != std::string::npos ||
+                s.find("pro controller") != std::string::npos ||
+                s.find("nintendo") != std::string::npos ||
+                s.find("trimui") != std::string::npos) {
+                return KeymapStyle::Switch;
+            }
+
+            if (s.find("xbox") != std::string::npos ||
+                s.find("x-box") != std::string::npos ||
+                s.find("microsoft") != std::string::npos ||
+                s.find("steam") != std::string::npos ||
+                s.find("xinput") != std::string::npos) {
+                return KeymapStyle::Xbox;
+            }
+        }
+    }
+#else
     // 自动模式：遍历已连接的手柄，探测设备名与布局
     for (int jid = 0; jid <= 15; ++jid) {
         if (glfwJoystickPresent(jid)) {
@@ -140,6 +179,7 @@ KeymapStyle Keymap::resolveActiveStyle() {
             }
         }
     }
+#endif
 #endif
 
     // 如果用户开启了 Switch 确认键反转，底栏也优先匹配 Switch 风格

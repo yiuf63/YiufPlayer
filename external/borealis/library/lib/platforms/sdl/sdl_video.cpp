@@ -235,7 +235,9 @@ SDLVideoContext::SDLVideoContext(std::string windowTitle, uint32_t windowWidth, 
     SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
 #endif
 #if defined(USE_EGL)
+#ifdef SDL_HINT_VIDEO_X11_FORCE_EGL
     SDL_SetHint(SDL_HINT_VIDEO_X11_FORCE_EGL, "1");
+#endif
 #endif
     windowFlags |= SDL_WINDOW_OPENGL;
 #endif
@@ -247,7 +249,9 @@ SDLVideoContext::SDLVideoContext(std::string windowTitle, uint32_t windowWidth, 
         windowFlags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
 #endif
     }
+#ifdef SDL_HINT_IME_SHOW_UI
     SDL_SetHint(SDL_HINT_IME_SHOW_UI, "1");
+#endif
 
     if (std::isnan(windowXPos) || std::isnan(windowYPos))
     {

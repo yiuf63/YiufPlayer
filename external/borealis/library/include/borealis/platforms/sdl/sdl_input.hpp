@@ -37,7 +37,10 @@ class SDLInputManager : public InputManager
 
     void updateMouseWheel(SDL_MouseWheelEvent event);
 
+#include <SDL2/SDL_version.h>
+#if SDL_VERSION_ATLEAST(2, 0, 14)
     void updateControllerSensorsUpdate(SDL_ControllerSensorEvent event);
+#endif
 
     void updateKeyboardState(SDL_KeyboardEvent event);
 

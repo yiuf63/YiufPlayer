@@ -164,8 +164,19 @@ elseif (ANDROID)
     )
     message(STATUS "平台：Android（GLESv3 + EGL）")
 else ()
-    pkg_check_modules(GL REQUIRED gl)
-    set(PLATFORM_LIBS ${GL_LIBRARIES})
+    if (MUVIK_USE_GLES2 OR MUVIK_USE_GLES3)
+        pkg_check_modules(GLES REQUIRED glesv2)
+        if (MUVIK_USE_EGL)
+            pkg_check_modules(EGL REQUIRED egl)
+            set(PLATFORM_LIBS ${GLES_LIBRARIES} ${EGL_LIBRARIES})
+        else ()
+            set(PLATFORM_LIBS ${GLES_LIBRARIES})
+        endif ()
+        message(STATUS "平台：Linux GLES (${PLATFORM_LIBS})")
+    else ()
+        pkg_check_modules(GL REQUIRED gl)
+        set(PLATFORM_LIBS ${GL_LIBRARIES})
+    endif ()
 endif ()
 
 # Borealis 路径设置（优先使用项目内置的 external/borealis，保证构建可复现）
@@ -332,6 +343,12 @@ target_link_libraries(muvik PRIVATE
     $<$<NOT:$<PLATFORM_ID:Android>>:pthread>
     $<$<NOT:$<PLATFORM_ID:Android>>:dl>
 )
+
+if (USE_SDL2 AND NOT ANDROID)
+    find_package(SDL2 REQUIRED)
+    target_include_directories(muvik PRIVATE ${SDL2_INCLUDE_DIRS})
+    target_link_libraries(muvik PRIVATE ${SDL2_LIBRARIES})
+endif ()
 
 # 抽帧（可选）：找到 FFmpeg 才链接，否则 thumbnail_cache 里整段实现被编译掉
 if (MUVIK_FFMPEG_FOUND)

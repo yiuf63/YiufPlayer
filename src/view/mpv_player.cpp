@@ -31,6 +31,9 @@
 #include <EGL/egl.h>
 #include <GLES3/gl3.h>
 #include <dlfcn.h>
+#elif defined(__SDL2__)
+#include <SDL2/SDL.h>
+#include <dlfcn.h>
 #else
 #include <GLFW/glfw3.h>
 #endif
@@ -144,6 +147,8 @@ static void* get_proc_address_mpv(void* fn_ctx, const char* name) {
     static void* libgles = dlopen("libGLESv3.so", RTLD_LAZY | RTLD_LOCAL);
     if (!libgles) libgles = dlopen("libGLESv2.so", RTLD_LAZY | RTLD_LOCAL);
     return libgles ? dlsym(libgles, name) : nullptr;
+#elif defined(__SDL2__)
+    return SDL_GL_GetProcAddress(name);
 #else
     glfwGetCurrentContext();
     return (void*)glfwGetProcAddress(name);
