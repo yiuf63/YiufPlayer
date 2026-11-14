@@ -33,6 +33,9 @@
 #include "view/tool_button.hpp"
 #include "view/view_sheet.hpp"
 #include "model/library_view_options.hpp"
+#include "model/network_source.hpp"
+#include "activity/network_browser_activity.hpp"
+#include "utils/webdav_client.hpp"
 #include "utils/thumbnail_cache.hpp"
 #include "utils/display_mode.hpp"
 #include "utils/input_settings.hpp"
@@ -582,7 +585,39 @@ void FileBrowserActivity::renderSourcesContent() {
             list->addView(cell);
         }
 
-        // 2. 网络存储与扩展 MOD 分区
+        // 2. 网络存储（NAS / WebDAV）
+        list->addView(new SectionHeader(i18n::tr("files.network_storage", "网络存储 (NAS / WebDAV)")));
+
+        auto net_sources = NetworkSourceStore::getInstance().getSources();
+        for (const auto& nsrc : net_sources) {
+            std::string sub = nsrc.url;
+            if (!nsrc.username.empty()) sub += " (" + nsrc.username + ")";
+            auto* cell = new MediaCell(ui::Icon::Drive, nsrc.name, sub);
+            cell->setChevron(true);
+            NetworkSource src_copy = nsrc;
+            cell->registerClickAction([src_copy](brls::View*) {
+                brls::Application::pushActivity(new NetworkBrowserActivity(src_copy));
+                return true;
+            });
+            cell->registerAction("管理/删除", brls::ControllerButton::BUTTON_X, [this, src_copy](brls::View*) {
+                showDeleteNetworkSourceDialog(src_copy);
+                return true;
+            });
+            list->addView(cell);
+        }
+
+        // 添加网络存储入口
+        auto* add_net = new MediaCell(
+            ui::Icon::Plus, i18n::tr("files.add_network_source", "添加网络存储 (WebDAV / NAS)"),
+            i18n::tr("files.add_network_source_desc", "连接群晖、威联通、AList 聚合盘或自建 WebDAV 服务器"));
+        add_net->setChevron(true);
+        add_net->registerClickAction([this](brls::View*) {
+            showAddNetworkSourceDialog();
+            return true;
+        });
+        list->addView(add_net);
+
+        // 3. 网络存储与扩展 MOD 分区
         list->addView(new SectionHeader(i18n::tr("files.plugin_sources", "插件视频源")));
 
         auto plugins = PluginManager::getInstance().getPlugins();
@@ -1898,6 +1933,142 @@ void FileBrowserActivity::showKeymapDialog(MediaCell* keymap_row) {
             brls::Application::notify(Keymap::styleToShortString(s));
         }
     );
+}
+
+void FileBrowserActivity::showAddNetworkSourceDialog() {
+    std::vector<SelectionOption> presets = {
+        {"alist", "AList 聚合网盘", "http://192.168.1.xxx:5244/dav (聚合挂载 115/夸克/本地存储)", ui::Icon::Drive, false, "推荐"},
+        {"synology", "群晖 Synology WebDAV", "http://192.168.1.xxx:5005 (DSM WebDAV Server 套件)", ui::Icon::Drive, false, ""},
+        {"qnap", "威联通 QNAP WebDAV", "http://192.168.1.xxx:5000/WebDAV (QTS WebDAV 共享)", ui::Icon::Drive, false, ""},
+        {"custom", "自定义 WebDAV 服务器", "输入任意标准的 HTTP / HTTPS WebDAV 地址", ui::Icon::Sliders, false, ""}
+    };
+
+    showSelectionDialog(
+        "选择网络存储类型 / 预设",
+        presets,
+        [this](const std::string& preset_id) {
+            auto source = std::make_shared<NetworkSource>();
+            auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+            source->id = "net_" + std::to_string(now_ms);
+            source->type = NetworkSourceType::WebDAV;
+
+            if (preset_id == "alist") {
+                source->name = "AList 聚合网盘";
+                source->url = "http://192.168.1.100:5244/dav";
+            } else if (preset_id == "synology") {
+                source->name = "群晖 NAS";
+                source->url = "http://192.168.1.100:5005";
+            } else if (preset_id == "qnap") {
+                source->name = "威联通 NAS";
+                source->url = "http://192.168.1.100:5000/WebDAV";
+            } else {
+                source->name = "我的 WebDAV";
+                source->url = "http://192.168.1.100:8080";
+            }
+
+            auto* box = new brls::Box();
+            box->setAxis(brls::Axis::COLUMN);
+            box->setWidth(640);
+            box->setPaddingTop(16.0f);
+            box->setPaddingBottom(16.0f);
+            box->setPaddingLeft(24.0f);
+            box->setPaddingRight(24.0f);
+
+            box->addView(new SectionHeader("配置网络存储 (" + source->name + ")"));
+
+            auto* name_row = new MediaCell(ui::Icon::Sliders, "显示名称", source->name);
+            name_row->setChevron(true);
+            name_row->registerClickAction([source, name_row](brls::View*) {
+                brls::Application::getImeManager()->openForText([source, name_row](std::string text) {
+                    if (!text.empty()) {
+                        source->name = text;
+                        name_row->setSubtitle(text);
+                    }
+                }, "请输入网络存储显示名称", "例如：客厅 NAS / 追番网盘", 64, source->name);
+                return true;
+            });
+            box->addView(name_row);
+
+            auto* url_row = new MediaCell(ui::Icon::Sliders, "服务器地址 (URL)", source->url);
+            url_row->setChevron(true);
+            url_row->registerClickAction([source, url_row](brls::View*) {
+                brls::Application::getImeManager()->openForText([source, url_row](std::string text) {
+                    if (!text.empty()) {
+                        source->url = text;
+                        url_row->setSubtitle(text);
+                    }
+                }, "请输入 WebDAV 完整地址", "支持 http:// 或 https://，含端口与路径", 256, source->url);
+                return true;
+            });
+            box->addView(url_row);
+
+            auto* user_row = new MediaCell(ui::Icon::Sliders, "账号 (可留空)", source->username.empty() ? "(未填写)" : source->username);
+            user_row->setChevron(true);
+            user_row->registerClickAction([source, user_row](brls::View*) {
+                brls::Application::getImeManager()->openForText([source, user_row](std::string text) {
+                    source->username = text;
+                    user_row->setSubtitle(text.empty() ? "(未填写)" : text);
+                }, "请输入用户名", "若无需账号认证可留空", 64, source->username);
+                return true;
+            });
+            box->addView(user_row);
+
+            auto* pass_row = new MediaCell(ui::Icon::Lock, "密码 (可留空)", source->password.empty() ? "(未填写)" : "••••••••");
+            pass_row->setChevron(true);
+            pass_row->registerClickAction([source, pass_row](brls::View*) {
+                brls::Application::getImeManager()->openForText([source, pass_row](std::string text) {
+                    source->password = text;
+                    pass_row->setSubtitle(text.empty() ? "(未填写)" : "••••••••");
+                }, "请输入密码", "若无需密码可留空", 64, source->password);
+                return true;
+            });
+            box->addView(pass_row);
+
+            auto* dialog = new brls::Dialog(box);
+            dialog->setCancelable(true);
+
+            dialog->addButton("取消", []() {});
+            dialog->addButton("测试并保存", [this, source, dialog]() {
+                brls::Application::notify("正在测试连接…");
+                std::thread([this, source, dialog]() {
+                    std::string err;
+                    bool ok = WebDAVClient::testConnection(*source, err);
+                    brls::sync([this, source, dialog, ok, err]() {
+                        if (ok) {
+                            NetworkSourceStore::getInstance().addSource(*source);
+                            brls::Application::notify("网络存储添加成功：" + source->name);
+                            dialog->close();
+                            refresh();
+                        } else {
+                            auto* err_dlg = new brls::Dialog("连接测试失败\n\n" + err + "\n\n是否仍然强制保存？");
+                            err_dlg->addButton("取消", []() {});
+                            err_dlg->addButton("仍然保存", [this, source, dialog]() {
+                                NetworkSourceStore::getInstance().addSource(*source);
+                                brls::Application::notify("已保存网络存储：" + source->name);
+                                dialog->close();
+                                refresh();
+                            });
+                            err_dlg->open();
+                        }
+                    });
+                }).detach();
+            });
+
+            dialog->open();
+        }
+    );
+}
+
+void FileBrowserActivity::showDeleteNetworkSourceDialog(const NetworkSource& source) {
+    auto* dlg = new brls::Dialog("网络存储操作\n\n名称：" + source.name + "\n地址：" + source.url);
+    dlg->addButton("取消", []() {});
+    dlg->addButton("删除该源", [this, source]() {
+        NetworkSourceStore::getInstance().removeSource(source.id);
+        brls::Application::notify("已移除网络存储：" + source.name);
+        refresh();
+    });
+    dlg->open();
 }
 
 void FileBrowserActivity::promptAddFolder() {

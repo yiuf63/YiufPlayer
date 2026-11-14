@@ -70,6 +70,8 @@ private:
     void showThemeDialog(MediaCell* theme_row);
     void showFpsLimitDialog(MediaCell* fps_row);
     void showKeymapDialog(MediaCell* keymap_row);
+    void showAddNetworkSourceDialog();
+    void showDeleteNetworkSourceDialog(const struct NetworkSource& source);
 
     // 条目卡片。三处共用同一套外观，差别只在传入的播放列表。
     MediaCell* makeVideoCell(const MediaItem& item, std::vector<MediaItem> playlist,

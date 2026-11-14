@@ -66,6 +66,7 @@ TESTS=(
     "workshop_dlc|tests/unit/test_workshop_dlc.cpp|$PLUGIN_SRCS|$PLUGIN_FLAGS"
     "scraper|tests/unit/test_scraper.cpp|$PLUGIN_SRCS|$PLUGIN_FLAGS"
     "js_plugin|tests/unit/test_js_plugin.cpp|$PLUGIN_SRCS|$PLUGIN_FLAGS"
+    "network_source|tests/unit/test_network_source.cpp|src/model/network_source.cpp src/utils/webdav_client.cpp src/utils/crypto_utils.cpp src/utils/app_paths.cpp|$BOREALIS_INC $(pkg-config --libs libcurl) -DTESTING_WITHOUT_BOREALIS"
 )
 
 PASS=0
@@ -88,9 +89,9 @@ for entry in "${TESTS[@]}"; do
     fi
 
     echo "$out" >/dev/null
-    # scraper 测试若存在本地 WebDAV 服务则自动启用其浏览用例
+    # scraper 与 network_source 测试若存在本地 WebDAV 服务则自动启用其浏览用例
     export MUVIK_TEST_DAV=""
-    if [ "$name" = "scraper" ] && [ -f "$ROOT/tests/tools/dav_test_server.py" ]; then
+    if ([ "$name" = "scraper" ] || [ "$name" = "network_source" ]) && [ -f "$ROOT/tests/tools/dav_test_server.py" ]; then
         DAVROOT=$(mktemp -d)
         mkdir -p "$DAVROOT/电影" && : > "$DAVROOT/电影/sample.mp4"
         python3 "$ROOT/tests/tools/dav_test_server.py" "$DAVROOT" 18099 u p >/dev/null 2>&1 &

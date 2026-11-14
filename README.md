@@ -55,6 +55,11 @@ On gaming handhelds like **Steam Deck**, **ROG Ally**, **Legion Go**, or on livi
 * Uses `vid=no` with 0% GPU / GL overhead, automatically suppresses macOS App Nap and supports standby playback.
 * Persistent "Now Playing" mini-bar on the main interface.
 
+### 🌐 Native NAS & WebDAV Streaming (Zero Setup Required)
+* **Out-of-the-box Network Storage**: Connect directly to Synology DSM, QNAP QTS, Nextcloud, or AList right from the UI without compiling external plugins.
+* **AList Cloud Aggregator**: Stream movies directly from 115, Quark, Baidu Netdisk, Aliyun Drive, Google Drive, or OneDrive via AList's WebDAV endpoint (`:5244/dav`).
+* **Hardware-Accelerated Streaming**: Streams directly via `libmpv` with instant seeking, subtitle loading, and resume history.
+
 ### 🧩 QuickJS Sandboxed Plugins (Scrapers & Video Sources)
 * Supports custom plugins written in plain JavaScript running inside an isolated 16MB QuickJS sandbox.
 * **Scraper Plugins**: Search and fetch metadata, plot summaries, ratings, and posters (e.g., TMDB, Bangumi, Douban).
