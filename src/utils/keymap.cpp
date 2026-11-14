@@ -108,6 +108,16 @@ KeymapStyle Keymap::resolveActiveStyle() {
         return pref;
     }
 
+    // 1. TrimUI 掌机硬件：机身物理印刷为 Switch 布局，即使驱动层模拟了 Xbox 360 手柄也优先按 Switch 显示
+    if (AppPaths::isTrimUI()) {
+        return KeymapStyle::Switch;
+    }
+
+    // 2. 如果开启了 Switch 确认键反转，底栏也优先匹配 Switch 风格
+    if (InputSettings::isSwapAB()) {
+        return KeymapStyle::Switch;
+    }
+
 #if !defined(TESTING_WITHOUT_BOREALIS)
 #if defined(__SDL2__) || defined(ANDROID)
     int num_joysticks = SDL_NumJoysticks();

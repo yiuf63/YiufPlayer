@@ -87,4 +87,14 @@ bool AppPaths::ensureDir(const std::string& dir) {
     return fs::create_directories(dir, ec) && !ec;
 }
 
+bool AppPaths::isTrimUI() {
+    if (const char* env = std::getenv("MUVIK_FORCE_TRIMUI")) {
+        return *env && *env != '0';
+    }
+    std::error_code ec;
+    return fs::exists("/etc/trimui_device.txt", ec) ||
+           fs::exists("/usr/trimui", ec) ||
+           fs::exists("/mnt/SDCARD/trimui", ec);
+}
+
 } // namespace muvik

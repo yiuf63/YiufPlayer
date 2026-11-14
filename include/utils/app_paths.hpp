@@ -28,6 +28,9 @@ public:
 
     // 确保某个目录存在，返回是否成功
     static bool ensureDir(const std::string& dir);
+
+    // 检查当前设备是否为 TrimUI 系列掌机 (TrimUI Smart Pro / Brick / Smart)
+    static bool isTrimUI();
 };
 
 } // namespace muvik

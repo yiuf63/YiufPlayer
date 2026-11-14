@@ -52,5 +52,13 @@ int main() {
     CHECK_TRUE(InputSettings::resolveSwapAB(), "环境变量 MUVIK_SWAP_AB=1 优先于配置文件");
     unsetenv("MUVIK_SWAP_AB");
 
+    TEST_BEGIN("InputSettings / TrimUI 硬件自动识别为 Switch 布局");
+    unsetenv("MUVIK_SWAP_AB");
+    std::remove(AppPaths::configFile("swap_ab").c_str());
+    setenv("MUVIK_FORCE_TRIMUI", "1", 1);
+    CHECK_TRUE(InputSettings::resolveSwapAB(), "MUVIK_FORCE_TRIMUI=1 时默认自动开启 Switch 布局");
+    unsetenv("MUVIK_FORCE_TRIMUI");
+    CHECK_FALSE(InputSettings::resolveSwapAB(), "非 TrimUI 环境默认 Xbox 布局");
+
     TEST_END();
 }

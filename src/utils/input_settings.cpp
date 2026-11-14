@@ -64,7 +64,14 @@ bool InputSettings::resolveSwapAB() {
         }
     }
 
-    // 3. 默认不反转（Steam Deck / Xbox 标准布局）
+    // 3. 硬件平台探测：TrimUI 系列掌机物理丝印为 Switch 布局（右键 A 确认 / 下键 B 返回）
+    // 系统的 trimui_inputd 驱动模拟了 Xbox 360 手柄导致逻辑反转，故默认自动开启 Switch 键位反转
+    if (AppPaths::isTrimUI()) {
+        logInfo("InputSettings: 检测到 TrimUI 掌机硬件，默认启用 Switch 按键布局（右键 A 确认 / 下键 B 返回）");
+        return true;
+    }
+
+    // 4. 默认不反转（Steam Deck / Xbox 标准布局）
     return false;
 }
 

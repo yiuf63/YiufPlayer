@@ -81,6 +81,14 @@ static std::vector<std::pair<std::string, std::string>> detectLocalMediaSources(
         }
     };
 
+    // 0. 开源掌机与嵌入式 Linux MicroSD 卡媒体目录（TrimUI / 掌机设备优先）
+    checkAndAdd("/mnt/SDCARD/Videos", i18n::tr("files.sdcard_videos", "MicroSD 视频目录 (/mnt/SDCARD/Videos)"));
+    checkAndAdd("/mnt/SDCARD/music", i18n::tr("files.sdcard_music", "MicroSD 音乐目录 (/mnt/SDCARD/music)"));
+    checkAndAdd("/mnt/SDCARD/Music", i18n::tr("files.sdcard_music", "MicroSD 音乐目录 (/mnt/SDCARD/Music)"));
+    if (seen.find("/mnt/SDCARD/Videos") == seen.end()) {
+        checkAndAdd("/mnt/SDCARD", i18n::tr("files.sdcard_root", "MicroSD 存储卡 (/mnt/SDCARD)"));
+    }
+
     // 1. Steam Deck MicroSD 存储卡
     checkAndAdd("/run/media/mmcblk0p1", i18n::tr("files.steam_deck_microsd", "Steam Deck 存储卡 (MicroSD)"));
 
@@ -1250,10 +1258,16 @@ void FileBrowserActivity::renderLibraryOverview(const std::vector<MediaLibrary::
                                          static_cast<int>(g.audios.size()));
         card->setWidthPercentage(25.0f);
         const std::string fpath = g.folder.path;
+        const std::string fname = g.folder.display_name;
         card->registerClickAction([this, fpath](brls::View*) {
             openFolder(fpath);
             return true;
         });
+        card->registerAction(i18n::tr("library.folder_options", "文件夹选项"), brls::ControllerButton::BUTTON_X,
+            [this, fpath, fname](brls::View*) {
+                showFolderOptions(fpath, fname);
+                return true;
+            });
         row->addView(card);
         col = (col + 1) % 4;
     }
@@ -1315,6 +1329,13 @@ void FileBrowserActivity::renderLibraryFolder(const std::vector<MediaLibrary::Gr
         openFolder(std::string());
         return true;
     });
+    const std::string cur_fpath = g.folder.path;
+    const std::string cur_fname = g.folder.display_name;
+    back->registerAction(i18n::tr("library.folder_options", "文件夹选项"), brls::ControllerButton::BUTTON_X,
+        [this, cur_fpath, cur_fname](brls::View*) {
+            showFolderOptions(cur_fpath, cur_fname);
+            return true;
+        });
     library_list_->addView(back);
 
     if (!g.videos.empty()) {
@@ -1554,15 +1575,15 @@ brls::View* FileBrowserActivity::createSettingsView() {
         const bool swap = InputSettings::isSwapAB();
         auto* swap_row = new MediaCell(
             ui::Icon::Sliders,
-            i18n::tr("settings.swap_ab", "手柄确认键") + "：" + (swap ? i18n::tr("settings.layout_switch", "Switch 布局（B 确认 / A 返回）") : i18n::tr("settings.layout_xbox", "Xbox 布局（A 确认 / B 返回）")),
+            i18n::tr("settings.swap_ab", "手柄确认键") + "：" + (swap ? i18n::tr("settings.layout_switch", "Switch 布局（右键确认 / 下键返回）") : i18n::tr("settings.layout_xbox", "Xbox 布局（下键确认 / 右键返回）")),
             i18n::tr("settings.swap_ab_desc", "Nintendo Switch 风格或 Xbox/Steam 风格按键布局，即时生效"));
         swap_row->registerClickAction([swap_row](brls::View*) {
             InputSettings::toggleSwapAB();
             const bool now_swap = InputSettings::isSwapAB();
             swap_row->setTitle(i18n::tr("settings.swap_ab", "手柄确认键") + "：" +
-                               (now_swap ? i18n::tr("settings.layout_switch", "Switch 布局（B 确认 / A 返回）") : i18n::tr("settings.layout_xbox", "Xbox 布局（A 确认 / B 返回）")));
+                               (now_swap ? i18n::tr("settings.layout_switch", "Switch 布局（右键确认 / 下键返回）") : i18n::tr("settings.layout_xbox", "Xbox 布局（下键确认 / 右键返回）")));
             brls::Application::notify(i18n::tr("settings.swap_ab", "手柄确认键") + "：" +
-                                      (now_swap ? "Switch (B)" : "Xbox (A)"));
+                                      (now_swap ? "Switch (右键确认)" : "Xbox (下键确认)"));
             return true;
         });
         list->addView(swap_row);
@@ -2123,10 +2144,16 @@ void FileBrowserActivity::startLibraryScan() {
 void FileBrowserActivity::showFolderOptions(const std::string& path, const std::string& name) {
     brls::Dialog* dialog = new brls::Dialog(i18n::tr("library.folder_options_title", "媒体文件夹：") + name + "\n" + path);
     dialog->addButton(i18n::tr("common.cancel", "取消"), []() {});
-    dialog->addButton(i18n::tr("library.remove_folder", "移除该文件夹"), [path]() {
+    auto alive = std::make_shared<std::atomic<bool>>(true);
+    alive_flags_.push_back(alive);
+    dialog->addButton(i18n::tr("library.remove_folder", "移除该文件夹"), [this, alive, path]() {
         if (MediaLibrary::getInstance().removeFolder(path)) {
             MediaLibrary::getInstance().save();
-            brls::Application::notify(i18n::tr("library.folder_removed", "已移除"));
+            brls::Application::notify(i18n::tr("library.folder_removed", "已移除该文件夹"));
+            if (alive->load()) {
+                if (open_folder_ == path) open_folder_.clear();
+                this->refresh();
+            }
         }
     });
     dialog->open();

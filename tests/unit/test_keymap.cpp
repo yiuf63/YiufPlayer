@@ -61,5 +61,12 @@ int main() {
     CHECK_FALSE(Keymap::styleToString(KeymapStyle::Xbox).empty(), "styleToString 非空");
     CHECK_FALSE(Keymap::styleToShortString(KeymapStyle::PlayStation).empty(), "styleToShortString 非空");
 
+    TEST_BEGIN("Keymap / TrimUI 硬件自动识别 Switch 字体风格");
+    Keymap::setStyle(KeymapStyle::Auto, false);
+    unsetenv("MUVIK_KEYMAP");
+    setenv("MUVIK_FORCE_TRIMUI", "1", 1);
+    CHECK_EQ((int)Keymap::resolveActiveStyle(), (int)KeymapStyle::Switch, "MUVIK_FORCE_TRIMUI=1 时自动解析为 Switch 风格");
+    unsetenv("MUVIK_FORCE_TRIMUI");
+
     TEST_SUMMARY();
 }
