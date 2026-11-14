@@ -113,6 +113,8 @@
     "recent_count": "Recently added",
     "filter_empty": "No matching media found",
     "all_folders": "All Folders",
+    "parent_folder": "Up to Parent",
+    "subfolders": "Subfolders",
     "scanning": "Scanning media library in background…",
     "view_and_sort": "View & Sort",
     "folder_exists": "This folder is already in the library",

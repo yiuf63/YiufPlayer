@@ -56,6 +56,7 @@ private:
     void renderLibraryFolder(const std::vector<MediaLibrary::Group>& groups);
     void renderLibraryFlat(const std::vector<MediaLibrary::Group>& groups);
     void openFolder(const std::string& path);
+    void navigateLibraryUp();
 
     // 工具行：唯一的视图入口 + 搜索
     brls::Box* makeLibraryToolbar();

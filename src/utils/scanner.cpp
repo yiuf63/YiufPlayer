@@ -23,7 +23,7 @@ const std::set<std::string> MediaScanner::SUPPORTED_VIDEO_EXTS = {
     // 蓝光、广播及高清传输流
     ".ts", ".m2ts", ".mts", ".tp", ".trp",
     // 传统与经典多媒体格式
-    ".avi", ".flv", ".f4v", ".wmv", ".asf",
+    ".avi", ".flv", ".f4v", ".swf", ".wmv", ".asf",
     // DVD/VCD及MPEG历史格式
     ".vob", ".mpg", ".mpeg", ".m1v", ".m2v", ".mpv",
     // RealMedia及移动便携格式

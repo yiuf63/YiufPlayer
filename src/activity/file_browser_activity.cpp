@@ -512,7 +512,7 @@ void FileBrowserActivity::onContentAvailable() {
         const int activeTab = tab_frame_ ? tab_frame_->getActiveIndex() : -1;
         if (activeTab == 0) { // 媒体库标签页
             if (!open_folder_.empty()) {
-                openFolder(std::string());
+                navigateLibraryUp();
                 return true;
             }
         } else if (activeTab == 1) { // 文件标签页
@@ -1017,7 +1017,7 @@ brls::View* FileBrowserActivity::createLibraryView() {
     library_scroller_->registerAction(i18n::tr("common.back", "返回"), brls::ControllerButton::BUTTON_B,
         [this](brls::View*) {
             if (open_folder_.empty()) return false;
-            openFolder(std::string());
+            navigateLibraryUp();
             return true;
         }, false);
 
@@ -1063,6 +1063,29 @@ void FileBrowserActivity::openFolder(const std::string& path) {
     // 换层之后要回到顶部：进文件夹还停在总览的滚动位置，
     // 首屏直接从第三张卡片开始，看着像内容丢了。
     if (library_scroller_) library_scroller_->setContentOffsetY(0.0f, false);
+}
+
+void FileBrowserActivity::navigateLibraryUp() {
+    if (open_folder_.empty()) return;
+    auto groups = MediaLibrary::getInstance().getGroups();
+    const auto it = std::find_if(groups.begin(), groups.end(),
+        [this](const MediaLibrary::Group& g) {
+            if (g.folder.path == open_folder_) return true;
+            std::string prefix = g.folder.path;
+            if (!prefix.empty() && prefix.back() != '/') prefix += '/';
+            return open_folder_.rfind(prefix, 0) == 0;
+        });
+    if (it == groups.end() || open_folder_ == it->folder.path) {
+        // 已经在当前媒体库根目录，返回总览
+        openFolder(std::string());
+    } else {
+        // 返回上一级子目录
+        std::string parent = fs::path(open_folder_).parent_path().string();
+        if (parent.size() < it->folder.path.size()) {
+            parent = it->folder.path;
+        }
+        openFolder(parent);
+    }
 }
 
 void FileBrowserActivity::renderLibraryContent() {
@@ -1158,7 +1181,12 @@ void FileBrowserActivity::renderLibraryContent() {
     // 文件夹被移除 / 换库之后，open_folder_ 可能指向已经不存在的目录
     if (!open_folder_.empty()) {
         const auto it = std::find_if(groups.begin(), groups.end(),
-            [this](const MediaLibrary::Group& g) { return g.folder.path == open_folder_; });
+            [this](const MediaLibrary::Group& g) {
+                if (g.folder.path == open_folder_) return true;
+                std::string prefix = g.folder.path;
+                if (!prefix.empty() && prefix.back() != '/') prefix += '/';
+                return open_folder_.rfind(prefix, 0) == 0;
+            });
         if (it == groups.end()) open_folder_.clear();
     }
 
@@ -1317,48 +1345,149 @@ void FileBrowserActivity::renderLibraryOverview(const std::vector<MediaLibrary::
 
 void FileBrowserActivity::renderLibraryFolder(const std::vector<MediaLibrary::Group>& groups) {
     const auto it = std::find_if(groups.begin(), groups.end(),
-        [this](const MediaLibrary::Group& g) { return g.folder.path == open_folder_; });
+        [this](const MediaLibrary::Group& g) {
+            if (g.folder.path == open_folder_) return true;
+            std::string prefix = g.folder.path;
+            if (!prefix.empty() && prefix.back() != '/') prefix += '/';
+            return open_folder_.rfind(prefix, 0) == 0;
+        });
     if (it == groups.end()) return;
     const MediaLibrary::Group& g = *it;
 
-    // 返回行：和条目一样的卡片规格，位置也一致 —— 用户不需要为「回去」
-    // 学一套新的操作方式，方向键往上顶一条就是它。
-    // 不用右侧的 > 箭头：那是「进入下一层」的语义，而这一行是往上一层。
-    std::string back_sub = g.folder.display_name;
-    if (!g.videos.empty()) back_sub += " · " + std::to_string(g.videos.size()) + " " + i18n::tr("common.videos", "视频");
-    if (!g.audios.empty()) back_sub += " · " + std::to_string(g.audios.size()) + " " + i18n::tr("common.audios", "音乐");
-    auto* back = new MediaCell(ui::Icon::Back, i18n::tr("library.all_folders", "全部文件夹"), back_sub);
-    back->registerClickAction([this](brls::View*) {
-        openFolder(std::string());
-        return true;
-    });
-    const std::string cur_fpath = g.folder.path;
-    const std::string cur_fname = g.folder.display_name;
-    back->registerAction(i18n::tr("library.folder_options", "文件夹选项"), brls::ControllerButton::BUTTON_X,
-        [this, cur_fpath, cur_fname](brls::View*) {
-            showFolderOptions(cur_fpath, cur_fname);
+    // 规范化当前路径前缀（确保以 / 结尾且不含重复斜杠）
+    std::string cur_prefix = open_folder_;
+    while (cur_prefix.size() > 1 && cur_prefix.back() == '/') {
+        cur_prefix.pop_back();
+    }
+    cur_prefix += '/';
+
+    const bool is_root = (open_folder_ == g.folder.path);
+
+    // 统计与收集：子文件夹 vs 当前目录直属文件
+    struct SubfolderEntry {
+        std::string name;
+        std::string path;
+        int video_count = 0;
+        int audio_count = 0;
+    };
+    std::map<std::string, SubfolderEntry> subfolder_map;
+    std::vector<MediaItem> direct_videos;
+    std::vector<MediaItem> direct_audios;
+
+    auto partition_item = [&](const MediaItem& item) {
+        if (item.path.size() <= cur_prefix.size()) return;
+        if (item.path.compare(0, cur_prefix.size(), cur_prefix) != 0) return;
+        std::string rel = item.path.substr(cur_prefix.size());
+        size_t slash = rel.find_first_of("/\\");
+        if (slash == std::string::npos) {
+            // 直接位于当前目录下
+            if (item.is_video()) direct_videos.push_back(item);
+            else if (item.is_audio()) direct_audios.push_back(item);
+        } else {
+            // 位于子目录下（聚合到下一级目录名）
+            std::string sub_name = rel.substr(0, slash);
+            std::string sub_path = cur_prefix + sub_name;
+            auto& entry = subfolder_map[sub_name];
+            entry.name = sub_name;
+            entry.path = sub_path;
+            if (item.is_video()) entry.video_count++;
+            else if (item.is_audio()) entry.audio_count++;
+        }
+    };
+
+    for (const auto& v : g.videos) partition_item(v);
+    for (const auto& a : g.audios) partition_item(a);
+
+    // 1. 返回行：和条目一样的卡片规格
+    if (is_root) {
+        // 在媒体库添加的顶层目录：返回总览
+        std::string back_sub = g.folder.display_name;
+        if (!g.videos.empty()) back_sub += " · " + std::to_string(g.videos.size()) + " " + i18n::tr("common.videos", "视频");
+        if (!g.audios.empty()) back_sub += " · " + std::to_string(g.audios.size()) + " " + i18n::tr("common.audios", "音乐");
+        auto* back = new MediaCell(ui::Icon::Back, i18n::tr("library.all_folders", "全部文件夹"), back_sub);
+        back->registerClickAction([this](brls::View*) {
+            openFolder(std::string());
             return true;
         });
-    library_list_->addView(back);
+        const std::string cur_fpath = g.folder.path;
+        const std::string cur_fname = g.folder.display_name;
+        back->registerAction(i18n::tr("library.folder_options", "文件夹选项"), brls::ControllerButton::BUTTON_X,
+            [this, cur_fpath, cur_fname](brls::View*) {
+                showFolderOptions(cur_fpath, cur_fname);
+                return true;
+            });
+        library_list_->addView(back);
+    } else {
+        // 在子目录中：返回上级目录
+        std::string cur_folder_name = fs::path(open_folder_).filename().string();
+        std::string parent_folder_path = fs::path(open_folder_).parent_path().string();
+        std::string parent_folder_name;
+        if (parent_folder_path == g.folder.path) {
+            parent_folder_name = g.folder.display_name;
+        } else {
+            parent_folder_name = fs::path(parent_folder_path).filename().string();
+        }
+        std::string back_title = ".. " + i18n::tr("common.parent_dir", "返回上级");
+        std::string back_sub = cur_folder_name;
+        size_t total_in_folder = direct_videos.size() + direct_audios.size();
+        for (const auto& [_, sub] : subfolder_map) {
+            total_in_folder += sub.video_count + sub.audio_count;
+        }
+        back_sub += " · " + std::to_string(total_in_folder) + " " + i18n::tr("common.items", "项");
 
-    if (!g.videos.empty()) {
-        library_list_->addView(
-            new SectionHeader(i18n::tr("common.videos", "视频") + " · " + std::to_string(g.videos.size())));
-        requestThumbnails(g.videos);
-        for (size_t i = 0; i < g.videos.size(); ++i) {
-            library_list_->addView(makeVideoCell(g.videos[i], g.videos, i));
+        auto* back = new MediaCell(ui::Icon::Back, back_title, back_sub);
+        back->registerClickAction([this, parent_folder_path](brls::View*) {
+            openFolder(parent_folder_path);
+            return true;
+        });
+        library_list_->addView(back);
+    }
+
+    // 2. 子文件夹（Subfolders）
+    if (!subfolder_map.empty()) {
+        library_list_->addView(new SectionHeader(
+            i18n::tr("common.folders", "子文件夹") + " · " + std::to_string(subfolder_map.size())));
+        for (const auto& [name, entry] : subfolder_map) {
+            std::string sub_desc;
+            if (entry.video_count > 0) {
+                sub_desc += std::to_string(entry.video_count) + " " + i18n::tr("common.videos", "视频");
+            }
+            if (entry.audio_count > 0) {
+                if (!sub_desc.empty()) sub_desc += " · ";
+                sub_desc += std::to_string(entry.audio_count) + " " + i18n::tr("common.audios", "音乐");
+            }
+            auto* cell = new MediaCell(ui::Icon::Folder, entry.name, sub_desc);
+            cell->setChevron(true);
+            const std::string target_path = entry.path;
+            cell->registerClickAction([this, target_path](brls::View*) {
+                openFolder(target_path);
+                return true;
+            });
+            library_list_->addView(cell);
         }
     }
 
-    if (!g.audios.empty()) {
+    // 3. 直属视频（Direct Videos）
+    if (!direct_videos.empty()) {
         library_list_->addView(
-            new SectionHeader(i18n::tr("common.audios", "音乐") + " · " + std::to_string(g.audios.size())));
-        for (size_t i = 0; i < g.audios.size(); ++i) {
-            library_list_->addView(makeAudioCell(g.audios[i], g.audios, i));
+            new SectionHeader(i18n::tr("common.videos", "视频") + " · " + std::to_string(direct_videos.size())));
+        requestThumbnails(direct_videos);
+        for (size_t i = 0; i < direct_videos.size(); ++i) {
+            library_list_->addView(makeVideoCell(direct_videos[i], direct_videos, i));
         }
     }
 
-    if (g.total() == 0) {
+    // 4. 直属音频（Direct Audios）
+    if (!direct_audios.empty()) {
+        library_list_->addView(
+            new SectionHeader(i18n::tr("common.audios", "音乐") + " · " + std::to_string(direct_audios.size())));
+        for (size_t i = 0; i < direct_audios.size(); ++i) {
+            library_list_->addView(makeAudioCell(direct_audios[i], direct_audios, i));
+        }
+    }
+
+    // 5. 空状态
+    if (subfolder_map.empty() && direct_videos.empty() && direct_audios.empty()) {
         library_list_->addView(new EmptyState(
             ui::Icon::Folder, "这个文件夹里没有媒体文件",
             "支持的视频与音频会自动进库\n按 Y 可以重新扫描"));
@@ -2168,7 +2297,11 @@ void FileBrowserActivity::showFolderOptions(const std::string& path, const std::
             MediaLibrary::getInstance().save();
             brls::Application::notify(i18n::tr("library.folder_removed", "已移除该文件夹"));
             if (alive->load()) {
-                if (open_folder_ == path) open_folder_.clear();
+                std::string prefix = path;
+                if (!prefix.empty() && prefix.back() != '/') prefix += '/';
+                if (open_folder_ == path || open_folder_.rfind(prefix, 0) == 0) {
+                    open_folder_.clear();
+                }
                 this->refresh();
             }
         }

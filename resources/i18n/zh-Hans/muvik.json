@@ -113,6 +113,8 @@
     "recent_count": "最近添加",
     "filter_empty": "未找到匹配的媒体",
     "all_folders": "全部文件夹",
+    "parent_folder": "返回上级",
+    "subfolders": "子文件夹",
     "scanning": "正在后台扫描媒体库…",
     "view_and_sort": "视图与排序",
     "folder_exists": "该文件夹已在媒体库中",

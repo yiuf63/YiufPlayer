@@ -28,6 +28,7 @@ int main() {
     const std::string root = "/tmp/muvik_test_media";
     writeFile(root + "/media/a.mp4");
     writeFile(root + "/media/b.mkv");
+    writeFile(root + "/media/anim.swf");          // SWF 格式支持
     writeFile(root + "/media/sub/c.avi");
     writeFile(root + "/media/sub/subsub/d.webm");
     writeFile(root + "/media/readme.txt");        // 非媒体，应被过滤
@@ -50,8 +51,14 @@ int main() {
     lib.rebuild();
     auto videos = lib.getVideos();
     auto audios = lib.getAudios();
-    CHECK_EQ(videos.size(), (size_t)4, "递归找到 4 个视频（含两层子目录）");
+    CHECK_EQ(videos.size(), (size_t)5, "递归找到 5 个视频（含 SWF 与两层子目录）");
     CHECK_EQ(audios.size(), (size_t)2, "找到 2 个音频");
+
+    bool has_swf = false;
+    for (const auto& v : videos) {
+        if (v.name == "anim.swf") has_swf = true;
+    }
+    CHECK_TRUE(has_swf, "SWF 文件成功作为视频媒体被索引");
 
     TEST_BEGIN("媒体库 / 过滤规则");
     bool has_txt = false, has_hidden = false, has_srt = false;
