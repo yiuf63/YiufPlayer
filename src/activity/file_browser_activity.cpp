@@ -1606,6 +1606,21 @@ brls::View* FileBrowserActivity::createSettingsView() {
 void FileBrowserActivity::renderSettingsContent() {
     if (settings_slot_) settings_list_ = *settings_slot_;
     if (!settings_list_) return;
+
+    int prev_idx = -1;
+    brls::View* prev = brls::Application::getCurrentFocus();
+    bool focus_was_lost = false;
+    if (prev) {
+        std::vector<brls::View*> old_items;
+        collectFocusables(settings_list_, old_items);
+        for (size_t i = 0; i < old_items.size(); ++i) {
+            if (old_items[i] == prev) { prev_idx = (int)i; break; }
+        }
+        if (prev_idx < 0) focus_was_lost = true;
+    } else {
+        focus_was_lost = true;
+    }
+
     settings_list_->clearViews();
 
     auto* list = settings_list_;
@@ -1801,6 +1816,19 @@ void FileBrowserActivity::renderSettingsContent() {
         return true;
     });
     list->addView(exit_cell);
+
+    if (!tab_frame_ || tab_frame_->getActiveIndex() == 3) {
+        std::vector<brls::View*> items;
+        collectFocusables(settings_list_, items);
+        if (!items.empty()) {
+            if (prev_idx >= 0) {
+                const int idx = std::min(prev_idx, static_cast<int>(items.size()) - 1);
+                brls::Application::giveFocus(items[idx]);
+            } else if (focus_was_lost) {
+                brls::Application::giveFocus(items[0]);
+            }
+        }
+    }
 }
 
 void FileBrowserActivity::showExitDialog() {
@@ -2248,7 +2276,10 @@ void FileBrowserActivity::promptAddFolder() {
             lib.save();
             brls::Application::notify(i18n::tr("library.folder_added_scanning", "已添加，正在扫描…"));
             startLibraryScan();
-            refresh();
+            brls::sync([this, alive]() {
+                if (!alive->load()) return;
+                refresh();
+            });
         } else {
             brls::Application::notify(i18n::tr("library.folder_add_failed", "添加失败：路径不可用或已存在"));
         }
@@ -2329,6 +2360,7 @@ brls::View* FileBrowserActivity::createRecentView() {
 }
 
 void FileBrowserActivity::renderRecentContent() {
+    if (recent_slot_) recent_list_ = *recent_slot_;
     if (!recent_list_) return;
     recent_list_->clearViews();
 

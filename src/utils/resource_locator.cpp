@@ -118,6 +118,23 @@ bool ResourceLocator::setup() {
 
     g_resource_dir = dir;
 
+#if defined(__linux__) && !defined(ANDROID)
+    // 针对嵌入式 Linux（如 TrimUI / Buildroot 等无系统字体的设备）：
+    // fontconfig 默认会扫描 ~/.fonts 目录。在此处自动建立软链接，
+    // 确保 libass / fontconfig 能扫描并使用 Muvik 内置的中文字体，杜绝字幕无法显示或方块乱码。
+    const char* home = std::getenv("HOME");
+    if (home && *home) {
+        fs::path user_fonts = fs::path(home) / ".fonts";
+        std::error_code fec;
+        fs::create_directories(user_fonts, fec);
+        fs::path target_font = fs::path(dir) / "font" / "font.ttf";
+        fs::path link_path = user_fonts / "NotoSansSC.ttf";
+        if (fs::exists(target_font, fec) && !fs::exists(link_path, fec)) {
+            fs::create_symlink(target_font, link_path, fec);
+        }
+    }
+#endif
+
     // borealis 的 BRLS_RESOURCES 是相对路径 "./resources/"，
     // 把工作目录切到资源目录的父目录即可让该相对路径成立。
     fs::path parent = fs::path(dir).parent_path();

@@ -79,10 +79,14 @@ Hint::Hint(std::shared_ptr<Action> action, bool allowAButtonTouch)
     }
 }
 
-std::string Hint::getKeyIcon(ControllerButton button, bool ignoreKeysSwap)
+std::string Hint::getKeyIcon(ControllerButton button, [[maybe_unused]] bool ignoreKeysSwap)
 {
-    if (!ignoreKeysSwap)
-        button = InputManager::mapControllerState(button);
+    // Muvik 修复：禁止在此处调用 InputManager::mapControllerState(button)。
+    // Application::mainLoop 中已经根据 isSwapInputKeys() 将硬件输入正确映射到了逻辑按钮
+    // （物理 A 按键产生 BUTTON_A，物理 X 产生 BUTTON_X）。
+    // 若在 getKeyIcon 中再次做 mapControllerState，会导致界面提示倒错
+    // （例如 BUTTON_A 确定显示为 [B]，BUTTON_X 选项显示为 [Y]），
+    // 用户按照屏幕提示按键时会触发完全相反的操作。
 
     // Muvik 补丁：键盘输入时显示键盘字符，而不是手柄图标。
     // 上游无论何种输入都显示 Switch 手柄字形，用户用键盘操作时

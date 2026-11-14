@@ -16,6 +16,7 @@
 #include "utils/playback_history.hpp"
 #include "utils/scanner.hpp"
 #include "utils/i18n.hpp"
+#include "utils/resource_locator.hpp"
 #include <cmath>
 #include <algorithm>
 #include <ctime>
@@ -205,8 +206,13 @@ MPVPlayerView::MPVPlayerView() {
         return true;
     }, false);
 
-    this->registerAction(i18n::tr("common.back", "返回"), brls::ControllerButton::BUTTON_B, [handleLocked]([[maybe_unused]] brls::View* view) {
+    this->registerAction(i18n::tr("common.back", "返回"), brls::ControllerButton::BUTTON_B, [this, handleLocked]([[maybe_unused]] brls::View* view) {
         if (handleLocked()) return true;
+        // 若当前 OSD 正在显示，按 B 键首先关闭 OSD；OSD 已隐藏时按 B 才退出播放页
+        if (isOsdActive()) {
+            showOSD(false);
+            return true;
+        }
         // 退出当前视频播放页（立即返回上一页，无需淡出等待）
         brls::Application::popActivity(brls::TransitionAnimation::NONE);
         return true;
@@ -1662,7 +1668,15 @@ void MPVPlayerView::initMPV() {
     mpv_set_option_string(mpv_, "vo", "libmpv");
     mpv_set_option_string(mpv_, "keep-open", "yes");
     mpv_set_option_string(mpv_, "sub-auto", "fuzzy");
-    mpv_set_option_string(mpv_, "sub-font", "sans-serif");
+    mpv_set_option_string(mpv_, "sub-file-paths", "sub:subs:subtitles:字幕:Sub:Subs:Subtitles");
+
+    // 针对嵌入式/无系统字体的掌机设备（如 TrimUI / 极简 Linux）配置内置字体目录与中文字体
+    std::string font_dir = ResourceLocator::resourceDir() + "/font";
+    std::error_code fec;
+    if (std::filesystem::exists(font_dir, fec)) {
+        mpv_set_option_string(mpv_, "sub-fonts-dir", font_dir.c_str());
+    }
+    mpv_set_option_string(mpv_, "sub-font", "Noto Sans SC");
 
     // 字幕字号按**屏幕高度比例**计算，而不是写死 46。
     //
@@ -1731,6 +1745,7 @@ void MPVPlayerView::initMPV() {
     // 但我们又想保留最后一帧（避免播完立刻黑屏），所以订阅 eof-reached，
     // 在它为真时手动触发结束回调。
     mpv_observe_property(mpv_, 0, "eof-reached", MPV_FORMAT_FLAG);
+    mpv_observe_property(mpv_, 0, "track-list", MPV_FORMAT_NONE);
 
     mpv_opengl_init_params gl_params{get_proc_address_mpv, nullptr};
     mpv_render_param params[] = {
@@ -2092,22 +2107,27 @@ void MPVPlayerView::setAspectRatio(AspectRatioMode mode) {
     std::string prompt;
     switch (aspect_mode_) {
         case AspectRatioMode::Auto:
+            mpv_set_property_string(mpv_, "panscan", "0.0");
             mpv_set_property_string(mpv_, "video-aspect-override", "-1");
             prompt = "画面比例: 原始自适应";
             break;
         case AspectRatioMode::Stretch_16_10:
+            mpv_set_property_string(mpv_, "panscan", "0.0");
             mpv_set_property_string(mpv_, "video-aspect-override", "1.6");
             prompt = "画面比例: 16:10 满屏 (Steam Deck 专用)";
             break;
         case AspectRatioMode::Fit_16_9:
+            mpv_set_property_string(mpv_, "panscan", "0.0");
             mpv_set_property_string(mpv_, "video-aspect-override", "1.777777");
             prompt = "画面比例: 16:9 标准宽屏";
             break;
         case AspectRatioMode::Fit_4_3:
+            mpv_set_property_string(mpv_, "panscan", "0.0");
             mpv_set_property_string(mpv_, "video-aspect-override", "1.333333");
             prompt = "画面比例: 4:3 复古动画/电视";
             break;
         case AspectRatioMode::ZoomCrop:
+            mpv_set_property_string(mpv_, "video-aspect-override", "-1");
             mpv_set_property_string(mpv_, "panscan", "1.0");
             prompt = "画面比例: 裁切铺满全屏";
             break;
@@ -2417,6 +2437,39 @@ void MPVPlayerView::checkMPVEvents() {
                 total_duration_ = (int64_t)*(double*)prop->data;
             } else if (std::string(prop->name) == "pause" && prop->data) {
                 is_playing_ = (*(int*)prop->data == 0);
+            } else if (std::string(prop->name) == "track-list") {
+                // 外挂字幕或异步探测的音轨/字幕轨加载完成后，在此补救处理
+                if (!subtitle_chosen_ && file_loaded_ && selected_sid_ != 0) {
+                    const bool subtitle_off = std::getenv("MUVIK_SUBTITLE_OFF") != nullptr;
+                    if (!subtitle_off) {
+                        auto subs = getTracks("sub");
+                        if (!subs.empty()) {
+                            int want = subs.front().id;
+                            if (selected_sid_ > 0) {
+                                for (const auto& t : subs) {
+                                    if (t.id == selected_sid_) { want = t.id; break; }
+                                }
+                            }
+                            selectTrack("sub", want, false);
+                            subtitle_chosen_ = true;
+                            brls::Logger::info("MPVPlayerView (track-list 更新): 自动选中字幕轨 #{}", want);
+                        }
+                    }
+                }
+                if (file_loaded_ && selected_aid_ > 1) {
+                    // 若音轨偏好不是默认第 1 轨，且当前实际 aid != selected_aid_，检查新轨道是否匹配
+                    int64_t current_aid = 0;
+                    if (mpv_get_property(mpv_, "aid", MPV_FORMAT_INT64, &current_aid) >= 0 && current_aid != selected_aid_) {
+                        auto audios = getTracks("audio");
+                        for (const auto& t : audios) {
+                            if (t.id == selected_aid_) {
+                                selectTrack("audio", selected_aid_, false);
+                                brls::Logger::info("MPVPlayerView (track-list 更新): 延迟匹配并恢复音轨 #{}", selected_aid_);
+                                break;
+                            }
+                        }
+                    }
+                }
             }
         } else if (event->event_id == MPV_EVENT_FILE_LOADED) {
             brls::Logger::info("MPVPlayerView: 文件已加载");
@@ -2448,9 +2501,7 @@ void MPVPlayerView::checkMPVEvents() {
                 pending_resume_position_ = 0;
                 mpv_set_property_string(mpv_, "start", "none");
             }
-            // 音频：mpv 默认用第一条音轨。这里支持强制指定，便于验证
-            // 「能否切换到非默认音轨」（多音轨文件在掌机上很常见，
-            // 例如双语 BDRip 需要选日语或国语）。
+            // 音频：恢复上次选择的音轨偏好或测试指定的音轨
             if (const char* fa = std::getenv("MUVIK_FORCE_AID")) {
                 const int want_aid = std::atoi(fa);
                 auto audios = getTracks("audio");
@@ -2460,8 +2511,6 @@ void MPVPlayerView::checkMPVEvents() {
                 }
                 if (found) {
                     selectTrack("audio", want_aid, false);
-                    // 关键：报告 mpv 的**实际属性**，而不是「我刚请求了什么」。
-                    // 否则测试只能证明代码被执行过，证明不了真的切过去了。
                     char* actual = mpv_get_property_string(mpv_, "aid");
                     brls::Logger::info("测试：请求音轨 #{}，mpv 实际 aid={}（共 {} 条）",
                                        want_aid, actual ? actual : "?", audios.size());
@@ -2469,6 +2518,16 @@ void MPVPlayerView::checkMPVEvents() {
                 } else {
                     brls::Logger::warning("测试：音轨 #{} 不存在（共 {} 条）",
                                           want_aid, audios.size());
+                }
+            } else if (selected_aid_ > 0) {
+                auto audios = getTracks("audio");
+                bool found = false;
+                for (const auto& t : audios) {
+                    if (t.id == selected_aid_) { found = true; break; }
+                }
+                if (found) {
+                    selectTrack("audio", selected_aid_, false);
+                    brls::Logger::info("MPVPlayerView: 自动恢复音轨 #{}", selected_aid_);
                 }
             }
 
@@ -2479,7 +2538,11 @@ void MPVPlayerView::checkMPVEvents() {
             if (subtitle_off) {
                 mpv_set_property_string(mpv_, "sid", "no");
                 subtitle_chosen_ = true;
-            } else if (selected_sid_ > 0 && !subtitle_chosen_) {
+            } else if (selected_sid_ == 0) {
+                mpv_set_property_string(mpv_, "sid", "no");
+                subtitle_chosen_ = true;
+                brls::Logger::info("MPVPlayerView: 恢复历史状态：关闭字幕");
+            } else if (!subtitle_chosen_) {
                 auto subs = getTracks("sub");
                 if (!subs.empty()) {
                     // 测试用：MUVIK_FORCE_SUB_SID=N 强制选指定轨，
@@ -2488,7 +2551,7 @@ void MPVPlayerView::checkMPVEvents() {
                     if (const char* f = std::getenv("MUVIK_FORCE_SUB_SID")) {
                         want = std::atoi(f);
                         brls::Logger::info("测试：强制选择字幕轨 #{}", want);
-                    } else if (selected_sid_ > 0 && selected_sid_ != 1) {
+                    } else if (selected_sid_ > 0) {
                         // 有历史记录时优先恢复它
                         for (const auto& t : subs) {
                             if (t.id == selected_sid_) { want = t.id; break; }

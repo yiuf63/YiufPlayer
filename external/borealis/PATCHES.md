@@ -309,4 +309,24 @@ static Activity* getTopActivity()
 
 ---
 
+## 修改 13：按键提示图表禁止重复 mapControllerState，杜绝 Switch/任天堂手柄提示倒错
+
+**文件**：
+- `library/lib/views/hint.cpp`
+
+**背景**：
+原版 Borealis 的 `Hint::getKeyIcon` 在未传入 `ignoreKeysSwap` 时调用了 `InputManager::mapControllerState(button)`。
+然而 `Application::mainLoop` 中早已根据 `isSwapInputKeys()` 将硬件底层按键映射到了标准逻辑按钮（如物理标记 A 键对应 `BUTTON_A`，物理标记 X 键对应 `BUTTON_X`）。
+在 `getKeyIcon` 中再次调用映射导致逻辑发生二次反转：
+- `BUTTON_A` 确定动作的屏幕提示变成了 `[B]`（字体字形 `\uE0E1`），键盘提示变成了 `Esc`；
+- `BUTTON_B` 返回动作的屏幕提示变成了 `[A]`；
+- `BUTTON_X` 选项动作的屏幕提示变成了 `[Y]`；
+- `BUTTON_Y` 字幕动作的屏幕提示变成了 `[X]`。
+在任天堂/Switch 布局掌机（如 TrimUI Smart Pro、Switch）上，用户按照屏幕提示按下对应字母的物理按键时，实际触发了相反的操作。
+
+**修改**：
+- 移除 `Hint::getKeyIcon` 中的二次 `mapControllerState`，使 `BUTTON_A/B/X/Y` 提示字形严格与物理丝印和逻辑动作保持统一。
+
+---
+
 以上修改均为健壮性加固或可选的扩展点，未改变 Borealis 现有公开 API 的语义。
