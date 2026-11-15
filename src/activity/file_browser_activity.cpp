@@ -33,6 +33,8 @@
 #include "view/media_thumb.hpp"
 #include "view/tool_button.hpp"
 #include "view/view_sheet.hpp"
+#include "model/series_detector.hpp"
+#include "activity/series_activity.hpp"
 #include "model/library_view_options.hpp"
 #include "model/network_source.hpp"
 #include "activity/network_browser_activity.hpp"
@@ -1485,13 +1487,58 @@ void FileBrowserActivity::renderLibraryFolder(const std::vector<MediaLibrary::Gr
         }
     }
 
-    // 3. 直属视频（Direct Videos）
+    // 3. 直属视频（Direct Videos，按 Kodi 规则自动聚合剧集并保留独立单片）
     if (!direct_videos.empty()) {
-        library_list_->addView(
-            new SectionHeader(i18n::tr("common.videos", "视频") + " · " + std::to_string(direct_videos.size())));
-        requestThumbnails(direct_videos);
-        for (size_t i = 0; i < direct_videos.size(); ++i) {
-            library_list_->addView(makeVideoCell(direct_videos[i], direct_videos, i));
+        auto det = SeriesDetector::detect(direct_videos);
+
+        // 剧集聚合条目：将多集动画/电视剧收敛为单个条目，点击进入沉浸式选集详情页
+        if (!det.series.empty()) {
+            library_list_->addView(new SectionHeader(
+                i18n::tr("common.series", "剧集") + " · " + std::to_string(det.series.size())));
+            for (const auto& s : det.series) {
+                std::string sub = "共 " + std::to_string(s.episodes.size()) + " 集";
+                if (s.last_watched_idx >= 0) {
+                    sub += " · 看到第 " + std::to_string(s.last_watched_idx + 1) + " 集";
+                    if (s.last_watched_pos > 0) {
+                        sub += " (" + MediaScanner::formatDuration(s.last_watched_pos) + ")";
+                    }
+                } else if (!s.release_date.empty()) {
+                    sub = s.release_date.substr(0, 4) + " · " + sub;
+                }
+
+                auto* cell = new MediaCell(ui::Icon::Video, s.title, sub);
+                cell->setChevron(true);
+                if (s.rating > 0.0) {
+                    char buf[16];
+                    std::snprintf(buf, sizeof(buf), "★ %.1f", s.rating);
+                    cell->setBadge(buf);
+                } else {
+                    cell->setBadge(std::to_string(s.episodes.size()) + " 集");
+                }
+                if (s.last_watched_dur > 0 && s.last_watched_pos > 0) {
+                    cell->setProgress(static_cast<float>((double)s.last_watched_pos / s.last_watched_dur));
+                }
+
+                cell->registerClickAction([s](brls::View*) {
+                    brls::Application::pushActivity(new SeriesActivity(s));
+                    return true;
+                });
+                cell->registerAction(i18n::tr("media.get_info", "获取信息"), brls::ControllerButton::BUTTON_X, [this, s](brls::View*) {
+                    showMediaInfo(s.representativeItem().path, s.title);
+                    return true;
+                });
+                library_list_->addView(cell);
+            }
+        }
+
+        // 独立单片/电影
+        if (!det.standalone_videos.empty()) {
+            library_list_->addView(new SectionHeader(
+                i18n::tr("common.videos", "单片视频") + " · " + std::to_string(det.standalone_videos.size())));
+            requestThumbnails(det.standalone_videos);
+            for (size_t i = 0; i < det.standalone_videos.size(); ++i) {
+                library_list_->addView(makeVideoCell(det.standalone_videos[i], det.standalone_videos, i));
+            }
         }
     }
 
@@ -1571,9 +1618,60 @@ void FileBrowserActivity::renderLibraryFlat(
     };
 
     if (!videos.empty()) {
-        library_list_->addView(
-            new SectionHeader(i18n::tr("common.videos", "视频") + " · " + std::to_string(videos.size())));
-        renderGrid(videos, true);
+        auto det = SeriesDetector::detect(videos);
+
+        // 1. 剧集海报墙（Series Poster Wall）
+        if (!det.series.empty()) {
+            library_list_->addView(
+                new SectionHeader(i18n::tr("common.series", "剧集与番剧") + " · " + std::to_string(det.series.size())));
+            brls::Box* row = nullptr;
+            int col = 0;
+            for (size_t i = 0; i < det.series.size(); ++i) {
+                const auto& s = det.series[i];
+                if (col == 0) {
+                    row = new brls::Box();
+                    row->setAxis(brls::Axis::ROW);
+                    row->setWidthPercentage(100.0f);
+                    row->setHeight(MediaGridCard::HEIGHT);
+                    library_list_->addView(row);
+                }
+                std::string sub = "共 " + std::to_string(s.episodes.size()) + " 集";
+                if (s.last_watched_idx >= 0) {
+                    sub += " · 看到第 " + std::to_string(s.last_watched_idx + 1) + " 集";
+                } else if (!s.release_date.empty()) {
+                    sub = s.release_date.substr(0, 4) + " · " + sub;
+                }
+                float prog = (s.last_watched_dur > 0 && s.last_watched_pos > 0)
+                                 ? static_cast<float>((double)s.last_watched_pos / s.last_watched_dur)
+                                 : -1.0f;
+                auto* card = new MediaGridCard(s.representativeItem(), s.title, sub, prog);
+                if (s.rating > 0.0) {
+                    char buf[16];
+                    std::snprintf(buf, sizeof(buf), "★ %.1f", s.rating);
+                    card->setBadge(buf);
+                } else {
+                    card->setBadge(std::to_string(s.episodes.size()) + " 集");
+                }
+                card->setWidthPercentage(25.0f);
+                card->registerClickAction([s](brls::View*) {
+                    brls::Application::pushActivity(new SeriesActivity(s));
+                    return true;
+                });
+                card->registerAction(i18n::tr("media.get_info", "获取信息"), brls::ControllerButton::BUTTON_X, [this, s](brls::View*) {
+                    showMediaInfo(s.representativeItem().path, s.title);
+                    return true;
+                });
+                row->addView(card);
+                col = (col + 1) % 4;
+            }
+        }
+
+        // 2. 电影与独立单片
+        if (!det.standalone_videos.empty()) {
+            library_list_->addView(
+                new SectionHeader(i18n::tr("common.movies", "电影与单片") + " · " + std::to_string(det.standalone_videos.size())));
+            renderGrid(det.standalone_videos, true);
+        }
     }
     if (!audios.empty()) {
         library_list_->addView(

@@ -52,6 +52,7 @@ PLUGIN_SRCS="src/plugin/plugin_manager.cpp src/plugin/plugin_config_store.cpp sr
 PLUGIN_FLAGS="$BOREALIS_INC $QUICKJS_INC $FMT_LIB $QUICKJS_LIB $(pkg-config --libs libcurl) -ldl -lpthread"
 
 TESTS=(
+    "series_detector|tests/unit/test_series_detector.cpp|src/model/series_detector.cpp src/model/metadata_store.cpp src/utils/playback_history.cpp src/utils/app_paths.cpp|"
     "media_name_parser|tests/unit/test_media_name_parser.cpp|src/utils/media_name_parser.cpp|"
     "metadata_store|tests/unit/test_metadata_store.cpp|src/model/metadata_store.cpp src/utils/app_paths.cpp|"
     "media_library|tests/unit/test_media_library.cpp|src/model/media_library.cpp src/utils/scanner.cpp src/utils/app_paths.cpp src/utils/i18n.cpp src/utils/resource_locator.cpp|-DTESTING_WITHOUT_BOREALIS"
