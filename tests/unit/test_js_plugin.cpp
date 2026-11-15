@@ -86,6 +86,11 @@ int main() {
 
     // 写入 main.js
     std::ofstream(fake_plugin_dir + "/main.js") << R"JS(
+        var g_inited_cfg = {};
+        function init(cfg) {
+            g_inited_cfg = cfg || {};
+        }
+
         // MediaStreamProvider
         async function search(keyword, page) {
             return {
@@ -173,6 +178,7 @@ int main() {
 
     auto js_plug = JSPlugin::loadFromDirectory(fake_plugin_dir, &err);
     CHECK_TRUE(js_plug != nullptr, "成功从目录加载 JSPlugin");
+    CHECK_EQ(PluginConfigStore::getInstance().get("com.test.universal-source", "server_url"), "https://pan.example.com", "自动同步默认配置项到 PluginConfigStore");
     if (js_plug) {
         CHECK_EQ(js_plug->getId(), "com.test.universal-source", "插件 ID 匹配");
         CHECK_EQ(js_plug->getName(), "全能三合一插件", "插件名称匹配");

@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include "plugin/js_plugin.hpp"
+#include "plugin/plugin_config_store.hpp"
 #include <borealis/core/logger.hpp>
 #include <nlohmann/json.hpp>
 #include <fstream>
@@ -78,15 +79,26 @@ std::shared_ptr<JSPlugin> JSPlugin::loadFromDirectory(const std::string& dir_pat
 
     // 解析 settings
     if (meta.contains("settings") && meta["settings"].is_array()) {
+        bool config_changed = false;
         for (const auto& s : meta["settings"]) {
             if (s.is_object()) {
                 PluginSettingField f;
                 f.key = s.value("key", "");
                 f.label = s.value("label", f.key);
                 f.type = s.value("type", "string");
-                f.default_value = s.value("default", "");
-                if (!f.key.empty()) plugin->settings_.push_back(f);
+                f.default_value = s.contains("default") ? s.value("default", "") : s.value("default_value", "");
+                if (!f.key.empty()) {
+                    plugin->settings_.push_back(f);
+                    // 如果持久化配置中尚未有此项且该字段具有默认值，写入默认配置
+                    if (!f.default_value.empty() && PluginConfigStore::getInstance().get(id, f.key).empty()) {
+                        PluginConfigStore::getInstance().set(id, f.key, f.default_value);
+                        config_changed = true;
+                    }
+                }
             }
+        }
+        if (config_changed) {
+            PluginConfigStore::getInstance().save();
         }
     }
 
@@ -123,6 +135,13 @@ std::shared_ptr<JSPlugin> JSPlugin::loadFromDirectory(const std::string& dir_pat
         if (runtime->hasFunction("scrapeSearch") || runtime->hasFunction("scrapeDetail")) {
             plugin->capabilities_.push_back("scraper");
         }
+    }
+
+    // 如果插件定义了 init(config)，自动传入当前持久化配置
+    if (runtime->hasFunction("init")) {
+        std::string cfg_json = PluginConfigStore::getInstance().toJson(id);
+        std::string init_res, init_err;
+        runtime->callFunction("init", { cfg_json }, init_res, &init_err);
     }
 
     plugin->runtime_ = std::move(runtime);

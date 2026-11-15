@@ -22,6 +22,7 @@
 #include "playback/audio_player.hpp"
 #include "plugin/plugin_manager.hpp"
 #include "plugin/plugin_config_store.hpp"
+#include "plugin/js_plugin.hpp"
 #include "activity/plugin_manager_activity.hpp"
 #include "activity/plugin_browser_activity.hpp"
 #include "model/metadata_store.hpp"
@@ -644,8 +645,23 @@ void FileBrowserActivity::renderSourcesContent() {
 
             std::string sub = i18n::tr("files.plugin_ver", "视频源插件 v") + plug.version +
                               (plug.has_scraper ? i18n::tr("files.plugin_with_scraper", " · 含刮削器") : "");
-            if (!PluginConfigStore::getInstance().hasConfig(
-                    fs::path(plug.path).stem().string())) {
+            bool configured = PluginConfigStore::getInstance().hasConfig(plug.id);
+            if (!configured && plug.is_js_plugin) {
+                auto js_p = PluginManager::getInstance().getJSPlugin(plug.id);
+                if (js_p) {
+                    bool all_defaults = true;
+                    for (const auto& s : js_p->getSettings()) {
+                        if (s.default_value.empty()) {
+                            all_defaults = false;
+                            break;
+                        }
+                    }
+                    if (all_defaults || plug.id == "com.plugin.iptv_live") {
+                        configured = true;
+                    }
+                }
+            }
+            if (!configured) {
                 sub += i18n::tr("files.plugin_not_configured", " · 尚未配置");
             }
             auto* cell = new MediaCell(ui::Icon::Plugin, plug.name, sub);
@@ -2228,7 +2244,7 @@ void FileBrowserActivity::showKeymapDialog(MediaCell* keymap_row) {
     const std::vector<std::pair<KeymapStyle, std::string>> styles = {
         {KeymapStyle::Auto, i18n::tr("keymap.auto", "自动识别（跟随手柄）")},
         {KeymapStyle::Xbox, i18n::tr("keymap.xbox", "Xbox / Steam Deck（A/B/X/Y）")},
-        {KeymapStyle::PlayStation, i18n::tr("keymap.ps", "PlayStation（✕/◯/▢/△）")},
+        {KeymapStyle::PlayStation, i18n::tr("keymap.ps", "PlayStation（×/○/□/△）")},
         {KeymapStyle::Switch, i18n::tr("keymap.switch", "Nintendo Switch（Switch 风格）")},
     };
 

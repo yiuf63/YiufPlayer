@@ -56,7 +56,7 @@
   "keymap": {
     "auto": "Auto Detect (Follow Controller)",
     "xbox": "Xbox / Steam Deck (A/B/X/Y)",
-    "ps": "PlayStation (✕/◯/▢/△)",
+    "ps": "PlayStation (×/○/□/△)",
     "switch": "Nintendo Switch (Switch Style)",
     "unknown": "Unknown Style",
     "auto_short": "Auto",

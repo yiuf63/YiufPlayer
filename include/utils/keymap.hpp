@@ -11,7 +11,7 @@ namespace muvik {
 enum class KeymapStyle {
     Auto = 0,        // 自动根据当前连接的手柄类型与系统平台判定
     Xbox = 1,        // Xbox / Steam Deck 风格（绿 A / 红 B / 蓝 X / 黄 Y）
-    PlayStation = 2, // PlayStation 风格（✕ / ◯ / ▢ / △）
+    PlayStation = 2, // PlayStation 风格（× / ○ / □ / △）
     Switch = 3       // Nintendo Switch 风格（红白圆形 Switch 字形）
 };
 

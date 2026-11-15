@@ -56,7 +56,7 @@
   "keymap": {
     "auto": "自动识别（跟随手柄）",
     "xbox": "Xbox / Steam Deck（A/B/X/Y）",
-    "ps": "PlayStation（✕/◯/▢/△）",
+    "ps": "PlayStation（×/○/□/△）",
     "switch": "Nintendo Switch（Switch 风格）",
     "unknown": "未知风格",
     "auto_short": "自动",

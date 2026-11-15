@@ -253,23 +253,84 @@ void Keymap::applyKeymapFont() {
 
 bool Keymap::reloadKeymapFont() {
 #if !defined(TESTING_WITHOUT_BOREALIS)
-    std::string font_path = resolveFontAssetPath(getStyle());
+    KeymapStyle active = resolveActiveStyle();
+    std::string font_path = resolveFontAssetPath(active);
     brls::FontLoader::USER_ICON_PATH = font_path;
 
     auto* vg = brls::Application::getNVGContext();
     if (!vg) return false;
 
-    // 重新加载指定字体并绑定到 FONT_SWITCH_ICONS ("switch")
-    bool ok = brls::Application::loadFontFromFile(brls::FONT_SWITCH_ICONS, font_path);
-    if (ok) {
-        nvgAddFallbackFontId(vg,
-            brls::Application::getFont(brls::FONT_REGULAR),
-            brls::Application::getFont(brls::FONT_SWITCH_ICONS));
-        brls::Application::getGlobalHintsUpdateEvent()->fire();
-        logInfo("Keymap: 热切换按键提示字体成功: " + font_path);
-        return true;
+    // 采用专属的 fontKey，避免与初始的 FONT_SWITCH_ICONS ("switch") 发生名称冲突
+    std::string font_key;
+    switch (active) {
+        case KeymapStyle::Xbox:        font_key = "keymap_xbox"; break;
+        case KeymapStyle::PlayStation: font_key = "keymap_ps"; break;
+        case KeymapStyle::Switch:      font_key = "keymap_switch"; break;
+        default:                       font_key = "keymap_xbox"; break;
     }
-    return false;
+
+    int font_handle = brls::Application::getFont(font_key);
+    if (font_handle == brls::FONT_INVALID) {
+        if (brls::Application::loadFontFromFile(font_key, font_path)) {
+            font_handle = brls::Application::getFont(font_key);
+        } else {
+            font_handle = brls::Application::getFont(brls::FONT_SWITCH_ICONS);
+        }
+    }
+
+    if (font_handle == brls::FONT_INVALID) {
+        logInfo("Keymap: 加载按键提示字体失败: " + font_path);
+        return false;
+    }
+
+    // 重置 FONT_REGULAR 的回退字体列表并重新绑定，使新按键字形优先匹配。
+    // NanoVG fontstash 的 fonsAddFallbackFont 是尾插法，且遍历回退时首次命中即返回；
+    // 若不重置，原先注册的 switch_icons.ttf 仍在最前，导致 \uE0E0 永远解析为旧图标。
+    int regular_font = brls::Application::getFont(brls::FONT_REGULAR);
+    if (regular_font != brls::FONT_INVALID) {
+        nvgResetFallbackFontsId(vg, regular_font);
+
+        // 1. 中文字体回退
+        int cjk = brls::Application::getFont(brls::FONT_CHINESE_SIMPLIFIED);
+        if (cjk != brls::FONT_INVALID) {
+            nvgAddFallbackFontId(vg, regular_font, cjk);
+        }
+
+        // 2. 韩文字体回退
+        int kor = brls::Application::getFont(brls::FONT_KOREAN_REGULAR);
+        if (kor != brls::FONT_INVALID) {
+            nvgAddFallbackFontId(vg, regular_font, kor);
+        }
+
+        // 3. Emoji 字体回退
+        int emoji = brls::Application::getFont(brls::FONT_EMOJI);
+        if (emoji != brls::FONT_INVALID) {
+            nvgAddFallbackFontId(vg, regular_font, emoji);
+        }
+
+        // 4. 当前激活的按键提示字体（优先于旧字体）
+        nvgAddFallbackFontId(vg, regular_font, font_handle);
+
+        // 5. Material 图标与默认字体回退
+        int mat = brls::Application::getFont(brls::FONT_MATERIAL_ICONS);
+        if (mat != brls::FONT_INVALID) {
+            nvgAddFallbackFontId(vg, regular_font, mat);
+        }
+        int def = brls::Application::getFont("default");
+        if (def != brls::FONT_INVALID) {
+            nvgAddFallbackFontId(vg, regular_font, def);
+        }
+    }
+
+    int cjk_font = brls::Application::getFont(brls::FONT_CHINESE_SIMPLIFIED);
+    if (cjk_font != brls::FONT_INVALID && cjk_font != regular_font) {
+        nvgResetFallbackFontsId(vg, cjk_font);
+        nvgAddFallbackFontId(vg, cjk_font, font_handle);
+    }
+
+    brls::Application::getGlobalHintsUpdateEvent()->fire();
+    logInfo("Keymap: 热切换按键提示字体成功: " + font_path + " (" + styleToShortString(active) + ")");
+    return true;
 #else
     return true;
 #endif
@@ -279,7 +340,7 @@ std::string Keymap::styleToString(KeymapStyle style) {
     switch (style) {
         case KeymapStyle::Auto:        return i18n::tr("keymap.auto", "自动识别（跟随手柄）");
         case KeymapStyle::Xbox:        return i18n::tr("keymap.xbox", "Xbox / Steam Deck（A/B/X/Y）");
-        case KeymapStyle::PlayStation: return i18n::tr("keymap.ps", "PlayStation（✕/◯/▢/△）");
+        case KeymapStyle::PlayStation: return i18n::tr("keymap.ps", "PlayStation（×/○/□/△）");
         case KeymapStyle::Switch:      return i18n::tr("keymap.switch", "Nintendo Switch（Switch 风格）");
         default:                       return i18n::tr("keymap.unknown", "未知风格");
     }

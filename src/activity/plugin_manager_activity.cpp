@@ -11,6 +11,8 @@
 #include "utils/app_paths.hpp"
 #include "plugin/plugin_installer.hpp"
 #include "plugin/plugin_config_store.hpp"
+#include "plugin/js_plugin.hpp"
+#include "activity/plugin_browser_activity.hpp"
 #include <borealis/views/scrolling_frame.hpp>
 #include <borealis/views/label.hpp>
 #include <borealis/views/dialog.hpp>
@@ -190,6 +192,15 @@ void PluginManagerActivity::render() {
             brls::Dialog* d = new brls::Dialog(box);
             box->addView(new SectionHeader(name));
 
+            // 如果该插件提供视频源，增加直接进入 / 浏览入口
+            if (is_source) {
+                box->addView(makeRow(ui::Icon::Folder, "浏览视频源", "进入插件目录浏览与播放频道",
+                                     [path, name, d]() {
+                    d->close();
+                    brls::Application::pushActivity(new PluginBrowserActivity(path, name));
+                }, true));
+            }
+
             std::string src_text = "本地插件目录";
             if (p.source_type == PluginSourceType::Workshop) {
                 src_text = "Steam 创意工坊 (Item #" + p.workshop_item_id + ")";
@@ -198,7 +209,60 @@ void PluginManagerActivity::render() {
             }
             box->addView(makeRow(ui::Icon::Info, "插件来源", src_text, nullptr, false));
 
-            if (is_source) {
+            if (p.is_js_plugin) {
+                // 现代 JS 插件配置：动态从 manifest 的 settings 呈现
+                auto js_plug = PluginManager::getInstance().getJSPlugin(p.id);
+                if (!js_plug) js_plug = PluginManager::getInstance().getJSPlugin(p.path);
+                if (js_plug && !js_plug->getSettings().empty()) {
+                    box->addView(new SectionHeader("插件参数配置"));
+                    for (const auto& field : js_plug->getSettings()) {
+                        std::string cur_val = PluginConfigStore::getInstance().get(p.id, field.key);
+                        if (cur_val.empty() && !field.default_value.empty()) {
+                            cur_val = field.default_value;
+                        }
+                        std::string display_val = cur_val.empty() ? "未设置（点击填写）" : cur_val;
+                        if (field.type == "password" && !cur_val.empty()) {
+                            display_val = "••••••••";
+                        }
+                        std::string f_key = field.key;
+                        std::string f_label = field.label;
+                        std::string pid = p.id;
+                        box->addView(makeRow(field.type == "password" ? ui::Icon::Lock : ui::Icon::Sliders,
+                                             field.label, display_val,
+                                             [this, pid, f_key, f_label, d]() {
+                            d->close();
+                            brls::Application::getImeManager()->openForText(
+                                [this, pid, f_key, f_label](std::string v) {
+                                    PluginConfigStore::getInstance().set(pid, f_key, v);
+                                    PluginConfigStore::getInstance().save();
+                                    PluginManager::getInstance().unloadAll();
+                                    PluginManager::getInstance().loadAll();
+                                    brls::Application::notify(f_label + (v.empty() ? " 已清空" : " 已保存"));
+                                    render();
+                                },
+                                f_label, "输入配置值", 512);
+                        }, true));
+                    }
+                    box->addView(makeRow(ui::Icon::Close, "重置该插件的配置",
+                                         "恢复默认配置", [this, p, d]() {
+                        d->close();
+                        PluginConfigStore::getInstance().clear(p.id);
+                        PluginConfigStore::getInstance().save();
+                        PluginManager::getInstance().unloadAll();
+                        PluginManager::getInstance().loadAll();
+                        brls::Application::notify("配置已重置");
+                        render();
+                    }));
+                } else if (!is_source) {
+                    brls::Label* info = new brls::Label();
+                    info->setText("该插件无需额外配置。");
+                    info->setFontSize(14.0f);
+                    info->setMarginLeft(24.0f);
+                    info->setMarginTop(8.0f);
+                    info->setMarginBottom(8.0f);
+                    box->addView(info);
+                }
+            } else if (is_source) {
                 // 服务器地址
                 std::string cur_url = PluginConfigStore::getInstance().get(stem, "url");
                 box->addView(makeRow(ui::Icon::Drive, "服务器地址",
