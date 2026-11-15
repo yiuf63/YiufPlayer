@@ -510,6 +510,11 @@ void FileBrowserActivity::onContentAvailable() {
     // 绑定返回键 B：在子目录/子文件夹时返回上一级；在最外层时弹出退出应用确认对话框
     this->registerAction(i18n::tr("common.exit", "退出"), brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
         (void)view;
+        // 如果视图与排序浮层正在显示，优先关闭浮层
+        if (view_sheet_ && view_sheet_->isOpen()) {
+            view_sheet_->hide();
+            return true;
+        }
         const int activeTab = tab_frame_ ? tab_frame_->getActiveIndex() : -1;
         if (activeTab == 0) { // 媒体库标签页
             if (!open_folder_.empty()) {
@@ -945,8 +950,10 @@ void FileBrowserActivity::openViewSheet() {
                 renderLibraryContent();
             },
             [this]() {
-                // 关闭后把焦点接回内容区第一项，手柄接着用
-                if (library_list_) {
+                // 关闭后优先把焦点交还给打开它的「视图与排序」工具按钮，若无则交还给内容区第一项
+                if (library_view_btn_) {
+                    brls::Application::giveFocus(library_view_btn_);
+                } else if (library_list_) {
                     std::vector<brls::View*> items;
                     collectFocusables(library_list_, items);
                     if (!items.empty()) brls::Application::giveFocus(items[0]);
@@ -1222,6 +1229,10 @@ void FileBrowserActivity::renderLibraryContent() {
 
     // 焦点接回：只有当当前 Tab 处于媒体库时才接回焦点，避免切到其他 Tab（如设置、文件）时将焦点错误抢回不可见的媒体库
     if (!tab_frame_ || tab_frame_->getActiveIndex() == 0) {
+        // 模态安全守护：若视图与排序浮层正在显示，绝不能抢夺焦点（焦点必须留在浮层内）
+        if (view_sheet_ && view_sheet_->isOpen()) {
+            return;
+        }
         std::vector<brls::View*> items;
         collectFocusables(library_list_, items);
         if (!items.empty()) {

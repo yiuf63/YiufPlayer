@@ -42,6 +42,11 @@ public:
     void draw(NVGcontext* vg, float x, float y, float width, float height,
               brls::Style style, brls::FrameContext* ctx) override;
 
+    // 模态焦点锁定：绝不允许焦点逃逸到背后的界面、工具栏或侧边栏
+    brls::View* getNextFocus(brls::FocusDirection direction, brls::View* currentView) override;
+    brls::View* getParentNavigationDecision(brls::View* from, brls::View* newFocus, brls::FocusDirection direction) override;
+    brls::View* getDefaultFocus() override;
+
 private:
     void rebuild();
     void syncChips();

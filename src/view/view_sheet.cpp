@@ -75,6 +75,26 @@ ViewSheet::ViewSheet(std::function<void()> on_change, std::function<void()> on_c
                              this->hide();
                              return true;
                          });
+    this->registerAction(i18n::tr("common.close", "关闭"), brls::ControllerButton::BUTTON_BACK,
+                         [this](brls::View*) {
+                             this->hide();
+                             return true;
+                         });
+    this->registerAction(i18n::tr("common.close", "关闭"), brls::ControllerButton::BUTTON_START,
+                         [this](brls::View*) {
+                             this->hide();
+                             return true;
+                         });
+    this->registerAction(i18n::tr("common.close", "关闭"), brls::ControllerButton::BUTTON_LB,
+                         [this](brls::View*) {
+                             this->hide();
+                             return true;
+                         });
+    this->registerAction(i18n::tr("common.close", "关闭"), brls::ControllerButton::BUTTON_RB,
+                         [this](brls::View*) {
+                             this->hide();
+                             return true;
+                         });
 
     panel_ = new CardBox(ui::radius::lg, pal.surfaceRaised);
     panel_->setAxis(brls::Axis::COLUMN);
@@ -98,15 +118,44 @@ void ViewSheet::draw(NVGcontext* vg, float x, float y, float width, float height
     brls::Box::draw(vg, x, y, width, height, style, ctx);
 }
 
-void ViewSheet::show(brls::Box* parent) {    if (open_) return;
+void ViewSheet::show(brls::Box* parent) {
+    if (open_) return;
     open_ = true;
+    if (this->hasParent()) {
+        this->getParent()->removeView(this, false);
+    }
     parent->addView(this);
     // 打开后方向键立刻可用：焦点给第一枚胶囊，否则方向键还在
     // 操作遮罩背后的列表，用户看着菜单、移的却是卡片。
     rebuild();   // 重新构建以同步外部可能变化的选项
     if (!chips_.empty() && chips_.front().btn) {
         brls::Application::giveFocus(chips_.front().btn);
+    } else if (panel_) {
+        brls::Application::giveFocus(panel_->getDefaultFocus());
     }
+}
+
+brls::View* ViewSheet::getDefaultFocus() {
+    if (!chips_.empty() && chips_.front().btn) {
+        return chips_.front().btn;
+    }
+    if (panel_) return panel_->getDefaultFocus();
+    return this;
+}
+
+brls::View* ViewSheet::getNextFocus(brls::FocusDirection direction, brls::View* currentView) {
+    // 模态浮层焦点锁定：绝不允许焦点逃逸到 ViewSheet 遮罩外部的工具栏、侧边栏或媒体列表！
+    (void)direction;
+    (void)currentView;
+    return nullptr;
+}
+
+brls::View* ViewSheet::getParentNavigationDecision(brls::View* from, brls::View* newFocus, brls::FocusDirection direction) {
+    (void)from;
+    (void)direction;
+    // 阻止任何祖先试图将焦点切离 ViewSheet 模态层
+    if (open_) return nullptr;
+    return newFocus;
 }
 
 void ViewSheet::hide() {
