@@ -205,7 +205,7 @@ void PlayerActivity::playCurrentIndex() {
         }
     }
 
-    player_view_->openFile(item.path, item.name, resume_pos);
+    player_view_->openFile(item.path, item.name, resume_pos, item.matched_subtitles);
 }
 
 } // namespace muvik

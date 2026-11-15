@@ -120,18 +120,29 @@ bool ResourceLocator::setup() {
 
 #if defined(__linux__) && !defined(ANDROID)
     // 针对嵌入式 Linux（如 TrimUI / Buildroot 等无系统字体的设备）：
-    // fontconfig 默认会扫描 ~/.fonts 目录。在此处自动建立软链接，
-    // 确保 libass / fontconfig 能扫描并使用 Muvik 内置的中文字体，杜绝字幕无法显示或方块乱码。
+    // fontconfig 默认会扫描 ~/.fonts 与 /usr/share/fonts 目录。在此处自动建立软链接，
+    // 确保 libass / fontconfig 能扫描并使用内置中文字体，杜绝字幕无法显示或方块乱码。
     const char* home = std::getenv("HOME");
-    if (home && *home) {
-        fs::path user_fonts = fs::path(home) / ".fonts";
-        std::error_code fec;
-        fs::create_directories(user_fonts, fec);
-        fs::path target_font = fs::path(dir) / "font" / "font.ttf";
-        fs::path link_path = user_fonts / "NotoSansSC.ttf";
-        if (fs::exists(target_font, fec) && !fs::exists(link_path, fec)) {
-            fs::create_symlink(target_font, link_path, fec);
+    fs::path target_font = fs::path(dir) / "font" / "font.ttf";
+    std::error_code fec;
+
+    if (fs::exists(target_font, fec)) {
+        if (home && *home) {
+            fs::path user_fonts = fs::path(home) / ".fonts";
+            fs::create_directories(user_fonts, fec);
+            fs::path link_sc = user_fonts / "NotoSansSC.ttf";
+            fs::path link_f  = user_fonts / "font.ttf";
+            // 无论此前是否存在（包括更名改版后的失效死链），先移除再重新建立正确链接
+            fs::remove(link_sc, fec);
+            fs::remove(link_f, fec);
+            fs::create_symlink(target_font, link_sc, fec);
+            fs::create_symlink(target_font, link_f, fec);
         }
+
+        // 若拥有系统字体目录写权限，一并建立系统级目录链接
+        fs::path sys_fonts_dir = "/usr/share/fonts/yiufplayer";
+        fs::remove_all(sys_fonts_dir, fec);
+        fs::create_symlink(fs::path(dir) / "font", sys_fonts_dir, fec);
     }
 #endif
 

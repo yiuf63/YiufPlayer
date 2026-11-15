@@ -61,7 +61,8 @@ public:
     ~MPVPlayerView() override;
 
     // 打开播放文件
-    void openFile(const std::string& path, const std::string& title = "", int64_t resume_position = 0);
+    void openFile(const std::string& path, const std::string& title = "", int64_t resume_position = 0,
+                  const std::vector<std::string>& extra_subtitles = {});
 
     // 基础播放控制
     void togglePlayPause();
@@ -228,6 +229,7 @@ private:
 
     std::string current_file_path_;
     std::string video_title_;
+    std::vector<std::string> pending_subtitles_;
     bool is_playing_ = false;
     int64_t current_position_ = 0; // 秒
     int64_t total_duration_ = 0;   // 秒

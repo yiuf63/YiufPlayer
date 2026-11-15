@@ -153,9 +153,16 @@ brls::View* ViewSheet::getNextFocus(brls::FocusDirection direction, brls::View* 
 brls::View* ViewSheet::getParentNavigationDecision(brls::View* from, brls::View* newFocus, brls::FocusDirection direction) {
     (void)from;
     (void)direction;
-    // 阻止任何祖先试图将焦点切离 ViewSheet 模态层
-    if (open_) return nullptr;
-    return newFocus;
+    if (!open_) return newFocus;
+    if (!newFocus) return nullptr;
+
+    // 检查 newFocus 是否属于本浮层内部视图（如各行胶囊、按钮）
+    for (brls::View* v = newFocus; v != nullptr; v = v->getParent()) {
+        if (v == this) return newFocus; // 属于浮层内部，允许获得焦点
+    }
+
+    // 目标在浮层外部（工具栏、侧边栏、底层媒体列表等），坚决拦截阻止逃逸
+    return nullptr;
 }
 
 void ViewSheet::hide() {

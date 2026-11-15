@@ -1734,6 +1734,8 @@ void MPVPlayerView::initMPV() {
         return;
     }
 
+    mpv_request_log_messages(mpv_, "warn");
+
     // 订阅播放状态属性。必须显式调用 mpv_observe_property，否则 mpv 不会发送
     // MPV_EVENT_PROPERTY_CHANGE，进度、时长、暂停状态将永远停留在初始值，
     // 导致进度条、时间显示、断点续播与播放历史全部失效。
@@ -1747,7 +1749,7 @@ void MPVPlayerView::initMPV() {
     mpv_observe_property(mpv_, 0, "eof-reached", MPV_FORMAT_FLAG);
     mpv_observe_property(mpv_, 0, "track-list", MPV_FORMAT_NONE);
 
-    mpv_opengl_init_params gl_params{get_proc_address_mpv, nullptr};
+    mpv_opengl_init_params gl_params{get_proc_address_mpv, nullptr, nullptr};
     mpv_render_param params[] = {
         {MPV_RENDER_PARAM_API_TYPE, (void*)MPV_RENDER_API_TYPE_OPENGL},
         {MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &gl_params},
@@ -1773,7 +1775,8 @@ void MPVPlayerView::destroyMPV() {
     }
 }
 
-void MPVPlayerView::openFile(const std::string& path, const std::string& title, int64_t resume_position) {
+void MPVPlayerView::openFile(const std::string& path, const std::string& title, int64_t resume_position,
+                             const std::vector<std::string>& extra_subtitles) {
     if (!current_file_path_.empty() && current_position_ > 0) {
         PlaybackHistory::getInstance().updateProgress(
             current_file_path_, current_position_, total_duration_,
@@ -1783,6 +1786,7 @@ void MPVPlayerView::openFile(const std::string& path, const std::string& title, 
     last_saved_position_ = resume_position;
     current_file_path_ = path;
     video_title_ = title.empty() ? std::filesystem::path(path).filename().string() : title;
+    pending_subtitles_ = extra_subtitles;
     if (!mpv_) return;
 
     brls::Logger::info("MPVPlayerView: 打开文件 {}", path);
@@ -2531,6 +2535,27 @@ void MPVPlayerView::checkMPVEvents() {
                 }
             }
 
+            // 如果传入了扫描器匹配到的外挂字幕，且 mpv 轨道列表尚未包含，主动下发 sub-add
+            if (!pending_subtitles_.empty()) {
+                auto subs = getTracks("sub");
+                for (const auto& sub_file : pending_subtitles_) {
+                    bool already_has = false;
+                    std::string fn = std::filesystem::path(sub_file).filename().string();
+                    for (const auto& t : subs) {
+                        if (t.title.find(fn) != std::string::npos) {
+                            already_has = true;
+                            break;
+                        }
+                    }
+                    if (!already_has) {
+                        brls::Logger::info("MPVPlayerView: 显式加载匹配外挂字幕: {}", sub_file);
+                        const char* cmd[] = {"sub-add", sub_file.c_str(), "auto", nullptr};
+                        mpv_command_async(mpv_, 0, cmd);
+                    }
+                }
+                pending_subtitles_.clear();
+            }
+
             // mpv 默认不选中任何字幕轨（sid=no），需要显式选第一条。
             // 若不处理，内嵌字幕永远不会显示。
             // 测试用：强制不选字幕，便于脚本做「有/无字幕」对照
@@ -2564,6 +2589,15 @@ void MPVPlayerView::checkMPVEvents() {
             }
         } else if (event->event_id == MPV_EVENT_VIDEO_RECONFIG) {
             brls::Logger::info("MPVPlayerView: 视频重配置");
+        } else if (event->event_id == MPV_EVENT_LOG_MESSAGE) {
+            auto* msg = (mpv_event_log_message*)event->data;
+            if (msg && msg->text) {
+                std::string text = msg->text;
+                while (!text.empty() && (text.back() == '\n' || text.back() == '\r')) text.pop_back();
+                if (!text.empty()) {
+                    brls::Logger::warning("[mpv:{}] {}", msg->prefix ? msg->prefix : "", text);
+                }
+            }
         } else if (event->event_id == MPV_EVENT_END_FILE) {
             mpv_event_end_file* ef = (mpv_event_end_file*)event->data;
 
