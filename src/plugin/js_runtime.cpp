@@ -1,3 +1,6 @@
+#include <chrono>
+#include <string>
+#include <vector>
 #include "plugin/js_runtime.hpp"
 #include "plugin/plugin_config_store.hpp"
 #include "utils/crypto_utils.hpp"

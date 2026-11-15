@@ -1,3 +1,6 @@
+#include <set>
+#include <string>
+#include <vector>
 #include "utils/webdav_client.hpp"
 #include "utils/crypto_utils.hpp"
 

@@ -1,4 +1,4 @@
-# Muvik 🎬🎮
+# Yiuf Player (YiufPlayer) 🎬🎮
 
 **A 10-foot, controller-first media player crafted for Steam Deck, handhelds, and large screens.**
 
@@ -11,7 +11,7 @@
 
 ---
 
-## 🌟 Why Muvik?
+## 🌟 Why Yiuf Player?
 
 On gaming handhelds like **Steam Deck**, **ROG Ally**, **Legion Go**, or on living-room PCs and Android TV, enjoying local movies, anime, or background music with a gamepad has long been an awkward experience:
 
@@ -19,7 +19,7 @@ On gaming handhelds like **Steam Deck**, **ROG Ally**, **Legion Go**, or on livi
 * **Heavy HTPC Stacks (Kodi)**: Originating as an all-in-one home theater operating system, Kodi carries hundreds of megabytes of legacy code, boots slowly (several seconds), and feels heavy when all you want is to play an offline episode in handheld mode. Its touch controls and virtual keyboard also feel disconnected from modern handheld OSs.
 * **Cloud Streaming (Plex / Emby client)**: In offline environments like airplanes or bullet trains, playing media directly from an SD card requires cumbersome setups and often enforces account login.
 
-**Muvik** bridges this gap by marrying the console-grade 60FPS UI of [Borealis](https://github.com/dragonflylee/borealis) with the industry-leading decoding powerhouse of [libmpv](https://mpv.io):
+**Yiuf Player** bridges this gap by marrying the console-grade 60FPS UI of [Borealis](https://github.com/dragonflylee/borealis) with the industry-leading decoding powerhouse of [libmpv](https://mpv.io):
 
 * **Instant Startup**: Native C++17 binary (< 7 MB), boots in **< 100 ms**, uses ~40 MB RAM.
 * **Handheld & Controller First**: Built entirely for D-Pad, thumbsticks, triggers, and full touch gestures.
@@ -89,16 +89,16 @@ On gaming handhelds like **Steam Deck**, **ROG Ally**, **Legion Go**, or on livi
 
 ## 📥 Installation
 
-Pre-compiled release packages are available on [GitHub Releases](https://github.com/yiuf63/muvik/releases):
+Pre-compiled release packages are available on [GitHub Releases](https://github.com/yiuf63/YiufPlayer/releases):
 
 ### Steam Deck (SteamOS)
 1. Switch Steam Deck to **Desktop Mode**.
-2. Download `muvik-linux-x86_64.tar.gz` and extract it to `~/muvik`.
-3. Run `python3 add_to_steam.py` to automatically register Muvik into your Steam Library with official boxart and banner grids.
-4. Return to **Gaming Mode** — launch Muvik directly from your Non-Steam Games library!
+2. Download `yiufplayer-linux-x86_64.tar.gz` and extract it to `~/yiufplayer`.
+3. Run `python3 add_to_steam.py` to automatically register Yiuf Player into your Steam Library with official boxart and banner grids.
+4. Return to **Gaming Mode** — launch Yiuf Player directly from your Non-Steam Games library!
 
 ### Linux Desktop / Handhelds (Arch / Ubuntu / Fedora)
-Extract `muvik-linux-x86_64.tar.gz` and run `./muvik`. Ensure `libmpv`, `ffmpeg`, and `libcurl` are installed on your distribution:
+Extract `yiufplayer-linux-x86_64.tar.gz` and run `./yiufplayer`. Ensure `libmpv`, `ffmpeg`, and `libcurl` are installed on your distribution:
 ```bash
 # Ubuntu / Debian
 sudo apt install libmpv2 libavcodec-dev libcurl4
@@ -108,13 +108,13 @@ sudo pacman -S mpv ffmpeg curl
 ```
 
 ### macOS (Apple Silicon arm64)
-Download `muvik-macos-arm64.zip`, extract, and launch `./muvik`. Alternatively build via Homebrew dependencies:
+Download `yiufplayer-macos-arm64.zip`, extract, and launch `./yiufplayer`. Alternatively build via Homebrew dependencies:
 ```bash
 brew install mpv ffmpeg fmt tinyxml2
 ```
 
 ### Android (arm64-v8a)
-Download and install `muvik-android-arm64.apk` directly on Android tablets, handhelds (Odin, Retroid), or Android TV.
+Download and install `yiufplayer-android-arm64.apk` directly on Android tablets, handhelds (Odin, Retroid), or Android TV.
 
 ---
 
@@ -131,31 +131,31 @@ Download and install `muvik-android-arm64.apk` directly on Android tablets, hand
 
 ```bash
 # Clone repository
-git clone https://github.com/yiuf63/muvik.git
-cd muvik
+git clone https://github.com/yiuf63/YiufPlayer.git
+cd YiufPlayer
 
 # Configure & build
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
 
 # Run
-./build/muvik
+./build/yiufplayer
 ```
 
 ### Linux Container Build (for Steam Deck target)
 ```bash
-docker build --platform linux/amd64 -f Dockerfile.linux -t muvik-linux .
-docker run --rm -v "$PWD:/src" -w /src muvik-linux bash scripts/build-linux.sh
+docker build --platform linux/amd64 -f Dockerfile.linux -t yiufplayer-linux .
+docker run --rm -v "$PWD:/src" -w /src yiufplayer-linux bash scripts/build-linux.sh
 ```
 
 ---
 
 ## 🧪 Testing & Verification
 
-Muvik features an extensive test suite verifying logic, memory safety, and visual rendering:
+Yiuf Player features an extensive test suite verifying logic, memory safety, and visual rendering:
 
 ```bash
-# Run all 15 unit test suites
+# Run all 16 unit test suites
 ./tests/run_tests.sh
 
 # Run end-to-end UI and framebuffer smoke test
@@ -169,7 +169,7 @@ python3 tests/tools/check_docs.py
 
 ## 📄 License & Acknowledgments
 
-Muvik is released under the **[GNU General Public License v3.0](LICENSE)**.
+Yiuf Player is released under the **[GNU General Public License v3.0](LICENSE)**.
 
 ### Third-Party Components & Notices
 * **[Borealis](https://github.com/dragonflylee/borealis)**: Apache-2.0 UI engine for controller navigation.

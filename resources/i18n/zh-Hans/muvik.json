@@ -88,7 +88,7 @@
     "saved": "已保存影片信息"
   },
   "dialog": {
-    "exit_confirm": "确定要退出 Muvik 吗？",
+    "exit_confirm": "确定要退出 Yiuf Player 吗？",
     "exit_hint": "即将退出应用",
     "delete_confirm": "确定要删除吗？",
     "folder_options": "文件夹选项",
@@ -100,7 +100,7 @@
   },
   "library": {
     "title": "媒体库",
-    "welcome_title": "欢迎使用 Muvik",
+    "welcome_title": "欢迎使用 Yiuf Player",
     "welcome_desc": "专为大屏与掌机手柄打造的纯净影音中心",
     "one_click_setup": "一键建立影院",
     "manual_pick": "手动挑选媒体目录",
@@ -202,18 +202,18 @@
     "plugins_manage": "插件管理",
     "plugins_desc": "安装 / 移除视频源与刮削源，来自 ZIP 或目录",
     "about": "关于",
-    "about_app": "关于 Muvik",
+    "about_app": "关于 Yiuf Player",
     "about_desc": "点击查看版本信息与核心引擎详情",
     "license": "开源许可证：GNU GPL v3.0",
     "license_desc": "自由开源软件，保障用户使用、修改与分发的全部权利",
     "engines": "解码核心与界面引擎",
     "engines_desc": "libmpv 硬件加速 + FFmpeg 全能编解码 + Borealis 原生手柄 UI",
     "system": "系统",
-    "exit": "退出 Muvik",
+    "exit": "退出 Yiuf Player",
     "exit_desc": "保存所有状态并正常退出程序（手柄按 A 确认）"
   },
   "about": {
-    "title": "关于 Muvik",
+    "title": "关于 Yiuf Player",
     "subtitle": "专为大屏与掌机手柄打造的跨平台纯净影音中心",
     "version_title": "版本信息",
     "version_detail": "v1.0.0 (Release Build · C++17 · 60FPS Controller UI)",

@@ -88,8 +88,8 @@
     "saved": "Saved media metadata"
   },
   "dialog": {
-    "exit_confirm": "Are you sure you want to exit Muvik?",
-    "exit_hint": "Muvik will close",
+    "exit_confirm": "Are you sure you want to exit Yiuf Player?",
+    "exit_hint": "Yiuf Player will close",
     "delete_confirm": "Are you sure you want to delete this?",
     "folder_options": "Folder Options",
     "select_language": "Select Language",
@@ -100,7 +100,7 @@
   },
   "library": {
     "title": "Library",
-    "welcome_title": "Welcome to Muvik",
+    "welcome_title": "Welcome to Yiuf Player",
     "welcome_desc": "Pure media center crafted for controllers and large displays",
     "one_click_setup": "One-Click Setup",
     "manual_pick": "Browse Media Folder…",
@@ -202,18 +202,18 @@
     "plugins_manage": "Plugin Management",
     "plugins_desc": "Install / remove video sources and scrapers from ZIP or folder",
     "about": "About",
-    "about_app": "About Muvik",
+    "about_app": "About Yiuf Player",
     "about_desc": "Click to view version info and engine details",
     "license": "Open Source License: GNU GPL v3.0",
     "license_desc": "Free and open source software protecting rights to use, modify, and distribute",
     "engines": "Core Decoders & UI Engine",
     "engines_desc": "libmpv hardware decode + FFmpeg demuxing + Borealis gamepad UI",
     "system": "System",
-    "exit": "Exit Muvik",
+    "exit": "Exit Yiuf Player",
     "exit_desc": "Save all states and exit application (Press A to confirm)"
   },
   "about": {
-    "title": "About Muvik",
+    "title": "About Yiuf Player",
     "subtitle": "Pure cross-platform media center designed for handhelds & gamepads",
     "version_title": "Version Info",
     "version_detail": "v1.0.0 (Release Build · C++17 · 60FPS Controller UI)",

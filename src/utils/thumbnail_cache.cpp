@@ -1,3 +1,6 @@
+#include <functional>
+#include <string>
+#include <unordered_map>
 #include "utils/thumbnail_cache.hpp"
 
 #include <algorithm>

@@ -1,3 +1,6 @@
+#include <mutex>
+#include <string>
+#include <vector>
 #include "model/network_source.hpp"
 #include "utils/app_paths.hpp"
 

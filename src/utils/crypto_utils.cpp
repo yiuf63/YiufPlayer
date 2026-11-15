@@ -1,3 +1,4 @@
+#include <string>
 #include "utils/crypto_utils.hpp"
 #include <vector>
 #include <sstream>

@@ -25,7 +25,7 @@ int main() {
     CHECK_EQ(i18n::tr("tabs.library"), "媒体库", "点号分割 tabs.library");
     CHECK_EQ(i18n::tr("tabs/files"), "文件", "斜杠分割 tabs/files");
     CHECK_EQ(i18n::tr("common.exit"), "退出", "common.exit");
-    CHECK_EQ(i18n::tr("dialog.exit_confirm"), "确定要退出 Muvik 吗？", "退出确认提示");
+    CHECK_EQ(i18n::tr("dialog.exit_confirm"), "确定要退出 Yiuf Player 吗？", "退出确认提示");
     CHECK_EQ(i18n::tr("library.empty_title"), "还没有添加任何媒体目录", "媒体库空状态标题");
     CHECK_EQ(i18n::tr("settings.appearance"), "外观", "设置-外观");
     CHECK_EQ(i18n::tr("theme.dark"), "深色", "主题-深色");
@@ -40,7 +40,7 @@ int main() {
     CHECK_EQ(i18n::tr("tabs.library"), "Library", "英文 tabs.library");
     CHECK_EQ(i18n::tr("tabs.files"), "Files", "英文 tabs.files");
     CHECK_EQ(i18n::tr("common.exit"), "Exit", "英文 common.exit");
-    CHECK_EQ(i18n::tr("dialog.exit_confirm"), "Are you sure you want to exit Muvik?", "英文退出确认提示");
+    CHECK_EQ(i18n::tr("dialog.exit_confirm"), "Are you sure you want to exit Yiuf Player?", "英文退出确认提示");
     CHECK_EQ(i18n::tr("library.empty_title"), "No Media Folders Added", "英文媒体库空状态标题");
     CHECK_EQ(i18n::tr("settings.appearance"), "Appearance", "英文设置-外观");
     CHECK_EQ(i18n::tr("theme.dark"), "Dark", "英文主题-Dark");

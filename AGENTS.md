@@ -7,7 +7,7 @@
 
 ## 项目是什么
 
-**Muvik** —— 面向 Steam Deck 与通用掌机/桌面的音视频播放器。
+**Yiuf Player**（前身为 Muvik） —— 面向 Steam Deck 与通用掌机/桌面的音视频播放器。
 
 - **技术栈**：C++17 + [Borealis](https://github.com/xfangfang/borealis) UI 框架 + libmpv 解码内核
 - **分发形态**：**GPL-3.0 开源**（2026-10 起从闭源改为 GPL-3.0，见「许可证」一节）
@@ -22,7 +22,7 @@
 # 本地开发（链接系统 mpv）
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(sysctl -n hw.ncpu 2>/dev/null || nproc)
-./build/muvik
+./build/yiufplayer
 ```
 
 构建时 `license_probe` 会打印所用 FFmpeg 的版本与许可证，**不会阻断构建**

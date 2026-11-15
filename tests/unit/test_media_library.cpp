@@ -2,6 +2,7 @@
 // 用临时目录构造真实文件树，走真实扫描逻辑。
 
 #include "model/media_library.hpp"
+#include "utils/app_paths.hpp"
 #include "test_framework.hpp"
 #include <cstdlib>
 #include <fstream>
@@ -82,10 +83,12 @@ int main() {
 
     TEST_BEGIN("媒体库 / 持久化");
     lib.save();
-    CHECK_TRUE(fs::exists("/tmp/muvik_test_library/muvik/libraries.dat") ||
+    CHECK_TRUE(fs::exists(AppPaths::configFile("libraries.dat")) ||
+               fs::exists("/tmp/muvik_test_library/yiufplayer/libraries.dat") ||
                fs::exists("/tmp/muvik_test_library/muvik/libraries.dat"),
                "libraries.dat 已生成");
-    CHECK_TRUE(fs::exists("/tmp/muvik_test_library/muvik/library_cache.dat") ||
+    CHECK_TRUE(fs::exists(AppPaths::configFile("library_cache.dat")) ||
+               fs::exists("/tmp/muvik_test_library/yiufplayer/library_cache.dat") ||
                fs::exists("/tmp/muvik_test_library/muvik/library_cache.dat"),
                "library_cache.dat 已生成");
 

@@ -1,3 +1,4 @@
+#include <string>
 #include "ui/scene_tile.hpp"
 
 #include <algorithm>

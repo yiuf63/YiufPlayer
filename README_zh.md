@@ -1,4 +1,4 @@
-# Muvik 🎬🎮
+# Yiuf Player 🎬🎮
 
 **专为 Steam Deck、掌机与大屏设计的沉浸式手柄优先媒体播放器。**
 
@@ -11,7 +11,7 @@
 
 ---
 
-## 🌟 为什么选择 Muvik？
+## 🌟 为什么选择 Yiuf Player？
 
 在 **Steam Deck**、**ROG Ally**、**Legion Go** 等掌上游戏机，或是客厅 HTPC 与 Android 平板/TV 上，使用手柄看电影、追番或听歌一直缺乏顺手优雅的体验：
 
@@ -19,7 +19,7 @@
 * **重量级家庭影院套件（Kodi）**：最初作为完整操作系统设计，包含数百兆历史包袱，冷启动耗时数秒，在掌机只想随手看一集离线番剧时显得沉重缓慢。其触控与软键盘体验也与现代掌机系统严重割裂。
 * **流媒体客户端（Plex / Emby）**：在飞机、高铁等无网络离线环境下，直接播放 SD 卡中的本地资源门槛高，且常绑定账号登录。
 
-**Muvik** 将主机级 60FPS 流畅渲染引擎 [Borealis](https://github.com/dragonflylee/borealis) 与业界顶尖的解码内核 [libmpv](https://mpv.io) 深度融合，专为掌机场景量身定做：
+**Yiuf Player** 将主机级 60FPS 流畅渲染引擎 [Borealis](https://github.com/dragonflylee/borealis) 与业界顶尖的解码内核 [libmpv](https://mpv.io) 深度融合，专为掌机场景量身定做：
 
 * **秒级瞬启**：纯原生 C++17 二进制文件（< 7 MB），冷启动用时 **< 100 ms**，常驻内存仅约 40 MB。
 * **原生手柄与掌机优先**：为十字键、双摇杆、肩键、扳机键与完整触控手势全面优化，告别模拟鼠标。
@@ -89,16 +89,16 @@
 
 ## 📥 安装与运行
 
-预编译发布安装包可在 [GitHub Releases](https://github.com/yiuf63/muvik/releases) 直接下载：
+预编译发布安装包可在 [GitHub Releases](https://github.com/yiuf63/YiufPlayer/releases) 直接下载：
 
 ### Steam Deck (SteamOS)
 1. 将 Steam Deck 切换至 **桌面模式（Desktop Mode）**。
-2. 下载 `muvik-linux-x86_64.tar.gz` 并解压至 `~/muvik`。
-3. 运行 `python3 add_to_steam.py`，脚本将自动在 Steam 库中注册 Muvik 非 Steam 游戏快捷方式，并自动设置官方海报及封面网格图。
-4. 切回 **游戏模式（Gaming Mode）** —— 在非 Steam 游戏库中点击 Muvik 即可享受 60FPS 掌机大屏播放！
+2. 下载 `yiufplayer-linux-x86_64.tar.gz` 并解压至 `~/yiufplayer`。
+3. 运行 `python3 add_to_steam.py`，脚本将自动在 Steam 库中注册 Yiuf Player 非 Steam 游戏快捷方式，并自动设置官方海报及封面网格图。
+4. 切回 **游戏模式（Gaming Mode）** —— 在非 Steam 游戏库中点击 Yiuf Player 即可享受 60FPS 掌机大屏播放！
 
 ### Linux 桌面与其它 Linux 掌机（Arch / Ubuntu / Fedora）
-解压 `muvik-linux-x86_64.tar.gz` 并运行 `./muvik`。请确保系统已安装 `libmpv`、`ffmpeg` 和 `libcurl`：
+解压 `yiufplayer-linux-x86_64.tar.gz` 并运行 `./yiufplayer`。请确保系统已安装 `libmpv`、`ffmpeg` 和 `libcurl`：
 ```bash
 # Ubuntu / Debian
 sudo apt install libmpv2 libavcodec-dev libcurl4
@@ -108,13 +108,13 @@ sudo pacman -S mpv ffmpeg curl
 ```
 
 ### macOS (Apple Silicon arm64)
-下载 `muvik-macos-arm64.zip` 解压后直接运行 `./muvik`。如需从源码编译，可通过 Homebrew 安装依赖：
+下载 `yiufplayer-macos-arm64.zip` 解压后直接运行 `./yiufplayer`。如需从源码编译，可通过 Homebrew 安装依赖：
 ```bash
 brew install mpv ffmpeg fmt tinyxml2
 ```
 
 ### Android (arm64-v8a)
-下载 `muvik-android-arm64.apk`，可直接安装于 Android 平板、安卓掌机（如 Odin、Retroid Pocket）及 Android TV 智能电视。
+下载 `yiufplayer-android-arm64.apk`，可直接安装于 Android 平板、安卓掌机（如 Odin、Retroid Pocket）及 Android TV 智能电视。
 
 ---
 
@@ -131,31 +131,31 @@ brew install mpv ffmpeg fmt tinyxml2
 
 ```bash
 # 克隆仓库
-git clone https://github.com/yiuf63/muvik.git
-cd muvik
+git clone https://github.com/yiuf63/YiufPlayer.git
+cd YiufPlayer
 
 # 配置与编译
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
 
 # 启动运行
-./build/muvik
+./build/yiufplayer
 ```
 
 ### Linux 容器化交叉构建（Steam Deck 目标）
 ```bash
-docker build --platform linux/amd64 -f Dockerfile.linux -t muvik-linux .
-docker run --rm -v "$PWD:/src" -w /src muvik-linux bash scripts/build-linux.sh
+docker build --platform linux/amd64 -f Dockerfile.linux -t yiufplayer-linux .
+docker run --rm -v "$PWD:/src" -w /src yiufplayer-linux bash scripts/build-linux.sh
 ```
 
 ---
 
 ## 🧪 自动化测试与质量保障
 
-Muvik 包含完善的质量验证套件，覆盖业务逻辑、内存安全与界面渲染：
+Yiuf Player 包含完善的质量验证套件，覆盖业务逻辑、内存安全与界面渲染：
 
 ```bash
-# 运行 15 组独立单元测试
+# 运行 16 组独立单元测试
 ./tests/run_tests.sh
 
 # 运行端到端 UI 与无头 GL 帧缓冲冒烟测试
@@ -169,7 +169,7 @@ python3 tests/tools/check_docs.py
 
 ## 📄 开源许可证与致谢
 
-Muvik 采用 **[GNU General Public License v3.0](LICENSE)** 协议分发。
+Yiuf Player 采用 **[GNU General Public License v3.0](LICENSE)** 协议分发。
 
 ### 第三方组件声明
 * **[Borealis](https://github.com/dragonflylee/borealis)**：专为游戏手柄设计的 Apache-2.0 UI 引擎。

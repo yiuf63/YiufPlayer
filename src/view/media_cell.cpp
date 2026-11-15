@@ -1,3 +1,4 @@
+#include <string>
 #include "view/media_cell.hpp"
 
 #include <algorithm>

@@ -79,7 +79,7 @@ int main(int argc, char* argv[]) {
     muvik::Keymap::applyKeymapFont();
 
     // 默认创建窗口或全屏画面（针对 macOS Retina 大屏与外接显示器自适应）
-    brls::Application::createWindow("Muvik");
+    brls::Application::createWindow("Yiuf Player");
 
     // 注册全局全屏快捷键（F11 / Alt+Enter / macOS Cmd+F）
     muvik::DisplayMode::setupGlobalKeyBindings();

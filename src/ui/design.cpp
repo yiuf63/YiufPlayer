@@ -1,3 +1,4 @@
+#include <string>
 #include "ui/design.hpp"
 
 #include <algorithm>

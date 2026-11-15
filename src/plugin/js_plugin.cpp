@@ -1,3 +1,7 @@
+#include <memory>
+#include <mutex>
+#include <string>
+#include <vector>
 #include "plugin/js_plugin.hpp"
 #include <borealis/core/logger.hpp>
 #include <nlohmann/json.hpp>

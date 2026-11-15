@@ -1,3 +1,5 @@
+#include <string>
+#include <vector>
 #include "view/media_folder_card.hpp"
 
 #include <algorithm>

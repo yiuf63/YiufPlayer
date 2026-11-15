@@ -1,3 +1,7 @@
+#include <atomic>
+#include <memory>
+#include <string>
+#include <vector>
 #include "activity/network_browser_activity.hpp"
 #include "activity/player_activity.hpp"
 #include "utils/webdav_client.hpp"

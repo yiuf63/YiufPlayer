@@ -1,3 +1,5 @@
+#include <string>
+#include <vector>
 #include "model/library_view_options.hpp"
 
 #include <algorithm>

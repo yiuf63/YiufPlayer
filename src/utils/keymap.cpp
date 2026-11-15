@@ -1,3 +1,4 @@
+#include <string>
 #include "utils/keymap.hpp"
 #include "utils/app_paths.hpp"
 #include "utils/resource_locator.hpp"

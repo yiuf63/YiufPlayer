@@ -1,3 +1,4 @@
+#include <string>
 #include "view/tool_button.hpp"
 
 #include <algorithm>

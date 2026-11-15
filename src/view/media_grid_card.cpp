@@ -1,3 +1,4 @@
+#include <string>
 #include "view/media_grid_card.hpp"
 
 #include <algorithm>

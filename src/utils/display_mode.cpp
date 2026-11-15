@@ -1,3 +1,4 @@
+#include <string>
 #include "utils/display_mode.hpp"
 #include "utils/app_paths.hpp"
 #include "utils/i18n.hpp"

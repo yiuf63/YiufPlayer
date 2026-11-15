@@ -1,3 +1,4 @@
+#include <string>
 #include "utils/input_settings.hpp"
 #include "utils/app_paths.hpp"
 

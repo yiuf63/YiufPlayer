@@ -1,3 +1,6 @@
+#include <functional>
+#include <string>
+#include <vector>
 #include "view/view_sheet.hpp"
 
 #include <borealis/core/touch/tap_gesture.hpp>

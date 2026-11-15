@@ -1,3 +1,4 @@
+#include <map>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -280,7 +281,7 @@ brls::View* FileBrowserActivity::createContentView() {
                        [this]() -> brls::View* { return createSettingsView(); });
 
     frame_ = new brls::AppletFrame(tab_frame_);
-    frame_->setTitle("Muvik");
+    frame_->setTitle("Yiuf Player");
     frame_->setIcon(BRLS_ASSET("icon/icon.png"));
 
     // 手柄设置/菜单键 (BUTTON_START / ☰)：直接切换到「设置」标签页，而不是闪退
@@ -1118,7 +1119,7 @@ void FileBrowserActivity::renderLibraryContent() {
         auto detected = detectLocalMediaSources();
         if (!detected.empty()) {
             library_list_->addView(new EmptyState(
-                ui::Icon::Video, i18n::tr("library.welcome_title", "欢迎使用 Muvik"),
+                ui::Icon::Video, i18n::tr("library.welcome_title", "欢迎使用 Yiuf Player"),
                 i18n::tr("library.welcome_desc", "已检测到本地存储设备与影音目录\n点击下方按钮一键建立您的专属掌机影院")));
             auto* one_click = new MediaCell(
                 ui::Icon::Play, i18n::tr("library.one_click_setup", "一键建立影院"),
@@ -1778,7 +1779,7 @@ void FileBrowserActivity::renderSettingsContent() {
     list->addView(new SectionHeader(i18n::tr("settings.about", "关于")));
 
     auto* about = new MediaCell(
-        ui::Icon::Info, i18n::tr("settings.about_app", "关于 Muvik"),
+        ui::Icon::Info, i18n::tr("settings.about_app", "关于 Yiuf Player"),
         i18n::tr("settings.about_desc", "点击查看版本信息与核心引擎详情"));
     about->setChevron(true);
     about->registerClickAction([this](brls::View*) {
@@ -1809,7 +1810,7 @@ void FileBrowserActivity::renderSettingsContent() {
     list->addView(new SectionHeader(i18n::tr("settings.system", "系统")));
 
     auto* exit_cell = new MediaCell(
-        ui::Icon::Close, i18n::tr("settings.exit", "退出 Muvik"),
+        ui::Icon::Close, i18n::tr("settings.exit", "退出 Yiuf Player"),
         i18n::tr("settings.exit_desc", "保存所有状态并正常退出程序（手柄按 A 确认）"));
     exit_cell->registerClickAction([this](brls::View*) {
         showExitDialog();
@@ -1832,7 +1833,7 @@ void FileBrowserActivity::renderSettingsContent() {
 }
 
 void FileBrowserActivity::showExitDialog() {
-    auto* dialog = new brls::Dialog(i18n::tr("dialog.exit_confirm", "确定要退出 Muvik 吗？"));
+    auto* dialog = new brls::Dialog(i18n::tr("dialog.exit_confirm", "确定要退出 Yiuf Player 吗？"));
     dialog->addButton(i18n::tr("common.cancel", "取消"), []() {});
     dialog->addButton(i18n::tr("common.exit", "退出"), []() {
         brls::Application::quit();
@@ -1852,7 +1853,7 @@ void FileBrowserActivity::showAboutDialog() {
     auto* dialog = new brls::Dialog(box);
 
     auto* title_lbl = new brls::Label();
-    title_lbl->setText(i18n::tr("about.title", "Muvik"));
+    title_lbl->setText(i18n::tr("about.title", "Yiuf Player"));
     title_lbl->setFontSize(26.0f);
     title_lbl->setTextColor(brls::Application::getTheme()["brls/sidebar/active_item"]);
     box->addView(title_lbl);
@@ -2472,7 +2473,7 @@ void FileBrowserActivity::navigateTo(const std::string& path, const std::string&
 void FileBrowserActivity::navigateUp() {
     if (path_history_.empty()) {
         current_path_ = "";
-        frame_->setTitle("Muvik");
+        frame_->setTitle("Yiuf Player");
         renderSourcesContent();
         return;
     }

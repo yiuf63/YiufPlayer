@@ -1,3 +1,4 @@
+#include <vector>
 #include <cstdlib>
 #include <string>
 #include <algorithm>
@@ -23,22 +24,37 @@ std::string AppPaths::configDir() {
 #if defined(ANDROID)
     if (const char* internal = SDL_AndroidGetInternalStoragePath();
         internal && *internal) {
-        return std::string(internal) + "/muvik";
+        return std::string(internal) + "/yiufplayer";
     }
     if (const char* tmp = std::getenv("TMPDIR"); tmp && *tmp) {
-        return std::string(tmp) + "/muvik";
+        return std::string(tmp) + "/yiufplayer";
     }
-    return "/data/local/tmp/muvik";
+    return "/data/local/tmp/yiufplayer";
 #else
+    std::string base;
     const char* xdg = std::getenv("XDG_CONFIG_HOME");
     if (xdg && *xdg) {
-        return std::string(xdg) + "/muvik";
+        base = std::string(xdg);
+    } else {
+        const char* home = std::getenv("HOME");
+        if (home && *home) {
+            base = std::string(home) + "/.config";
+        }
     }
-    const char* home = std::getenv("HOME");
-    if (home && *home) {
-        return std::string(home) + "/.config/muvik";
+    if (!base.empty()) {
+        std::string new_path = base + "/yiufplayer";
+        std::string old_path = base + "/muvik";
+        std::error_code ec;
+        if (fs::exists(new_path, ec)) return new_path;
+        if (fs::exists(old_path, ec)) {
+            // 平滑无感自动迁移旧版目录
+            fs::rename(old_path, new_path, ec);
+            if (!ec) return new_path;
+            return old_path;
+        }
+        return new_path;
     }
-    return "./muvik";
+    return "./yiufplayer";
 #endif
 }
 

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.18)
 
-project(Muvik
+project(YiufPlayer
     VERSION 1.0.0
     DESCRIPTION "Controller & Remote Native Media Player for Handhelds, TV & Desktop"
     LANGUAGES C CXX
@@ -289,25 +289,26 @@ endif ()
 # SDL 的 Java 层通过 System.loadLibrary("main") 加载，
 # 加载的必须是 .so，且入口符号为 SDL_main。
 if (ANDROID)
-    add_library(muvik SHARED ${SRC_FILES})
-    set_target_properties(muvik PROPERTIES OUTPUT_NAME "main")
+    add_library(yiufplayer SHARED ${SRC_FILES})
+    set_target_properties(yiufplayer PROPERTIES OUTPUT_NAME "main")
 else ()
-    add_executable(muvik ${SRC_FILES})
+    add_executable(yiufplayer ${SRC_FILES})
+    set_target_properties(yiufplayer PROPERTIES OUTPUT_NAME "yiufplayer")
 endif ()
 
 # USE_LIBROMFS 宏必须在我们自己的 target 上也定义一次。
 if (USE_LIBROMFS)
-    target_compile_definitions(muvik PRIVATE USE_LIBROMFS)
+    target_compile_definitions(yiufplayer PRIVATE USE_LIBROMFS)
     target_compile_definitions(borealis PRIVATE USE_LIBROMFS)
 endif ()
 
-target_include_directories(muvik PRIVATE
+target_include_directories(yiufplayer PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     ${MPV_INCLUDE_DIRS}
 )
 
 # 把第三方（borealis 及其依赖）的头文件标记为 SYSTEM。
-target_include_directories(muvik SYSTEM PRIVATE
+target_include_directories(yiufplayer SYSTEM PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/external/borealis/library/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/external/borealis/library/include/borealis/extern"
     "${CMAKE_CURRENT_SOURCE_DIR}/external/borealis/library/lib/extern/fmt/include"
@@ -318,22 +319,22 @@ target_include_directories(muvik SYSTEM PRIVATE
 )
 
 if (NOT APPLE)
-    target_include_directories(muvik PRIVATE ${GL_INCLUDE_DIRS})
+    target_include_directories(yiufplayer PRIVATE ${GL_INCLUDE_DIRS})
 endif ()
 
 if (APPLE)
-    target_link_directories(muvik PRIVATE
+    target_link_directories(yiufplayer PRIVATE
         ${MPV_LIBRARY_DIRS}
         "/opt/homebrew/lib"
         "/usr/local/lib"
     )
 else ()
-    target_link_directories(muvik PRIVATE
+    target_link_directories(yiufplayer PRIVATE
         ${MPV_LIBRARY_DIRS}
     )
 endif ()
 
-target_link_libraries(muvik PRIVATE
+target_link_libraries(yiufplayer PRIVATE
     borealis
     quickjs
     $<$<BOOL:${USE_LIBROMFS}>:${LIBROMFS_LIBRARY}>
@@ -346,24 +347,24 @@ target_link_libraries(muvik PRIVATE
 
 if (USE_SDL2 AND NOT ANDROID)
     find_package(SDL2 REQUIRED)
-    target_include_directories(muvik PRIVATE ${SDL2_INCLUDE_DIRS})
-    target_link_libraries(muvik PRIVATE ${SDL2_LIBRARIES})
+    target_include_directories(yiufplayer PRIVATE ${SDL2_INCLUDE_DIRS})
+    target_link_libraries(yiufplayer PRIVATE ${SDL2_LIBRARIES})
 endif ()
 
 # 抽帧（可选）：找到 FFmpeg 才链接，否则 thumbnail_cache 里整段实现被编译掉
 if (MUVIK_FFMPEG_FOUND)
-    target_compile_definitions(muvik PRIVATE MUVIK_HAVE_FFMPEG=1)
-    target_include_directories(muvik SYSTEM PRIVATE
+    target_compile_definitions(yiufplayer PRIVATE MUVIK_HAVE_FFMPEG=1)
+    target_include_directories(yiufplayer SYSTEM PRIVATE
         ${AVFORMAT_INCLUDE_DIRS} ${AVCODEC_INCLUDE_DIRS} ${AVUTIL_INCLUDE_DIRS} ${SWSCALE_INCLUDE_DIRS})
-    target_link_directories(muvik PRIVATE
+    target_link_directories(yiufplayer PRIVATE
         ${AVFORMAT_LIBRARY_DIRS} ${AVCODEC_LIBRARY_DIRS} ${AVUTIL_LIBRARY_DIRS} ${SWSCALE_LIBRARY_DIRS})
-    target_link_libraries(muvik PRIVATE
+    target_link_libraries(yiufplayer PRIVATE
         ${AVFORMAT_LIBRARIES} ${AVCODEC_LIBRARIES} ${AVUTIL_LIBRARIES} ${SWSCALE_LIBRARIES})
 endif ()
 
 # 针对 macOS 的 rpath 优化
 if (APPLE)
-    set_target_properties(muvik PROPERTIES
+    set_target_properties(yiufplayer PROPERTIES
         MACOSX_RPATH TRUE
         BUILD_WITH_INSTALL_RPATH TRUE
         INSTALL_RPATH "@executable_path/../Frameworks;@loader_path/../Frameworks"
@@ -381,12 +382,15 @@ if (BUILD_TESTING)
              COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tests.sh")
 endif ()
 
-# 构建目录中提供 resources，保证直接 ./build/muvik 即可找到字体与图标
-add_custom_command(TARGET muvik POST_BUILD
+# 构建目录中提供 resources，并创建兼容软链 muvik -> yiufplayer
+add_custom_command(TARGET yiufplayer POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E create_symlink
         "${CMAKE_CURRENT_SOURCE_DIR}/resources"
-        "$<TARGET_FILE_DIR:muvik>/resources"
-    COMMENT "Link resources into build directory"
+        "$<TARGET_FILE_DIR:yiufplayer>/resources"
+    COMMAND ${CMAKE_COMMAND} -E create_symlink
+        "$<TARGET_FILE_NAME:yiufplayer>"
+        "$<TARGET_FILE_DIR:yiufplayer>/muvik"
+    COMMENT "Link resources and muvik compatibility alias into build directory"
 )
 
 # 合规文档随安装包分发
@@ -396,25 +400,25 @@ install(FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/licenses/LICENSE-Apache-2.0-borealis.txt"
     "${CMAKE_CURRENT_SOURCE_DIR}/licenses/LICENSE-curl-MIT.txt"
     "${CMAKE_CURRENT_SOURCE_DIR}/licenses/LICENSE-MIT-quickjs.txt"
-    DESTINATION share/doc/muvik
+    DESTINATION share/doc/yiufplayer
 )
 
 # 安装配置 (Linux / SteamOS / Flatpak)
 if (UNIX AND NOT APPLE)
-    install(TARGETS muvik DESTINATION bin)
+    install(TARGETS yiufplayer DESTINATION bin)
 
     # 资源目录必须以绝对安装路径存在，否则运行时会找不到字体与图标。
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/resources"
-            DESTINATION share/muvik
+            DESTINATION share/yiufplayer
             USE_SOURCE_PERMISSIONS)
 
     install(FILES flatpak/org.muvik.Muvik.desktop
             DESTINATION share/applications
-            RENAME org.muvik.Muvik.desktop)
+            RENAME org.yiuf.YiufPlayer.desktop)
 
     install(FILES resources/icon/icon.png
             DESTINATION share/icons/hicolor/256x256/apps
-            RENAME org.muvik.Muvik.png)
+            RENAME org.yiuf.YiufPlayer.png)
 
     install(FILES flatpak/org.muvik.Muvik.metainfo.xml
             DESTINATION share/metainfo)
