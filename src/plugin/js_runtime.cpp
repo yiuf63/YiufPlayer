@@ -474,9 +474,11 @@ void JSRuntimeHost::initSandbox() {
     rt_ = JS_NewRuntime();
     if (!rt_) return;
 
-    // 内存安全沙箱：每个插件限制最大 16MB 内存，1MB 栈空间，适应低配 ARM 开源掌机
+    // 内存安全沙箱：每个插件限制最大 16MB 内存
     JS_SetMemoryLimit(rt_, 16 * 1024 * 1024);
-    JS_SetMaxStackSize(rt_, 1024 * 1024);
+    // 禁用硬编码栈深度限制（0 表示无限制），避免在由 std::thread 分配的后台线程中
+    // 因栈基址不同而被 js_check_stack_overflow 误判为 Stack Overflow
+    JS_SetMaxStackSize(rt_, 0);
     JS_SetInterruptHandler(rt_, jsInterruptHandler, this);
 
     ctx_ = JS_NewContext(rt_);
@@ -533,14 +535,28 @@ void JSRuntimeHost::initSandbox() {
 
 bool JSRuntimeHost::evaluate(const std::string& script, const std::string& filename, std::string* out_err) {
     if (!ctx_) return false;
+    JS_UpdateStackTop(rt_);
     JSValue ret = JS_Eval(ctx_, script.c_str(), script.size(), filename.c_str(), JS_EVAL_TYPE_GLOBAL);
     if (JS_IsException(ret)) {
         JSValue err = JS_GetException(ctx_);
+        std::string full_err;
         const char* err_str = JS_ToCString(ctx_, err);
-        if (out_err) *out_err = err_str ? err_str : "Unknown JS error";
-        if (err_str) JS_FreeCString(ctx_, err_str);
+        if (err_str) {
+            full_err = err_str;
+            JS_FreeCString(ctx_, err_str);
+        }
+        JSValue stack = JS_GetPropertyStr(ctx_, err, "stack");
+        if (!JS_IsUndefined(stack)) {
+            const char* stack_str = JS_ToCString(ctx_, stack);
+            if (stack_str) {
+                full_err += "\nStack:\n" + std::string(stack_str);
+                JS_FreeCString(ctx_, stack_str);
+            }
+        }
+        JS_FreeValue(ctx_, stack);
         JS_FreeValue(ctx_, err);
         JS_FreeValue(ctx_, ret);
+        if (out_err) *out_err = full_err.empty() ? "Unknown JS error" : full_err;
         return false;
     }
     JS_FreeValue(ctx_, ret);
@@ -591,6 +607,7 @@ bool JSRuntimeHost::callFunction(const std::string& func_name,
                                  std::string& out_result_json,
                                  std::string* out_err) {
     if (!ctx_) return false;
+    JS_UpdateStackTop(rt_);
     JSValue global = JS_GetGlobalObject(ctx_);
     JSValue fn = JS_GetPropertyStr(ctx_, global, func_name.c_str());
     if (!JS_IsFunction(ctx_, fn)) {
@@ -619,10 +636,23 @@ bool JSRuntimeHost::callFunction(const std::string& func_name,
 
     if (JS_IsException(ret)) {
         JSValue err = JS_GetException(ctx_);
+        std::string full_err;
         const char* err_str = JS_ToCString(ctx_, err);
-        if (out_err) *out_err = err_str ? err_str : "JS 执行异常";
-        if (err_str) JS_FreeCString(ctx_, err_str);
+        if (err_str) {
+            full_err = err_str;
+            JS_FreeCString(ctx_, err_str);
+        }
+        JSValue stack = JS_GetPropertyStr(ctx_, err, "stack");
+        if (!JS_IsUndefined(stack)) {
+            const char* stack_str = JS_ToCString(ctx_, stack);
+            if (stack_str) {
+                full_err += "\nStack:\n" + std::string(stack_str);
+                JS_FreeCString(ctx_, stack_str);
+            }
+        }
+        JS_FreeValue(ctx_, stack);
         JS_FreeValue(ctx_, err);
+        if (out_err) *out_err = full_err.empty() ? "JS 执行异常" : full_err;
         is_running_ = false;
         return false;
     }
@@ -654,9 +684,22 @@ bool JSRuntimeHost::callFunction(const std::string& func_name,
 
         if (wait_ctx.state == -1) {
             success = false;
+            std::string full_err;
             const char* err_str = JS_ToCString(ctx_, wait_ctx.result);
-            if (out_err) *out_err = err_str ? err_str : "Promise 被拒绝";
-            if (err_str) JS_FreeCString(ctx_, err_str);
+            if (err_str) {
+                full_err = err_str;
+                JS_FreeCString(ctx_, err_str);
+            }
+            JSValue stack = JS_GetPropertyStr(ctx_, wait_ctx.result, "stack");
+            if (!JS_IsUndefined(stack)) {
+                const char* stack_str = JS_ToCString(ctx_, stack);
+                if (stack_str) {
+                    full_err += "\nStack:\n" + std::string(stack_str);
+                    JS_FreeCString(ctx_, stack_str);
+                }
+            }
+            JS_FreeValue(ctx_, stack);
+            if (out_err) *out_err = full_err.empty() ? "Promise 被拒绝" : full_err;
             JS_FreeValue(ctx_, wait_ctx.result);
         } else {
             final_val = wait_ctx.result;
