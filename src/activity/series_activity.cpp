@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <borealis.hpp>
+#include <borealis/views/applet_frame.hpp>
 #include <borealis/views/scrolling_frame.hpp>
 
 #include "activity/player_activity.hpp"
@@ -13,6 +14,7 @@
 #include "utils/playback_history.hpp"
 #include "utils/scanner.hpp"
 #include "view/media_cell.hpp"
+#include "view/now_playing_bar.hpp"
 #include "view/tool_button.hpp"
 
 namespace muvik {
@@ -32,9 +34,8 @@ brls::View* SeriesActivity::createContentView() {
 
     auto* root = new brls::Box();
     root->setAxis(brls::Axis::COLUMN);
-    root->setWidthPercentage(100.0f);
-    root->setHeightPercentage(100.0f);
-    root->setPadding(24.0f, 32.0f, 24.0f, 32.0f);
+    root->setGrow(1.0f);
+    root->setPadding(16.0f, 28.0f, 16.0f, 28.0f);
 
     // ── 顶部 Hero 区域：海报/信息、简介、快捷续播按钮 ──
     auto* hero = new brls::Box();
@@ -42,11 +43,19 @@ brls::View* SeriesActivity::createContentView() {
     hero->setWidthPercentage(100.0f);
     hero->setMarginBottom(16.0f);
 
-    // 标题行
+    // 标题行（包含可见的返回按钮与作品标题）
     auto* title_box = new brls::Box();
     title_box->setAxis(brls::Axis::ROW);
     title_box->setAlignItems(brls::AlignItems::CENTER);
     title_box->setMarginBottom(6.0f);
+
+    auto* back_btn = new ToolButton(i18n::tr("common.back", "返回"), ui::Icon::Back, 12.0f);
+    back_btn->setMarginRight(14.0f);
+    back_btn->registerClickAction([](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    });
+    title_box->addView(back_btn);
 
     std::string full_title = series_.title;
     if (!series_.release_date.empty()) {
@@ -121,6 +130,8 @@ brls::View* SeriesActivity::createContentView() {
     auto* scroller = new brls::ScrollingFrame();
     scroller->setGrow(1.0f);
     scroller->setWidthPercentage(100.0f);
+    scroller->setMarginRight(20.0f);
+    styleScrollingFrame(scroller);
 
     episode_list_ = new brls::Box();
     episode_list_->setAxis(brls::Axis::COLUMN);
@@ -131,18 +142,37 @@ brls::View* SeriesActivity::createContentView() {
     scroller->setContentView(episode_list_);
     root->addView(scroller);
 
-    // 绑定返回键 B：退出当前剧集选集页面
+    // 注册返回动作至容器节点
+    root->registerAction(i18n::tr("common.back", "返回"), brls::ControllerButton::BUTTON_B,
+                         [](brls::View*) {
+                             brls::Application::popActivity();
+                             return true;
+                         });
+    scroller->registerAction(i18n::tr("common.back", "返回"), brls::ControllerButton::BUTTON_B,
+                            [](brls::View*) {
+                                brls::Application::popActivity();
+                                return true;
+                            });
+
+    frame_ = new brls::AppletFrame(root);
+    frame_->setTitle(series_.title.empty() ? i18n::tr("media.series_detail", "剧集详情") : series_.title);
+    frame_->setIcon(BRLS_ASSET("icon/icon.png"));
+
+    NowPlayingBar::install(frame_);
+
+    return frame_;
+}
+
+void SeriesActivity::onContentAvailable() {
+    Activity::onContentAvailable();
+
+    // 确保无论焦点在何处，手柄或快捷键按 B 均能安全退出当前剧集详情页面
     this->registerAction(i18n::tr("common.back", "返回"), brls::ControllerButton::BUTTON_B,
                          [](brls::View*) {
                              brls::Application::popActivity();
                              return true;
                          });
 
-    return root;
-}
-
-void SeriesActivity::onContentAvailable() {
-    Activity::onContentAvailable();
     if (play_btn_) {
         brls::Application::giveFocus(play_btn_);
     }
@@ -151,6 +181,13 @@ void SeriesActivity::onContentAvailable() {
 void SeriesActivity::refreshEpisodeList() {
     if (!episode_list_) return;
     episode_list_->clearViews();
+
+    if (series_.episodes.empty()) {
+        episode_list_->addView(new EmptyState(
+            ui::Icon::Video, "暂无剧集分集",
+            "未能检索到可播放的媒体分集文件"));
+        return;
+    }
 
     auto& hist = PlaybackHistory::getInstance();
 

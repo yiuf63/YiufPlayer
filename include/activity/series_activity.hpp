@@ -26,6 +26,7 @@ private:
     SeriesGroup series_;
     ToolButton* play_btn_ = nullptr;
     brls::Box* episode_list_ = nullptr;
+    brls::AppletFrame* frame_ = nullptr;
     std::vector<std::shared_ptr<std::atomic<bool>>> alive_flags_;
 };
 
