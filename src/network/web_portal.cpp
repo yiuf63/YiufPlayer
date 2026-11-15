@@ -277,6 +277,61 @@ void WebPortal::handleClient(int client_fd) {
         return;
     }
 
+    if (method == "GET" && path.rfind("/api/plugin/search", 0) == 0) {
+        std::string plug_id, q;
+        size_t q_pos = path.find('?');
+        if (q_pos != std::string::npos) {
+            std::string query_str = path.substr(q_pos + 1);
+            std::istringstream qs(query_str);
+            std::string pair;
+            while (std::getline(qs, pair, '&')) {
+                size_t eq = pair.find('=');
+                if (eq != std::string::npos) {
+                    std::string k = pair.substr(0, eq);
+                    std::string v = pair.substr(eq + 1);
+                    std::string decoded;
+                    for (size_t i = 0; i < v.size(); ++i) {
+                        if (v[i] == '%' && i + 2 < v.size()) {
+                            int hex_val = 0;
+                            std::istringstream hex_ss(v.substr(i + 1, 2));
+                            if (hex_ss >> std::hex >> hex_val) {
+                                decoded.push_back(static_cast<char>(hex_val));
+                                i += 2;
+                                continue;
+                            }
+                        } else if (v[i] == '+') {
+                            decoded.push_back(' ');
+                            continue;
+                        }
+                        decoded.push_back(v[i]);
+                    }
+                    if (k == "id") plug_id = decoded;
+                    else if (k == "q") q = decoded;
+                }
+            }
+        }
+        std::vector<MediaItem> results;
+        bool has_more = false;
+        bool ok = PluginManager::getInstance().searchVideoSource(plug_id, q, 1, results, has_more);
+        json res = {
+            {"ok", ok},
+            {"query", q},
+            {"count", results.size()},
+            {"items", json::array()}
+        };
+        for (const auto& item : results) {
+            res["items"].push_back({
+                {"name", item.name},
+                {"path", item.path},
+                {"type", item.is_directory() ? "directory" : (item.is_audio() ? "audio" : "video")},
+                {"size", item.size},
+                {"thumbnail", item.thumbnail_url}
+            });
+        }
+        sendResponse(200, "application/json; charset=utf-8", res.dump());
+        return;
+    }
+
     if (method == "POST" && path == "/api/remote/input") {
         try {
             json req = json::parse(body);

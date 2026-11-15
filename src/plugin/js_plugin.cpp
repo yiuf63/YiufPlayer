@@ -136,6 +136,9 @@ std::shared_ptr<JSPlugin> JSPlugin::loadFromDirectory(const std::string& dir_pat
             plugin->capabilities_.push_back("scraper");
         }
     }
+    if (runtime->hasFunction("search") && !plugin->hasCapability("search")) {
+        plugin->capabilities_.push_back("search");
+    }
 
     // 如果插件定义了 init(config)，自动传入当前持久化配置
     if (runtime->hasFunction("init")) {
@@ -149,9 +152,15 @@ std::shared_ptr<JSPlugin> JSPlugin::loadFromDirectory(const std::string& dir_pat
     return plugin;
 }
 
-// --- MediaStreamProvider 实现 ---
+bool JSPlugin::hasSearch() const {
+    if (hasCapability("search")) return true;
+    std::lock_guard<std::mutex> lock(runtime_mutex_);
+    return runtime_ && runtime_->hasFunction("search");
+}
 
-bool JSPlugin::search(const std::string& keyword, int page, std::vector<MediaItem>& out_items, bool& out_has_more) {
+// --- MediaStreamProvider / 搜索实现 ---
+
+bool JSPlugin::search(const std::string& keyword, int page, std::vector<MediaItem>& out_items, bool& out_has_more, const std::string& scope_path) {
     out_items.clear();
     out_has_more = false;
     std::lock_guard<std::mutex> lock(runtime_mutex_);
@@ -160,7 +169,8 @@ bool JSPlugin::search(const std::string& keyword, int page, std::vector<MediaIte
     std::string out_json, err;
     json arg_kw = keyword;
     json arg_pg = page;
-    if (!runtime_->callFunction("search", { arg_kw.dump(), arg_pg.dump() }, out_json, &err)) {
+    json arg_sc = scope_path;
+    if (!runtime_->callFunction("search", { arg_kw.dump(), arg_pg.dump(), arg_sc.dump() }, out_json, &err)) {
         brls::Logger::error("[JSPlugin:{}] search 执行出错: {}", id_, err);
         return false;
     }
@@ -182,10 +192,30 @@ bool JSPlugin::search(const std::string& keyword, int page, std::vector<MediaIte
             MediaItem mi;
             mi.name = item.value("title", item.value("name", ""));
             std::string item_id = item.value("id", "");
-            mi.path = "plugin://" + id_ + "/stream/" + item_id;
+            if (item.contains("path") && item["path"].is_string()) {
+                mi.path = item["path"].get<std::string>();
+            } else if (!item_id.empty()) {
+                mi.path = item_id;
+            } else {
+                mi.path = "plugin://" + id_ + "/stream/" + item_id;
+            }
+
             std::string type_str = item.value("type", "video");
-            mi.type = (type_str == "audio") ? MediaType::Audio : MediaType::Video;
+            if (type_str == "directory" || type_str == "folder" || item.value("isDirectory", false)) {
+                mi.type = MediaType::Directory;
+            } else if (type_str == "audio") {
+                mi.type = MediaType::Audio;
+            } else {
+                mi.type = MediaType::Video;
+            }
+
             mi.duration = item.value("duration", 0);
+            mi.size = item.value("size", 0);
+            if (item.contains("thumbnail") && item["thumbnail"].is_string()) {
+                mi.thumbnail_url = item["thumbnail"].get<std::string>();
+            } else if (item.contains("cover") && item["cover"].is_string()) {
+                mi.thumbnail_url = item["cover"].get<std::string>();
+            }
             out_items.push_back(mi);
         }
         return true;

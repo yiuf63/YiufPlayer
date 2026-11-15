@@ -78,11 +78,12 @@ public:
     bool hasMediaStream() const { return hasCapability("media_stream"); }
     bool hasStorage() const { return hasCapability("storage"); }
     bool hasScraper() const { return hasCapability("scraper"); }
+    bool hasSearch() const;
 
     const std::vector<PluginSettingField>& getSettings() const { return settings_; }
 
-    // --- MediaStreamProvider 接口 ---
-    bool search(const std::string& keyword, int page, std::vector<MediaItem>& out_items, bool& out_has_more);
+    // --- MediaStreamProvider / 搜索接口 ---
+    bool search(const std::string& keyword, int page, std::vector<MediaItem>& out_items, bool& out_has_more, const std::string& scope_path = "");
     bool loadDetail(const std::string& id, MediaDetail& out_detail);
     bool loadLinks(const std::string& episode_id, PlayLinksResult& out_links);
 

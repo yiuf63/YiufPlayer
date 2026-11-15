@@ -89,6 +89,17 @@ public:
                               const std::string& dir_path,
                               std::vector<MediaItem>& out);
 
+    // 检查插件视频源是否支持搜索
+    bool canSearch(const std::string& plugin_path_or_id) const;
+
+    // 通过插件视频源搜索媒体内容（支持流媒体番剧源与网盘文件检索）
+    bool searchVideoSource(const std::string& plugin_path_or_id,
+                           const std::string& keyword,
+                           int page,
+                           std::vector<MediaItem>& out_items,
+                           bool& out_has_more,
+                           const std::string& scope_path = "");
+
     // 通过插件提供的刮削器搜索
     bool scrapeSearch(const std::string& plugin_path,
                       const std::string& query, int64_t year,

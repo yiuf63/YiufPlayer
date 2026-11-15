@@ -55,6 +55,10 @@ void PluginBrowserActivity::onContentAvailable() {
     }
 
     this->registerAction("返回", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        if (is_searching_) {
+            clearSearch();
+            return true;
+        }
         if (!history_.empty()) {
             navigateUp();
             return true;
@@ -63,9 +67,19 @@ void PluginBrowserActivity::onContentAvailable() {
         return true;
     });
 
+    // 搜索（网盘文件或番剧内容）
+    this->registerAction("搜索", brls::ControllerButton::BUTTON_X, [this](brls::View*) {
+        promptSearch();
+        return true;
+    });
+
     // 刷新当前目录
     this->registerAction("刷新", brls::ControllerButton::BUTTON_Y, [this](brls::View*) {
-        render();
+        if (is_searching_) {
+            performSearch(search_query_);
+        } else {
+            render();
+        }
         return true;
     });
 
@@ -73,6 +87,9 @@ void PluginBrowserActivity::onContentAvailable() {
 }
 
 std::string PluginBrowserActivity::currentTitle() const {
+    if (is_searching_) {
+        return plugin_name_ + " / 搜索: " + search_query_;
+    }
     std::string base = plugin_name_;
     if (current_path_.empty() || current_path_ == "/") return base;
     // 取路径最后一段
@@ -161,6 +178,15 @@ void PluginBrowserActivity::render() {
                 list_->addView(up);
             }
 
+            // 搜索条目（支持快速输入检索）
+            auto* search_bar = new MediaCell(ui::Icon::Search, "搜索此源的内容…", "按 X 键或点击输入关键词检索");
+            search_bar->setChevron(true);
+            search_bar->registerClickAction([this](brls::View*) {
+                promptSearch();
+                return true;
+            });
+            list_->addView(search_bar);
+
             // 分目录与可播放条目
             std::vector<MediaItem> dirs, playable;
             for (const auto& it : items) {
@@ -236,10 +262,209 @@ void PluginBrowserActivity::render() {
                             return true;
                         }
 
-                        // 2. 动态预签名直链解析 (PikPak / 移动云盘)
-                        StreamSource resolved_source;
-                        if (PluginManager::getInstance().resolvePlayUrl(current_plugin, target_item.path, resolved_source)) {
-                            std::vector<MediaItem> resolved_list = playlist;
+                        // 2. 动态预签名直链解析 (PikPak / 移动云盘等网盘)
+                        brls::Application::notify("正在解析播放直链…");
+                        std::thread([playlist, idx, current_plugin, target_item]() {
+                            StreamSource resolved_source;
+                            bool ok = PluginManager::getInstance().resolvePlayUrl(current_plugin, target_item.path, resolved_source);
+                            brls::sync([playlist, idx, ok, resolved_source]() {
+                                std::vector<MediaItem> resolved_list = playlist;
+                                if (ok && !resolved_source.url.empty()) {
+                                    resolved_list[idx].path = resolved_source.url;
+                                    auto* player_act = new PlayerActivity(resolved_list, idx);
+                                    if (!resolved_source.headers.empty()) {
+                                        player_act->setStreamHeaders(resolved_source.headers);
+                                    }
+                                    brls::Application::pushActivity(player_act);
+                                } else {
+                                    brls::Application::pushActivity(new PlayerActivity(playlist, idx));
+                                }
+                            });
+                        }).detach();
+                        return true;
+                    });
+                    list_->addView(cell);
+                }
+            }
+            list_->setPaddingBottom(28.0f);
+        });
+    }).detach();
+}
+
+void PluginBrowserActivity::promptSearch() {
+    brls::Application::getImeManager()->openForText(
+        [this](std::string text) {
+            while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) text.erase(0, 1);
+            while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) text.pop_back();
+
+            if (text.empty()) {
+                clearSearch();
+            } else {
+                search_query_ = text;
+                is_searching_ = true;
+                performSearch(search_query_);
+            }
+        },
+        "搜索 - " + plugin_name_,
+        "输入关键词进行搜索，留空清除",
+        64);
+}
+
+void PluginBrowserActivity::clearSearch() {
+    is_searching_ = false;
+    search_query_.clear();
+    render();
+}
+
+void PluginBrowserActivity::performSearch(const std::string& query) {
+    if (!list_ || !frame_) return;
+
+    frame_->setTitle(plugin_name_ + " / 搜索: " + query);
+    list_->clearViews();
+    loading_ = true;
+
+    auto* clear_cell = new MediaCell(ui::Icon::Back, "退出搜索结果 (" + query + ")", "点击或按 B 返回目录");
+    clear_cell->registerClickAction([this](brls::View*) {
+        clearSearch();
+        return true;
+    });
+    list_->addView(clear_cell);
+
+    list_->addView(new EmptyState(ui::Icon::Search, "正在搜索 \"" + query + "\"…",
+                                  "正在查询匹配的内容"));
+
+    auto alive = std::make_shared<std::atomic<bool>>(true);
+    alive_flags_.push_back(alive);
+
+    std::string plugin = plugin_path_;
+    std::string current_p = current_path_;
+
+    std::thread([this, alive, plugin, query, current_p]() {
+        std::vector<MediaItem> results;
+        bool ok = false;
+        bool has_more = false;
+
+        if (PluginManager::getInstance().canSearch(plugin)) {
+            ok = PluginManager::getInstance().searchVideoSource(plugin, query, 1, results, has_more, current_p);
+        } else {
+            // 本地模糊过滤
+            std::vector<MediaItem> all_items;
+            if (PluginManager::getInstance().listVideoSourceItems(plugin, current_p, all_items)) {
+                std::string lq = query;
+                std::transform(lq.begin(), lq.end(), lq.begin(), ::tolower);
+                for (const auto& it : all_items) {
+                    std::string ln = it.name;
+                    std::transform(ln.begin(), ln.end(), ln.begin(), ::tolower);
+                    if (ln.find(lq) != std::string::npos) {
+                        results.push_back(it);
+                    }
+                }
+                ok = true;
+            }
+        }
+
+        brls::sync([this, alive, ok, results, query]() {
+            if (!alive->load()) return;
+            if (!list_ || !frame_) return;
+            loading_ = false;
+            renderSearchResults(query, ok, results);
+        });
+    }).detach();
+}
+
+void PluginBrowserActivity::renderSearchResults(const std::string& query, bool ok, const std::vector<MediaItem>& results) {
+    list_->clearViews();
+
+    auto* clear_cell = new MediaCell(ui::Icon::Back, "退出搜索结果 (" + query + ")", "点击或按 B 返回目录");
+    clear_cell->registerClickAction([this](brls::View*) {
+        clearSearch();
+        return true;
+    });
+    list_->addView(clear_cell);
+
+    if (!ok) {
+        list_->addView(new EmptyState(ui::Icon::Error, "搜索失败", "请检查网络或配置，按 Y 重新搜索"));
+        return;
+    }
+
+    if (results.empty()) {
+        list_->addView(new EmptyState(ui::Icon::Search, "未找到与 \"" + query + "\" 相关的结果",
+                                      "请尝试更换关键词，或点击上方退出搜索"));
+        return;
+    }
+
+    std::vector<MediaItem> dirs, playable;
+    for (const auto& it : results) {
+        if (it.is_directory()) dirs.push_back(it);
+        else if (it.is_video() || it.is_audio()) playable.push_back(it);
+    }
+
+    if (!dirs.empty()) {
+        list_->addView(new SectionHeader("文件夹 · " + std::to_string(dirs.size())));
+        for (const auto& d : dirs) {
+            auto* cell = new MediaCell(ui::Icon::Folder, d.name, "文件夹");
+            cell->setChevron(true);
+            std::string target = d.path;
+            std::string current_plugin = plugin_path_;
+            std::string d_name = d.name;
+            cell->registerClickAction([this, target, current_plugin, d_name](brls::View*) {
+                // 检查是否为流媒体剧集详情 (Kazumi 模型)
+                MediaDetail detail;
+                if (PluginManager::getInstance().loadDetail(current_plugin, target, detail) && !detail.episodes.empty()) {
+                    SeriesGroup sg;
+                    sg.id = detail.id.empty() ? target : detail.id;
+                    sg.title = detail.title.empty() ? d_name : detail.title;
+                    sg.overview = detail.overview;
+                    sg.poster_url = detail.poster_url;
+                    sg.backdrop_url = detail.backdrop_url;
+                    sg.release_date = detail.release_date;
+                    sg.folder_path = current_plugin;
+                    for (const auto& ep : detail.episodes) {
+                        MediaItem mi;
+                        mi.name = ep.title;
+                        mi.path = ep.id;
+                        mi.type = MediaType::Video;
+                        sg.episodes.push_back(mi);
+                    }
+                    brls::Application::pushActivity(new SeriesActivity(sg));
+                    return true;
+                }
+                clearSearch();
+                navigateTo(target);
+                return true;
+            });
+            list_->addView(cell);
+        }
+    }
+
+    if (!playable.empty()) {
+        list_->addView(new SectionHeader("搜索结果 · " + std::to_string(playable.size())));
+        for (size_t i = 0; i < playable.size(); ++i) {
+            const bool is_video = playable[i].is_video();
+            auto* cell = new MediaCell(
+                is_video ? ui::Icon::Video : ui::Icon::Music,
+                playable[i].name,
+                is_video ? "视频" : "音频");
+            size_t idx = i;
+            std::vector<MediaItem> playlist = playable;
+            std::string current_plugin = plugin_path_;
+            cell->registerClickAction([playlist, idx, current_plugin](brls::View*) {
+                const auto& target_item = playlist[idx];
+                if (target_item.path.rfind("http://", 0) == 0 ||
+                    target_item.path.rfind("https://", 0) == 0 ||
+                    target_item.path.rfind("rtmp://", 0) == 0 ||
+                    target_item.path.rfind("rtsp://", 0) == 0) {
+                    brls::Application::pushActivity(new PlayerActivity(playlist, idx));
+                    return true;
+                }
+
+                brls::Application::notify("正在解析播放直链…");
+                std::thread([playlist, idx, current_plugin, target_item]() {
+                    StreamSource resolved_source;
+                    bool ok = PluginManager::getInstance().resolvePlayUrl(current_plugin, target_item.path, resolved_source);
+                    brls::sync([playlist, idx, ok, resolved_source]() {
+                        std::vector<MediaItem> resolved_list = playlist;
+                        if (ok && !resolved_source.url.empty()) {
                             resolved_list[idx].path = resolved_source.url;
                             auto* player_act = new PlayerActivity(resolved_list, idx);
                             if (!resolved_source.headers.empty()) {
@@ -249,14 +474,14 @@ void PluginBrowserActivity::render() {
                         } else {
                             brls::Application::pushActivity(new PlayerActivity(playlist, idx));
                         }
-                        return true;
                     });
-                    list_->addView(cell);
-                }
-            }
-            list_->setPaddingBottom(28.0f);
-        });
-    }).detach();
+                }).detach();
+                return true;
+            });
+            list_->addView(cell);
+        }
+    }
+    list_->setPaddingBottom(28.0f);
 }
 
 } // namespace muvik

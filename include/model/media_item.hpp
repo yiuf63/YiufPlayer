@@ -32,6 +32,7 @@ struct MediaItem {
     int64_t duration = 0;      // 媒体总时长（秒）
     int64_t last_position = 0; // 上次播放进度（秒）
     std::string extension;     // 后缀名（小写）
+    std::string thumbnail_url; // 缩略图或海报 URL/路径
     std::vector<std::string> matched_subtitles; // 匹配到的同名外部字幕
 
     bool is_directory() const { return type == MediaType::Directory; }

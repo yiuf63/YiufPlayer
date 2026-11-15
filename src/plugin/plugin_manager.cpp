@@ -509,7 +509,37 @@ std::shared_ptr<JSPlugin> PluginManager::getJSPlugin(const std::string& path_or_
     std::lock_guard<std::recursive_mutex> lock(plugins_mutex_);
     auto it = js_plugins_.find(path_or_id);
     if (it != js_plugins_.end()) return it->second;
+    for (const auto& kv : js_plugins_) {
+        if (kv.second && (kv.second->getId() == path_or_id || kv.second->getDirectory() == path_or_id)) {
+            return kv.second;
+        }
+    }
     return nullptr;
+}
+
+bool PluginManager::canSearch(const std::string& plugin_path_or_id) const {
+    std::lock_guard<std::recursive_mutex> lock(plugins_mutex_);
+    auto js_plug = getJSPlugin(plugin_path_or_id);
+    if (js_plug) {
+        return js_plug->hasSearch();
+    }
+    return false;
+}
+
+bool PluginManager::searchVideoSource(const std::string& plugin_path_or_id,
+                                      const std::string& keyword,
+                                      int page,
+                                      std::vector<MediaItem>& out_items,
+                                      bool& out_has_more,
+                                      const std::string& scope_path) {
+    out_items.clear();
+    out_has_more = false;
+    std::lock_guard<std::recursive_mutex> lock(plugins_mutex_);
+    auto js_plug = getJSPlugin(plugin_path_or_id);
+    if (js_plug) {
+        return js_plug->search(keyword, page, out_items, out_has_more, scope_path);
+    }
+    return false;
 }
 
 bool PluginManager::loadStreamLinks(const std::string& plugin_path_or_id,
@@ -552,13 +582,13 @@ bool PluginManager::listVideoSourceItems(const std::string& plugin_path,
     std::lock_guard<std::recursive_mutex> lock(plugins_mutex_);
 
     // 优先分发给 JS 驱动插件
-    auto js_it = js_plugins_.find(plugin_path);
-    if (js_it != js_plugins_.end() && js_it->second) {
-        if (js_it->second->hasStorage()) {
-            return js_it->second->listDirectory(dir_path, out);
-        } else if (js_it->second->hasMediaStream()) {
+    auto js_plug = getJSPlugin(plugin_path);
+    if (js_plug) {
+        if (js_plug->hasStorage()) {
+            return js_plug->listDirectory(dir_path, out);
+        } else if (js_plug->hasMediaStream()) {
             bool has_more = false;
-            return js_it->second->search("", 1, out, has_more);
+            return js_plug->search("", 1, out, has_more);
         }
         return false;
     }

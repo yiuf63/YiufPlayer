@@ -243,6 +243,14 @@ int main() {
     CHECK_TRUE(pm.listVideoSourceItems(fake_plugin_dir, "/", pm_items), "PluginManager 列目录成功");
     CHECK_EQ(pm_items.size(), 2, "PluginManager 列目录结果为 2 项");
 
+    // 经由 PluginManager 检索视频源
+    CHECK_TRUE(pm.canSearch(fake_plugin_dir), "PluginManager 检测到搜索能力");
+    std::vector<MediaItem> pm_search_items;
+    bool pm_has_more = false;
+    CHECK_TRUE(pm.searchVideoSource(fake_plugin_dir, "动漫", 1, pm_search_items, pm_has_more), "PluginManager 搜索执行成功");
+    CHECK_EQ(pm_search_items.size(), 1, "PluginManager 搜索返回 1 项");
+    CHECK_EQ(pm_search_items[0].name, "测试动漫 第一季", "搜索结果标题一致");
+
     // 经由 PluginManager 解析播放流
     PlayLinksResult pm_links;
     CHECK_TRUE(pm.loadStreamLinks(fake_plugin_dir, "ep_1", pm_links), "PluginManager loadStreamLinks 成功");

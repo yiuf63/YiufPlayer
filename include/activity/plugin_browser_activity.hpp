@@ -33,11 +33,19 @@ private:
     void navigateUp();
     std::string currentTitle() const;
 
+    void promptSearch();
+    void performSearch(const std::string& query);
+    void clearSearch();
+    void renderSearchResults(const std::string& query, bool ok, const std::vector<MediaItem>& results);
+
     std::string plugin_path_;
     std::string plugin_name_;
     std::string current_path_;
     std::string initial_path_;
     std::vector<std::string> history_;
+
+    bool is_searching_ = false;
+    std::string search_query_;
 
     brls::AppletFrame* frame_ = nullptr;
     brls::ScrollingFrame* scroller_ = nullptr;

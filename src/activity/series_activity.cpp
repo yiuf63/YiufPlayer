@@ -234,17 +234,28 @@ void SeriesActivity::playEpisode(size_t index) {
     auto js_plug = PluginManager::getInstance().getJSPlugin(series_.folder_path);
     if (js_plug && js_plug->hasMediaStream()) {
         const auto& ep = series_.episodes[index];
-        PlayLinksResult links;
-        if (PluginManager::getInstance().loadStreamLinks(series_.folder_path, ep.path, links) && !links.streams.empty()) {
-            std::vector<MediaItem> resolved_episodes = series_.episodes;
-            resolved_episodes[index].path = links.streams[0].url;
-            auto* player = new PlayerActivity(resolved_episodes, index);
-            if (!links.streams[0].headers.empty()) {
-                player->setStreamHeaders(links.streams[0].headers);
-            }
-            brls::Application::pushActivity(player);
-            return;
-        }
+        brls::Application::notify("正在解析剧集播放直链…");
+        std::string folder_path = series_.folder_path;
+        auto episodes = series_.episodes;
+        std::string ep_path = ep.path;
+        std::thread([folder_path, episodes, index, ep_path]() {
+            PlayLinksResult links;
+            bool ok = PluginManager::getInstance().loadStreamLinks(folder_path, ep_path, links);
+            brls::sync([episodes, index, ok, links]() {
+                if (ok && !links.streams.empty()) {
+                    std::vector<MediaItem> resolved_episodes = episodes;
+                    resolved_episodes[index].path = links.streams[0].url;
+                    auto* player = new PlayerActivity(resolved_episodes, index);
+                    if (!links.streams[0].headers.empty()) {
+                        player->setStreamHeaders(links.streams[0].headers);
+                    }
+                    brls::Application::pushActivity(player);
+                } else {
+                    brls::Application::pushActivity(new PlayerActivity(episodes, index));
+                }
+            });
+        }).detach();
+        return;
     }
 
     brls::Application::pushActivity(new PlayerActivity(series_.episodes, index));
