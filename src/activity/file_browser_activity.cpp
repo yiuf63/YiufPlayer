@@ -814,7 +814,10 @@ MediaCell* FileBrowserActivity::makeVideoCell(const MediaItem& item,
         return true;
     });
 
-    // X 键获取信息：暂不暴露在界面底部提示条中，等待刮削方案最终确定
+    cell->registerAction(i18n::tr("media.get_info", "获取信息"), brls::ControllerButton::BUTTON_X, [this, item](brls::View*) {
+        showMediaInfo(item.path, item.name);
+        return true;
+    });
     return cell;
 }
 
@@ -830,7 +833,10 @@ brls::View* FileBrowserActivity::makeVideoCard(const MediaItem& item,
         return true;
     });
 
-    // X 键获取信息：暂不暴露在界面底部提示条中，等待刮削方案最终确定
+    card->registerAction(i18n::tr("media.get_info", "获取信息"), brls::ControllerButton::BUTTON_X, [this, item](brls::View*) {
+        showMediaInfo(item.path, item.name);
+        return true;
+    });
     return card;
 }
 
@@ -2587,9 +2593,18 @@ void FileBrowserActivity::showMediaInfo(const std::string& path, const std::stri
         }
         if (!meta->overview.empty()) body += "\n" + meta->overview;
     } else {
-        body = filename + "\n\n" + i18n::tr("media.no_info", "尚未获取影片信息。\n选中该条目后按 X 键可自动刮削。");
+        body = filename + "\n\n" + i18n::tr("media.no_info", "尚未获取影片信息。\n可点击下方按钮发起刮削。");
     }
     brls::Dialog* d = new brls::Dialog(body);
+    if (!meta || meta->is_empty()) {
+        d->addButton(i18n::tr("scraper.scrape_now", "立即刮削"), [this, path, filename]() {
+            this->scrapeItem(path, filename);
+        });
+    } else {
+        d->addButton(i18n::tr("scraper.rescrape", "重新刮削"), [this, path, filename]() {
+            this->scrapeItem(path, filename);
+        });
+    }
     d->addButton(i18n::tr("common.close", "关闭"), []() {});
     d->open();
 }
