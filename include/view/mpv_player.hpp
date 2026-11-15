@@ -4,6 +4,7 @@
 #include <functional>
 #include <string>
 #include <vector>
+#include <map>
 #include <borealis.hpp>
 #include <mpv/client.h>
 #include <mpv/render_gl.h>
@@ -63,6 +64,11 @@ public:
     // 打开播放文件
     void openFile(const std::string& path, const std::string& title = "", int64_t resume_position = 0,
                   const std::vector<std::string>& extra_subtitles = {});
+
+    // 设置流媒体自定义 HTTP Headers (User-Agent, Referer, Cookie 等)
+    void setStreamHeaders(const std::map<std::string, std::string>& headers) {
+        stream_headers_ = headers;
+    }
 
     // 基础播放控制
     void togglePlayPause();
@@ -298,6 +304,7 @@ private:
     std::chrono::steady_clock::time_point last_eof_time_{};  // 连播防抖
     std::function<void(bool)> on_prev_next_cb_;
     std::function<void()> on_show_playlist_cb_;
+    std::map<std::string, std::string> stream_headers_;
 };
 
 } // namespace muvik

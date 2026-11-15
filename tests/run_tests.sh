@@ -37,7 +37,7 @@ mkdir -p "$BUILD_DIR"
 # 需要额外源文件与链接参数的测试在此登记
 # 格式: 名称|源文件|附加源文件|额外编译参数
 # 需要 fmt / borealis 头文件的测试单独处理
-BOREALIS_INC="-I$ROOT/external/borealis/library/include -isystem $ROOT/external/borealis/library/include/borealis/extern -I$ROOT/external/borealis/library/include/borealis/extern/nanovg -I$ROOT/external/borealis/library/lib/extern/fmt/include"
+BOREALIS_INC="-I$ROOT/external/borealis/library/include -isystem $ROOT/external/borealis/library/include/borealis/extern -I$ROOT/external/borealis/library/include/borealis/extern/nanovg -I$ROOT/external/borealis/library/lib/extern/fmt/include -I$ROOT/external/borealis/library/lib/extern/tweeny/include -I$ROOT/external/borealis/library/lib/extern/yoga/yoga"
 QUICKJS_INC="-I$ROOT/external/quickjs"
 FMT_LIB=""
 for f in "$ROOT"/build/borealis/lib/extern/fmt/libfmt.a "$ROOT"/.build-tests/libfmt.a; do
@@ -48,7 +48,7 @@ for f in "$ROOT"/build/quickjs/libquickjs.a "$ROOT"/.build-tests/libquickjs.a; d
     [ -f "$f" ] && QUICKJS_LIB="$f" && break
 done
 
-PLUGIN_SRCS="src/plugin/plugin_manager.cpp src/plugin/plugin_config_store.cpp src/plugin/js_plugin.cpp src/plugin/js_runtime.cpp src/utils/crypto_utils.cpp src/utils/app_paths.cpp src/utils/media_name_parser.cpp"
+PLUGIN_SRCS="src/plugin/plugin_manager.cpp src/plugin/plugin_config_store.cpp src/plugin/js_plugin.cpp src/plugin/js_runtime.cpp src/utils/crypto_utils.cpp src/utils/app_paths.cpp src/utils/media_name_parser.cpp src/utils/network_utils.cpp"
 PLUGIN_FLAGS="$BOREALIS_INC $QUICKJS_INC $FMT_LIB $QUICKJS_LIB $(pkg-config --libs libcurl) -ldl -lpthread"
 
 TESTS=(

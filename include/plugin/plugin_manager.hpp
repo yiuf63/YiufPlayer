@@ -11,6 +11,8 @@ namespace muvik {
 
 class JSPlugin;
 struct PlayLinksResult;
+struct StreamSource;
+struct MediaDetail;
 
 // 刮削详情的 C++ 表示（从 ABI 的 muvik_scrape_result 转换而来）
 struct ScrapeDetail {
@@ -114,6 +116,16 @@ public:
     bool loadStreamLinks(const std::string& plugin_path_or_id,
                          const std::string& episode_id,
                          PlayLinksResult& out_links);
+
+    // 解析网盘/存储插件中的播放直链（由 JS 插件的 resolvePlayUrl 提供）
+    bool resolvePlayUrl(const std::string& plugin_path_or_id,
+                        const std::string& path,
+                        StreamSource& out_source);
+
+    // 解析番剧/影视详情（由 JS 插件的 loadDetail 提供）
+    bool loadDetail(const std::string& plugin_path_or_id,
+                    const std::string& id,
+                    MediaDetail& out_detail);
 
 private:
     // 插件表被多线程访问：UI 线程读取（getPlugins/渲染），

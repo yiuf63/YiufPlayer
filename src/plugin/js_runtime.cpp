@@ -4,6 +4,7 @@
 #include "plugin/js_runtime.hpp"
 #include "plugin/plugin_config_store.hpp"
 #include "utils/crypto_utils.hpp"
+#include "utils/network_utils.hpp"
 #include <borealis/core/logger.hpp>
 #include <curl/curl.h>
 #include <sstream>
@@ -385,6 +386,79 @@ JSRuntimeHost& JSRuntimeHost::operator=(JSRuntimeHost&& other) noexcept {
     return *this;
 }
 
+static JSValue jsHostGetDeviceIP(JSContext* ctx, JSValueConst /*this_val*/, int /*argc*/, JSValueConst* /*argv*/) {
+    std::string ip = NetworkUtils::getLocalIPv4();
+    return JS_NewString(ctx, ip.c_str());
+}
+
+static JSRuntimeHost::QRCodeHandler g_qrcode_handler = nullptr;
+static JSRuntimeHost::NotifyHandler g_notify_handler = nullptr;
+
+void JSRuntimeHost::setQRCodeHandler(QRCodeHandler handler) {
+    g_qrcode_handler = std::move(handler);
+}
+
+void JSRuntimeHost::setNotifyHandler(NotifyHandler handler) {
+    g_notify_handler = std::move(handler);
+}
+
+static JSValue jsHostShowQRCode(JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv) {
+    if (argc < 1 || !JS_IsObject(argv[0])) {
+        return JS_ThrowTypeError(ctx, "host.showQRCode expects an options object");
+    }
+    JSValue opt = argv[0];
+    std::string url, title = "扫码", hint = "";
+
+    JSValue val_url = JS_GetPropertyStr(ctx, opt, "url");
+    if (!JS_IsString(val_url)) {
+        JS_FreeValue(ctx, val_url);
+        val_url = JS_GetPropertyStr(ctx, opt, "text");
+    }
+    if (JS_IsString(val_url)) {
+        const char* s = JS_ToCString(ctx, val_url);
+        if (s) { url = s; JS_FreeCString(ctx, s); }
+    }
+    JS_FreeValue(ctx, val_url);
+
+    JSValue val_title = JS_GetPropertyStr(ctx, opt, "title");
+    if (JS_IsString(val_title)) {
+        const char* s = JS_ToCString(ctx, val_title);
+        if (s) { title = s; JS_FreeCString(ctx, s); }
+    }
+    JS_FreeValue(ctx, val_title);
+
+    JSValue val_hint = JS_GetPropertyStr(ctx, opt, "hint");
+    if (JS_IsString(val_hint)) {
+        const char* s = JS_ToCString(ctx, val_hint);
+        if (s) { hint = s; JS_FreeCString(ctx, s); }
+    }
+    JS_FreeValue(ctx, val_hint);
+
+    if (url.empty()) {
+        return JS_ThrowTypeError(ctx, "url or text is required");
+    }
+
+    if (g_qrcode_handler) {
+        g_qrcode_handler(title, url, hint);
+    }
+
+    return JS_NewBool(ctx, 1);
+}
+
+static JSValue jsHostNotify(JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv) {
+    if (argc < 1 || !JS_IsString(argv[0])) {
+        return JS_ThrowTypeError(ctx, "host.notify expects a message string");
+    }
+    const char* s = JS_ToCString(ctx, argv[0]);
+    std::string msg = s ? s : "";
+    JS_FreeCString(ctx, s);
+
+    if (g_notify_handler) {
+        g_notify_handler(msg);
+    }
+    return JS_NewBool(ctx, 1);
+}
+
 void JSRuntimeHost::cleanup() {
     if (ctx_) {
         JS_FreeContext(ctx_);
@@ -415,6 +489,10 @@ void JSRuntimeHost::initSandbox() {
     JSValue host_obj = JS_NewObject(ctx_);
     JS_SetPropertyStr(ctx_, host_obj, "http", JS_NewCFunction(ctx_, jsHostHttp, "http", 1));
     JS_SetPropertyStr(ctx_, host_obj, "getConfig", JS_NewCFunction(ctx_, jsHostGetConfig, "getConfig", 1));
+    JS_SetPropertyStr(ctx_, host_obj, "getDeviceIP", JS_NewCFunction(ctx_, jsHostGetDeviceIP, "getDeviceIP", 0));
+    JS_SetPropertyStr(ctx_, host_obj, "showQRCode", JS_NewCFunction(ctx_, jsHostShowQRCode, "showQRCode", 1));
+    JS_SetPropertyStr(ctx_, host_obj, "notify", JS_NewCFunction(ctx_, jsHostNotify, "notify", 1));
+    JS_SetPropertyStr(ctx_, host_obj, "toast", JS_NewCFunction(ctx_, jsHostNotify, "toast", 1));
 
     // host.storage
     JSValue storage_obj = JS_NewObject(ctx_);

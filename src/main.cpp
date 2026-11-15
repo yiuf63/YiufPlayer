@@ -19,6 +19,10 @@
 #include "activity/plugin_manager_activity.hpp"
 #include "activity/plugin_browser_activity.hpp"
 #include "plugin/plugin_manager.hpp"
+#include "plugin/js_runtime.hpp"
+#include "view/qr_code_view.hpp"
+#include "network/web_portal.hpp"
+#include "utils/app_paths.hpp"
 #include "model/metadata_store.hpp"
 #include <filesystem>
 #include <cstdio>
@@ -91,7 +95,22 @@ int main(int argc, char* argv[]) {
     // 应用手柄按键布局偏好（Xbox / Steam 标准 vs Nintendo Switch 反转）
     muvik::InputSettings::applySettings();
 
-    // 允许强制窗口尺寸，用于验证不同屏幕下的适配：
+    // 绑定 JS 插件扫码弹窗回调
+    muvik::JSRuntimeHost::setQRCodeHandler([](const std::string& title, const std::string& url, const std::string& hint) {
+        brls::sync([title, url, hint]() {
+            muvik::QRCodeView::showDialog(title, url, hint);
+        });
+    });
+    muvik::JSRuntimeHost::setNotifyHandler([](const std::string& msg) {
+        brls::sync([msg]() {
+            brls::Application::notify(msg);
+        });
+    });
+
+    // 掌机硬件环境或显式指定时，自动在后台静默拉起局域网 Web 门户服务
+    if (muvik::AppPaths::isTrimUI() || std::getenv("MUVIK_PORTAL")) {
+        muvik::WebPortal::getInstance().start(8888);
+    }
     //   MUVIK_WINDOW=1280x800   （Steam Deck 原生分辨率）
     //   MUVIK_WINDOW=640x360    （小屏）
     //
@@ -310,7 +329,8 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // 退出前落盘进度并关闭音频引擎
+    // 退出前落盘进度并关闭音频引擎与局域网后台
+    muvik::WebPortal::getInstance().stop();
     muvik::AudioPlayer::getInstance().shutdown();
 
     return EXIT_SUCCESS;

@@ -33,6 +33,8 @@
 #include "view/media_thumb.hpp"
 #include "view/tool_button.hpp"
 #include "view/view_sheet.hpp"
+#include "network/web_portal.hpp"
+#include "view/qr_code_view.hpp"
 #include "model/series_detector.hpp"
 #include "activity/series_activity.hpp"
 #include "model/library_view_options.hpp"
@@ -668,6 +670,20 @@ void FileBrowserActivity::renderSourcesContent() {
             return true;
         });
         list->addView(manage);
+
+        // 手机扫码配置 / 局域网控制台入口
+        auto* web_portal_cell = new MediaCell(
+            ui::Icon::Drive, "手机扫码配置 (局域网后台)",
+            "在手机上长按粘贴 M3U/网盘配置、遥控掌机或上传插件");
+        web_portal_cell->setChevron(true);
+        web_portal_cell->registerClickAction([](brls::View*) {
+            WebPortal::getInstance().start(8888);
+            std::string url = WebPortal::getInstance().getPortalUrl();
+            QRCodeView::showDialog("手机扫码配置", url,
+                                   "手机连接同一 Wi-Fi 后扫码即可管理配置与插件\n" + url);
+            return true;
+        });
+        list->addView(web_portal_cell);
     } else {
         // 返回上级
         auto* up = new MediaCell(ui::Icon::Back, "..");

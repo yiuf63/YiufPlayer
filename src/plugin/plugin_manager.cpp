@@ -1,6 +1,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <set>
 #include <vector>
 #include "plugin/plugin_manager.hpp"
 #include "plugin/js_plugin.hpp"
@@ -18,6 +19,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <mutex>
+#include <set>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -264,6 +266,11 @@ bool PluginManager::loadPlugin(const std::string& file_path, PluginSourceType so
                 return false;
             }
 
+            // 防止同 ID 插件重复加入
+            for (const auto& p : plugins_) {
+                if (p.id == js_plug->getId()) return false;
+            }
+
             LoadedPlugin info;
             info.path = file_path;
             info.id = js_plug->getId();
@@ -432,8 +439,30 @@ size_t PluginManager::loadAll(const std::string& plugins_dir) {
         return count;
     }
 
-    // 1. 本地插件目录（~/.config/muvik/plugins/）
-    tryLoadDir(AppPaths::pluginsDir(), PluginSourceType::Local);
+    // 1. 扫描本地标准与掌机便携插件目录（自动去重真实路径）
+    std::vector<std::string> search_dirs = {
+        AppPaths::pluginsDir(),
+        "./plugins",
+        "plugins"
+    };
+    if (AppPaths::isTrimUI()) {
+        search_dirs.push_back("/mnt/SDCARD/Apps/YiufPlayer/plugins");
+    }
+    const char* env_plug = std::getenv("MUVIK_PLUGINS_DIR");
+    if (env_plug && *env_plug) {
+        search_dirs.push_back(env_plug);
+    }
+
+    std::set<std::string> canonical_dirs;
+    for (const auto& d : search_dirs) {
+        std::error_code ec;
+        if (!fs::exists(d, ec)) continue;
+        fs::path canon = fs::canonical(d, ec);
+        std::string canon_str = ec ? d : canon.string();
+        if (canonical_dirs.insert(canon_str).second) {
+            tryLoadDir(canon, PluginSourceType::Local);
+        }
+    }
 
     // 2. Steam 创意工坊订阅目录
     for (const auto& ws_path : getWorkshopSearchPaths()) {
@@ -490,6 +519,28 @@ bool PluginManager::loadStreamLinks(const std::string& plugin_path_or_id,
     auto it = js_plugins_.find(plugin_path_or_id);
     if (it != js_plugins_.end() && it->second) {
         return it->second->loadLinks(episode_id, out_links);
+    }
+    return false;
+}
+
+bool PluginManager::resolvePlayUrl(const std::string& plugin_path_or_id,
+                                   const std::string& path,
+                                   StreamSource& out_source) {
+    std::lock_guard<std::recursive_mutex> lock(plugins_mutex_);
+    auto it = js_plugins_.find(plugin_path_or_id);
+    if (it != js_plugins_.end() && it->second) {
+        return it->second->resolvePlayUrl(path, out_source);
+    }
+    return false;
+}
+
+bool PluginManager::loadDetail(const std::string& plugin_path_or_id,
+                               const std::string& id,
+                               MediaDetail& out_detail) {
+    std::lock_guard<std::recursive_mutex> lock(plugins_mutex_);
+    auto it = js_plugins_.find(plugin_path_or_id);
+    if (it != js_plugins_.end() && it->second) {
+        return it->second->loadDetail(id, out_detail);
     }
     return false;
 }

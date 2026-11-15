@@ -5,7 +5,9 @@
 #include <vector>
 #include "activity/plugin_browser_activity.hpp"
 #include "activity/player_activity.hpp"
+#include "activity/series_activity.hpp"
 #include "plugin/plugin_manager.hpp"
+#include "plugin/js_plugin.hpp"
 #include <borealis/views/scrolling_frame.hpp>
 #include "view/media_cell.hpp"
 #include "ui/icons.hpp"
@@ -134,7 +136,7 @@ void PluginBrowserActivity::render() {
         std::vector<MediaItem> items;
         bool ok = PluginManager::getInstance().listVideoSourceItems(plugin, path, items);
 
-        brls::sync([this, alive, ok, items, path]() {
+        brls::sync([this, alive, ok, items, path, plugin]() {
             if (!alive->load()) return;   // 活动已销毁
             if (!list_ || !frame_) return;
 
@@ -180,7 +182,30 @@ void PluginBrowserActivity::render() {
                     auto* cell = new MediaCell(ui::Icon::Folder, d.name, "文件夹");
                     cell->setChevron(true);
                     std::string target = d.path;
-                    cell->registerClickAction([this, target](brls::View*) {
+                    std::string current_plugin = plugin;
+                    std::string d_name = d.name;
+                    cell->registerClickAction([this, target, current_plugin, d_name](brls::View*) {
+                        // 检查是否为流媒体剧集详情 (Kazumi 模型)
+                        MediaDetail detail;
+                        if (PluginManager::getInstance().loadDetail(current_plugin, target, detail) && !detail.episodes.empty()) {
+                            SeriesGroup sg;
+                            sg.id = detail.id.empty() ? target : detail.id;
+                            sg.title = detail.title.empty() ? d_name : detail.title;
+                            sg.overview = detail.overview;
+                            sg.poster_url = detail.poster_url;
+                            sg.backdrop_url = detail.backdrop_url;
+                            sg.release_date = detail.release_date;
+                            sg.folder_path = current_plugin; // 借用记录插件路径以解析分集
+                            for (const auto& ep : detail.episodes) {
+                                MediaItem mi;
+                                mi.name = ep.title;
+                                mi.path = ep.id;
+                                mi.type = MediaType::Video;
+                                sg.episodes.push_back(mi);
+                            }
+                            brls::Application::pushActivity(new SeriesActivity(sg));
+                            return true;
+                        }
                         navigateTo(target);
                         return true;
                     });
@@ -199,9 +224,31 @@ void PluginBrowserActivity::render() {
                         is_video ? "视频" : "音频");
                     size_t idx = i;
                     std::vector<MediaItem> playlist = playable;
-                    cell->registerClickAction([playlist, idx](brls::View*) {
-                        brls::Application::pushActivity(
-                            new PlayerActivity(playlist, idx));
+                    std::string current_plugin = plugin;
+                    cell->registerClickAction([playlist, idx, current_plugin](brls::View*) {
+                        const auto& target_item = playlist[idx];
+                        // 1. 直链或本地文件直接播放
+                        if (target_item.path.rfind("http://", 0) == 0 ||
+                            target_item.path.rfind("https://", 0) == 0 ||
+                            target_item.path.rfind("rtmp://", 0) == 0 ||
+                            target_item.path.rfind("rtsp://", 0) == 0) {
+                            brls::Application::pushActivity(new PlayerActivity(playlist, idx));
+                            return true;
+                        }
+
+                        // 2. 动态预签名直链解析 (PikPak / 移动云盘)
+                        StreamSource resolved_source;
+                        if (PluginManager::getInstance().resolvePlayUrl(current_plugin, target_item.path, resolved_source)) {
+                            std::vector<MediaItem> resolved_list = playlist;
+                            resolved_list[idx].path = resolved_source.url;
+                            auto* player_act = new PlayerActivity(resolved_list, idx);
+                            if (!resolved_source.headers.empty()) {
+                                player_act->setStreamHeaders(resolved_source.headers);
+                            }
+                            brls::Application::pushActivity(player_act);
+                        } else {
+                            brls::Application::pushActivity(new PlayerActivity(playlist, idx));
+                        }
                         return true;
                     });
                     list_->addView(cell);

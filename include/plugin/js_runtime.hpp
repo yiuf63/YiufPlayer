@@ -55,6 +55,12 @@ public:
                       std::string& out_result_json,
                       std::string* out_err = nullptr);
 
+    // 设置全局二维码与通知展示回调（解耦 View 层，适配单元测试与不同 UI 宿主）
+    using QRCodeHandler = std::function<void(const std::string& title, const std::string& url, const std::string& hint)>;
+    using NotifyHandler = std::function<void(const std::string& msg)>;
+    static void setQRCodeHandler(QRCodeHandler handler);
+    static void setNotifyHandler(NotifyHandler handler);
+
     // 设置执行超时时间（秒，默认 30 秒，防止死循环）
     void setExecutionTimeout(int seconds);
 

@@ -1820,6 +1820,25 @@ void MPVPlayerView::openFile(const std::string& path, const std::string& title, 
     }
 
     last_eof_time_ = std::chrono::steady_clock::now();  // 为防抖窗口起点
+
+    // 注入自定义 HTTP Headers（如直播源或网盘的 User-Agent / Referer / Cookie）
+    if (!stream_headers_.empty()) {
+        std::string header_str;
+        for (const auto& kv : stream_headers_) {
+            if (!header_str.empty()) header_str += ",";
+            header_str += kv.first + ": " + kv.second;
+            if (kv.first == "User-Agent" || kv.first == "user-agent") {
+                mpv_set_property_string(mpv_, "user-agent", kv.second.c_str());
+            }
+            if (kv.first == "Referer" || kv.first == "referer") {
+                mpv_set_property_string(mpv_, "referrer", kv.second.c_str());
+            }
+        }
+        mpv_set_property_string(mpv_, "http-header-fields", header_str.c_str());
+    } else {
+        mpv_set_property_string(mpv_, "http-header-fields", "");
+    }
+
     const char* cmd[] = {"loadfile", path.c_str(), nullptr};
     int rc = mpv_command_async(mpv_, 0, cmd);
     brls::Logger::info("MPVPlayerView: loadfile 返回 {}", rc);

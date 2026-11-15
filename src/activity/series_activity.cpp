@@ -5,6 +5,8 @@
 #include <borealis/views/scrolling_frame.hpp>
 
 #include "activity/player_activity.hpp"
+#include "plugin/plugin_manager.hpp"
+#include "plugin/js_plugin.hpp"
 #include "ui/design.hpp"
 #include "ui/icons.hpp"
 #include "utils/i18n.hpp"
@@ -190,6 +192,24 @@ void SeriesActivity::refreshEpisodeList() {
 
 void SeriesActivity::playEpisode(size_t index) {
     if (index >= series_.episodes.size()) return;
+
+    // 检查是否为流媒体插件剧集（Kazumi 模型），调用 loadLinks 解析真实播放直链与 Headers
+    auto js_plug = PluginManager::getInstance().getJSPlugin(series_.folder_path);
+    if (js_plug && js_plug->hasMediaStream()) {
+        const auto& ep = series_.episodes[index];
+        PlayLinksResult links;
+        if (PluginManager::getInstance().loadStreamLinks(series_.folder_path, ep.path, links) && !links.streams.empty()) {
+            std::vector<MediaItem> resolved_episodes = series_.episodes;
+            resolved_episodes[index].path = links.streams[0].url;
+            auto* player = new PlayerActivity(resolved_episodes, index);
+            if (!links.streams[0].headers.empty()) {
+                player->setStreamHeaders(links.streams[0].headers);
+            }
+            brls::Application::pushActivity(player);
+            return;
+        }
+    }
+
     brls::Application::pushActivity(new PlayerActivity(series_.episodes, index));
 }
 
