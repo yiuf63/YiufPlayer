@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 应用显示名。
+         之前 AndroidManifest 里硬编码 android:label="Muvik"，
+         项目早已改名为 Yiuf Player，桌面图标却还显示旧名字。
+         抽到这里之后：① 只需改一处；② 可以做多语言。 -->
+    <string name="app_name">Yiuf Player</string>
+</resources>

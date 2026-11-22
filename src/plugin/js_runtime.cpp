@@ -30,8 +30,13 @@ namespace muvik {
 
 namespace {
 
+// ⚠ 守卫要**尽量窄**：只包住真正用到 libcurl 的代码。
+// 早先这里写的是「namespace 一开始就 #if !defined(ANDROID)，
+// 一直到 400 多行才 #endif」，结果 jsHostGetConfig / jsHostStorage* /
+// jsHostCrypto* / jsHostLog* / jsInterruptHandler 全被一起排除了 ——
+// Android 构建报几十个 "use of undeclared identifier"。
+// 这些都是纯逻辑，跟 curl 无关，必须无条件编译。
 #if !defined(ANDROID)
-
 struct CurlWriteContext {
     std::string body;
     std::vector<std::string> headers;
@@ -57,7 +62,13 @@ static size_t curlWriteHeaderCallback(void* ptr, size_t size, size_t nmemb, void
     return total;
 }
 
+#endif  // !defined(ANDROID)：curl 回调辅助结束
+
 // 供 JS 调用的 host.http
+//
+// 注意本函数在**所有平台**都要有定义：宿主把这四个 API 无条件注册给 JS
+// （见 installHostApi），缺一个就是编译期 undeclared identifier。
+// 只有函数内部真正发请求的部分需要按平台分支。
 static JSValue jsHostHttp(JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv) {
     if (argc < 1 || !JS_IsObject(argv[0])) {
         return JS_ThrowTypeError(ctx, "host.http expects options object");
@@ -242,8 +253,9 @@ static JSValue jsHostHttp(JSContext* ctx, JSValueConst /*this_val*/, int argc, J
     }
     JS_SetPropertyStr(ctx, result, "headers", resp_headers);
     return result;
-#endif  // !defined(ANDROID)：curl 实现结束
+#endif  // !defined(ANDROID)：curl 的 host.http 实现结束
 }
+
 
 // 供 JS 调用的 host.storage
 static JSValue jsHostStorageGet(JSContext* ctx, JSValueConst /*this_val*/, int argc, JSValueConst* argv) {
@@ -416,8 +428,6 @@ static int jsInterruptHandler(JSRuntime* /*rt*/, void* opaque) {
     }
     return 0; // 正常返回 0
 }
-
-#endif  // !defined(ANDROID)：curl 辅助函数与 host.http 实现结束
 
 } // namespace
 

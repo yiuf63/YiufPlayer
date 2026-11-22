@@ -1,4 +1,7 @@
 package org.muvik.android;
+import android.content.Intent;
+import android.net.Uri;
+import android.provider.Settings;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
@@ -94,6 +97,47 @@ public class MuvikActivity extends SDLActivity {
             requestPermissions(need.toArray(new String[0]), 1001);
         } else {
             Log.i(TAG, "媒体权限已授予");
+        }
+
+        // 「所有文件访问」是特殊权限，**不能**走 requestPermissions，
+        // 只能引导用户去系统设置页手动开启。
+        ensureAllFilesAccess();
+    }
+
+    /**
+     * 检查并引导开启「所有文件访问」(MANAGE_EXTERNAL_STORAGE)。
+     *
+     * 为什么需要它：本项目的媒体库是**自己递归遍历目录**的，
+     * 而不是通过 MediaStore 查询。Android 11 起，
+     * READ_MEDIA_VIDEO/AUDIO 只在 MediaStore 查询路径上生效，
+     * 应用直接用 opendir/readdir 访问 /sdcard 会被拒绝。
+     *
+     * 实测（Android 16，权限已全部授予的前提下）：
+     *     ls /sdcard/Movies -> Permission denied
+     *
+     * 表现就是用户看到的两个问题：
+     *     · 添加媒体库时目录是空的
+     *     · 字幕选不了文件（文件选择器列不出 .srt/.ass）
+     */
+    private void ensureAllFilesAccess() {
+        if (Build.VERSION.SDK_INT < 30) return;   // Android 11 以下没有这个限制
+        if (Environment.isExternalStorageManager()) {
+            Log.i(TAG, "所有文件访问权限已授予");
+            return;
+        }
+        Log.w(TAG, "缺少「所有文件访问」权限：媒体库扫描与字幕选择都会是空的");
+        try {
+            Intent intent = new Intent(
+                Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                Uri.parse("package:" + getPackageName()));
+            startActivity(intent);
+        } catch (Exception e) {
+            // 部分 ROM 没有这个 Activity，退回到「所有文件访问」总列表
+            try {
+                startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
+            } catch (Exception e2) {
+                Log.e(TAG, "无法打开所有文件访问设置页: " + e2.getMessage());
+            }
         }
     }
 

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- 声明需要 OpenGL ES 3.0：nanoVG 与 mpv 渲染都依赖它。
          wiliwili 同样声明此项，缺少时部分设备会选错 GL 上下文。 -->
@@ -9,6 +10,34 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+
+    <!--
+        **必须声明** MANAGE_EXTERNAL_STORAGE。这是本项目在 Android 上
+        「添加媒体库是空的」「字幕选不了文件」两个问题的根因。
+
+        为什么 READ_MEDIA_VIDEO/AUDIO 不够：
+          Android 11 起，READ_MEDIA_* 只授予**通过 MediaStore 查询**
+          媒体条目的能力；应用自己用 opendir/readdir 遍历
+          /sdcard/Movies 这类目录会被直接拒绝。
+
+          实测（OnePlus Pad / Android 16）：
+            READ_MEDIA_VIDEO granted=true
+            adb shell run-as org.muvik.android ls /sdcard/Movies
+              -> ls: /sdcard/Movies: Permission denied
+
+          而本项目的媒体库是**自己递归扫描目录**（MediaScanner::rebuild），
+          没走 MediaStore，因此拿不到任何文件 —— 用户看到的就是空库。
+          文件选择器同理，列不出任何视频/字幕文件。
+
+        MANAGE_EXTERNAL_STORAGE 是「所有文件访问」权限：
+          · 属于特殊权限，**不能**用 requestPermissions 弹窗申请；
+          · 需要在设置页手动开启，代码里用 Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION 跳转；
+          · Play 商店对上架应用有此权限的审核，自行分发不受限。
+
+        本项目以 GPL-3.0 自行分发（不上架 Play），因此可以使用。
+    -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
     <!-- Android 12 及以下的旧权限名，供 minSdk 24 使用 -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
@@ -35,7 +64,7 @@
     <uses-feature android:name="android.software.leanback" android:required="false" />
 
     <application
-        android:label="Muvik"
+        android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="true"
         android:hardwareAccelerated="true"

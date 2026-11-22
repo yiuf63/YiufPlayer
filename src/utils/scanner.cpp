@@ -87,6 +87,56 @@ std::vector<StorageSource> MediaScanner::getAvailableSources() {
         }
     };
 
+    // 0. Android 存储（必须放在最前，且优先于一切 POSIX 路径）
+    //
+    // 为什么原来在 Android 上「添加媒体库」会从根目录开始、而且是空的：
+    //   这里整段候选路径全是 /mnt/SDCARD、/media、/run/media、/Volumes ——
+    //   普通 Linux/macOS 的挂载点。Android 的共享存储既不在其中，
+    //   也无法用 stat 探测（这些目录根本不存在），于是 getAvailableSources()
+    //   返回空列表，文件选择器退化成「手动输入路径」的根目录视图。
+    //
+    // Android 的路径规则（相对稳定，可安全硬编码）：
+    //   内置共享存储  /storage/emulated/<userId>   等价软链 /sdcard
+    //   外置 SD 卡    /storage/<XXXX-XXXX>         物理卷 ID，需枚举
+    //
+    // 注意 /storage/emulated/0 与 /sdcard 是同一个位置，用 seen 集合去重。
+#if defined(ANDROID)
+    {
+        // 内置存储：先按当前用户的 /sdcard（最通用，非 0 用户也能用）
+        addSource("android_internal", "内部存储", "/sdcard", "sd_card", false, true);
+        // 兜底：部分 ROM 没有 /sdcard 软链
+        addSource("android_emulated_0", "内部存储", "/storage/emulated/0", "sd_card", false, true);
+
+        // 常用媒体目录（存在才列出，让用户少点两层）
+        for (const char* sub : {"Movies", "Music", "Download", "DCIM"}) {
+            const std::string p = std::string("/sdcard/") + sub;
+            addSource(std::string("android_") + sub, std::string("内部存储 / ") + sub,
+                      p, "video_library", false, true);
+        }
+
+        // 外置 SD 卡：/storage 下除 emulated / self 之外的目录
+        std::error_code sd_ec;
+        if (fs::exists("/storage", sd_ec) && !sd_ec) {
+            try {
+                fs::directory_iterator it("/storage",
+                                          fs::directory_options::skip_permission_denied, sd_ec);
+                fs::directory_iterator end;
+                while (!sd_ec && it != end) {
+                    std::error_code e;
+                    const std::string name = it->path().filename().string();
+                    // emulated 是内置存储的挂载点，self 是当前用户的软链
+                    if (name != "emulated" && name != "self" && it->is_directory(e)) {
+                        addSource("android_sd_" + name,
+                                  std::string("SD 卡 (") + name + ")",
+                                  it->path().string(), "sd_card", true, true);
+                    }
+                    it.increment(sd_ec);
+                }
+            } catch (...) {}
+        }
+    }
+#endif
+
     // 1. 开源掌机与嵌入式 Linux 存储卡及媒体目录 (TrimUI / Miyoo / Anbernic / Linux SBC)
     addSource("sdcard_videos", i18n::tr("files.sdcard_videos", "MicroSD 视频目录 (/mnt/SDCARD/Videos)"),
               "/mnt/SDCARD/Videos", "video_library", false, true);
