@@ -5,6 +5,7 @@
 using namespace muvik;
 
 int main() {
+    TEST_SUITE();
     TEST_BEGIN("剧集识别与聚合 / SeriesDetector");
 
     // 1. 单集编号提取测试

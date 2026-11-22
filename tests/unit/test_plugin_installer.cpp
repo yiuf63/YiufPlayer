@@ -70,6 +70,7 @@ bool makeSlipZip(const std::string& zip_path) {
 } // namespace
 
 int main() {
+    TEST_SUITE();
     setenv("MUVIK_ENABLE_NATIVE_PLUGINS", "1", 1);
     setenv("XDG_CONFIG_HOME", "/tmp/muvik_test_installer", 1);
     std::system("rm -rf /tmp/muvik_test_installer /tmp/MUVIK_PWNED.txt "

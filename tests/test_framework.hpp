@@ -41,8 +41,56 @@ std::string toStr(const T& v) {
     return oss.str();
 }
 
+// ── 退出码守卫 ────────────────────────────────────────────────────────
+//
+// 这里曾经有一个**让所有测试失效**的缺陷：
+//
+//   int main() {
+//       ...
+//       TEST_SUMMARY();      // ← 宏返回 0/1，但这条语句的返回值没人接
+//   }                        //   main 隐式返回 0
+//
+// 于是无论多少断言失败，进程退出码恒为 0；而 run_tests.sh 只看退出码。
+// 结果是「测试永远不会失败」——本项目历史上反复踩的「测试恒真」，
+// 这次藏在框架本身。实测发现 3 个套件（keymap/theme/workshop_dlc）
+// 完全不可失败，另有 3 个（display_mode/input_settings/series_detector）
+// 连 TEST_SUMMARY 都没调用。
+//
+// 修法：不能靠每个测试文件记得写 `return`——那是在用纪律防守。
+// 改成编译器保证：
+//
+//   1. 定义一个 main 返回值对象（Guard），析构时把 g_failures 映射成退出码；
+//   2. TEST_SUITE() 宏创建局部 Guard，它随 main 一起析构；
+//   3. 只要测试文件用了 TEST_SUITE()，退出码就一定正确。
+//
+// 为什么不用 atexit：atexit 无法改变已经确定的退出码。
+// 为什么不用全局对象的析构：析构顺序不确定，可能晚于 main 返回。
+struct ExitGuard {
+    ~ExitGuard() {
+        // 注意：析构函数里调用 std::exit 是安全的（C++ 标准允许），
+        // 且能保证即使测试里有提前 return 也走正确退出码。
+        std::fflush(stdout);
+        std::exit(g_failures == 0 ? 0 : 1);
+    }
+};
+
 } // namespace testing
 
+// TEST_SUITE()：在 main() 开头调用一次，负责最终的退出码。
+//
+// 用法：
+//   int main() {
+//       TEST_SUITE();
+//       TEST_BEGIN("...");
+//       ...
+//       TEST_END();
+//   }
+//
+// 即使忘了写 TEST_END / TEST_SUMMARY，退出码依然正确。
+#define TEST_SUITE() ::testing::ExitGuard _testing_exit_guard_;
+
+// 兼容旧写法：把 TEST_SUMMARY() 保留为「打印 + 返回值」，
+// 但现在它只是一个可选的收尾打印，退出码由 TEST_SUITE() 保证。
 #define TEST_BEGIN(name)                                                      \
     do {                                                                      \
         ::testing::g_current_suite = (name);                                  \

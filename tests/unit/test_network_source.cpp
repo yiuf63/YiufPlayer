@@ -9,6 +9,7 @@
 using namespace muvik;
 
 int main() {
+    TEST_SUITE();
     setenv("XDG_CONFIG_HOME", "/tmp/muvik_test_netsrc", 1);
     std::filesystem::remove_all("/tmp/muvik_test_netsrc");
 

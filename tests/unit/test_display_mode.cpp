@@ -8,6 +8,7 @@
 using namespace muvik;
 
 int main() {
+    TEST_SUITE();
     setenv("XDG_CONFIG_HOME", "/tmp/muvik_test_display", 1);
     std::system("rm -rf /tmp/muvik_test_display");
 

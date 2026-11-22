@@ -12,6 +12,7 @@ using namespace muvik;
 namespace fs = std::filesystem;
 
 int main() {
+    TEST_SUITE();
     TEST_BEGIN("Crypto / MD5 与 SHA256 与 Base64");
     std::string text = "Hello Muvik 2026";
     std::string md5_res = crypto::md5(text);
@@ -263,6 +264,97 @@ int main() {
 
     pm.unloadAll();
     fs::remove_all(fake_plugin_dir);
+
+    // ── 回归：文档写法的 manifest 必须真的生效 ────────────────────────
+    //
+    // 实测事故：docs/PLUGIN-DEV.md 与 examples/tmdb_scraper_plugin 用的是
+    //   "capabilities": ["video_source"] 与 "configSchema": [...]
+    // 而代码只认 media_stream/storage 与 settings。于是「完全照文档写」的插件
+    // 既不出现在「文件 → 插件视频源」里，配置项也一条都不显示 ——
+    // 反而「不写 capabilities」靠自动探测能工作。文档与实现直接冲突。
+    //
+    // 下面用文档里的写法造插件，断言两条别名都生效。
+    TEST_BEGIN("JSPlugin / 文档写法（video_source + configSchema）别名");
+    std::string doc_plugin_dir = "/tmp/test_deckplayer_doc_style_plugin";
+    fs::remove_all(doc_plugin_dir);
+    fs::create_directories(doc_plugin_dir);
+
+    std::ofstream(doc_plugin_dir + "/manifest.json") << R"({
+        "id": "com.test.doc-style",
+        "name": "文档写法插件",
+        "version": "1.0.0",
+        "capabilities": ["video_source"],
+        "configSchema": [
+            { "key": "api_key", "title": "接口密钥", "type": "string", "default": "doc_default" },
+            { "key": "lang",    "title": "语言",     "type": "string", "default": "zh-CN" }
+        ]
+    })";
+    std::ofstream(doc_plugin_dir + "/main.js") << R"JS(
+        function init(cfg) { return "ok"; }
+        async function listDirectory(path) {
+            return { directories: [], files: [{ name: "a.mkv", path: "/a.mkv", type: "video" }] };
+        }
+    )JS";
+
+    auto doc_plug = JSPlugin::loadFromDirectory(doc_plugin_dir, &err);
+    CHECK_TRUE(doc_plug != nullptr, "文档写法的插件能加载");
+    if (doc_plug) {
+        // "video_source" 应被翻译成 media_stream + storage，
+        // 这样 PluginManager 才会把它当成视频源（has_video_source）。
+        CHECK_TRUE(doc_plug->hasMediaStream(), "video_source 别名 → media_stream");
+        CHECK_TRUE(doc_plug->hasStorage(), "video_source 别名 → storage");
+
+        // configSchema 应被解析成设置项，且 label 取自 title
+        const auto& st = doc_plug->getSettings();
+        CHECK_EQ(st.size(), (size_t)2, "configSchema 解析出 2 个设置项");
+        if (st.size() == 2) {
+            CHECK_EQ(st[0].key, "api_key", "设置项 key 正确");
+            CHECK_EQ(st[0].label, "接口密钥", "label 回退到 title（文档写法）");
+            CHECK_EQ(st[1].key, "lang", "第二个设置项 key 正确");
+        }
+        // 默认值应写入 PluginConfigStore，init 才能拿到
+        CHECK_EQ(PluginConfigStore::getInstance().get("com.test.doc-style", "api_key"),
+                 "doc_default", "默认值写入配置库");
+    }
+    fs::remove_all(doc_plugin_dir);
+
+    // ── 回归：onLinkExpired 降级路径不得自死锁 ──────────────────────
+    //
+    // 早先 onLinkExpired 持有 runtime_mutex_ 后直接调 resolvePlayUrl()，
+    // 而后者也锁同一把**非递归** mutex —— 同一线程二次加锁 = 永久挂死。
+    // 触发条件很常见：插件实现了 resolvePlayUrl 但没实现 onLinkExpired
+    // （绝大多数网盘插件就是这样），一旦接上「直链过期自动刷新」就会踩到。
+    //
+    // 这里直接调用它。修复前这个测试会挂住不返回；修复后正常返回 true。
+    TEST_BEGIN("JSPlugin / onLinkExpired 降级路径不自死锁（回归）");
+    std::string dl_dir = "/tmp/test_deckplayer_onlinkexpired";
+    fs::remove_all(dl_dir);
+    fs::create_directories(dl_dir);
+    std::ofstream(dl_dir + "/manifest.json") << R"({
+        "id": "com.test.onlinkexpired",
+        "name": "直链刷新降级测试",
+        "version": "1.0.0",
+        "capabilities": ["storage"]
+    })";
+    // 只实现 resolvePlayUrl，故意不实现 onLinkExpired
+    std::ofstream(dl_dir + "/main.js") << R"JS(
+        function init(cfg) { return "ok"; }
+        async function resolvePlayUrl(path) {
+            return { url: "https://cdn.example.com" + path + "?sign=fresh" };
+        }
+    )JS";
+
+    auto dl_plug = JSPlugin::loadFromDirectory(dl_dir, &err);
+    CHECK_TRUE(dl_plug != nullptr, "降级测试插件加载成功");
+    if (dl_plug) {
+        StreamSource expired;
+        // 若仍持有锁调公开 resolvePlayUrl，这一行会卡死（unit test 会超时）
+        bool ok = dl_plug->onLinkExpired("/movies/a.mkv", expired);
+        CHECK_TRUE(ok, "onLinkExpired 降级到 resolvePlayUrl 成功返回");
+        CHECK_TRUE(expired.url.find("sign=fresh") != std::string::npos,
+                   "降级路径拿到了新直链");
+    }
+    fs::remove_all(dl_dir);
 
     TEST_END();
     return TEST_SUMMARY();

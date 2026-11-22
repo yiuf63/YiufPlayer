@@ -22,6 +22,7 @@ void writeFile(const std::string& path) {
 } // namespace
 
 int main() {
+    TEST_SUITE();
     setenv("XDG_CONFIG_HOME", "/tmp/muvik_test_library", 1);
     std::system("rm -rf /tmp/muvik_test_library /tmp/muvik_test_media");
 

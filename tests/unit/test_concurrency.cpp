@@ -25,6 +25,7 @@ void writeFile(const std::string& p) {
 }
 
 int main() {
+    TEST_SUITE();
     setenv("XDG_CONFIG_HOME", "/tmp/muvik_test_concurrency", 1);
     std::system("rm -rf /tmp/muvik_test_concurrency /tmp/muvik_test_conc_media");
 

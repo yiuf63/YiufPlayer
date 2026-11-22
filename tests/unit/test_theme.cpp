@@ -4,6 +4,8 @@
 #include "utils/app_paths.hpp"
 #include "test_framework.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -13,6 +15,7 @@ using namespace muvik;
 namespace fs = std::filesystem;
 
 int main() {
+    TEST_SUITE();
     TEST_BEGIN("内置三大官方主题");
     auto themes = getAvailableThemes();
     CHECK_TRUE(themes.size() >= 3, "至少包含 3 个内置主题");
@@ -40,6 +43,82 @@ int main() {
 
     NVGcolor c3 = ui::hex("#00F"); // Blue 3-digit shorthand
     CHECK_TRUE(std::abs(c3.b - 1.0f) < 0.02f, "三位简写 Hex 解析");
+
+    TEST_BEGIN("禁用态颜色在三套主题下都可辨认（回归）");
+    // 背景：applyPaletteTo 里原本有 8 个硬编码深灰 disabled 色，
+    // 只适合深色主题。浅色主题下「深灰底 + 深灰字」对比度约 1.9:1，
+    // 按钮看起来像一块黑斑。现已改为从 palette 推导。
+    //
+    // 这里直接复算推导公式的结果，断言对比度达标。
+    // 阈值取 2.5：禁用态本来就要「弱化」，不能要求正文级的 4.5，
+    // 但低于 2.5 就真的读不出字了（WCAG 对纯装饰性元素的下限参考）。
+    auto rel_lum = [](NVGcolor c) {
+        auto lin = [](float v) {
+            return v <= 0.04045f ? v / 12.92f : std::pow((v + 0.055f) / 1.055f, 2.4f);
+        };
+        return 0.2126f * lin(c.r) + 0.7152f * lin(c.g) + 0.0722f * lin(c.b);
+    };
+    auto contrast = [&](NVGcolor a, NVGcolor b) {
+        const float la = rel_lum(a), lb = rel_lum(b);
+        const float hi = std::max(la, lb), lo = std::min(la, lb);
+        return (hi + 0.05f) / (lo + 0.05f);
+    };
+
+    for (const auto& item : getAvailableThemes()) {
+        if (!item.is_builtin) continue;
+        const auto& p = item.palette;
+
+        // 调用**真实实现**，而不是在测试里复制一份公式。
+        // 复制公式的话，把实现改回硬编码时测试依旧全绿 —— 那正是
+        // 本项目反复踩过的「测试恒真」。
+        const DisabledColors dc = deriveDisabledColors(p);
+        const float c_text_on_fill = contrast(dc.text, dc.fill);   // 禁用字压在禁用底上
+        const float c_fill_on_bg   = contrast(dc.fill, p.bg);      // 禁用底压在页面背景上
+
+        const std::string msg1 = item.id + " 禁用文字/禁用底色 对比度 >= 2.5（实测 " +
+                                 std::to_string(c_text_on_fill).substr(0, 4) + "）";
+        // 第二项是真正抓 bug 的那条。
+        //
+        // 旧的实现把禁用底色写死成 0x24262B（深灰）。深色主题下它与背景
+        // 很接近（对比度约 3.1），看不出问题；但浅色主题的背景是
+        // 0xF2F1ED 米白，"深灰块压在米白上"的对比度高达 13.4 ——
+        // 用户看到的是一块突兀的黑斑，而不是"禁用状态"。
+        //
+        // 所以判据是**上限**：禁用底必须与页面背景足够接近（< 5:1），
+        // 太接近了说明是"压下去"的观感，太远说明是一块异物。
+        const std::string msg2 = item.id + " 禁用底色/页面背景 对比度 <= 5（实测 " +
+                                 std::to_string(c_fill_on_bg).substr(0, 4) + "）";
+        CHECK_TRUE(c_text_on_fill >= 2.5f, msg1.c_str());
+        CHECK_TRUE(c_fill_on_bg <= 5.0f, msg2.c_str());
+    }
+
+    TEST_BEGIN("动效缓动工具 easeOut");
+    // 端点：必须精确落在 0 / 1，否则动画会残留半截不透明度
+    CHECK_TRUE(std::abs(ui::easeOut(0.0f) - 0.0f) < 1e-6f, "t=0 → 0");
+    CHECK_TRUE(std::abs(ui::easeOut(1.0f) - 1.0f) < 1e-6f, "t=1 → 1");
+    // 越界输入要被 clamp，不能把 NaN／负值放大到颜色里
+    CHECK_TRUE(std::abs(ui::easeOut(-5.0f) - 0.0f) < 1e-6f, "t<0 被钳到 0");
+    CHECK_TRUE(std::abs(ui::easeOut(9.0f) - 1.0f) < 1e-6f, "t>1 被钳到 1");
+    // 单调递增：中途不能回退，否则焦点动画会「抖」
+    {
+        float prev = -1.0f;
+        bool monotonic = true;
+        for (int i = 0; i <= 20; ++i) {
+            const float v = ui::easeOut(static_cast<float>(i) / 20.0f);
+            if (v < prev - 1e-6f) monotonic = false;
+            prev = v;
+        }
+        CHECK_TRUE(monotonic, "0..1 区间内单调不减");
+    }
+    // 缓出特征：前半程必须走得比线性多（这是「立刻有响应」的来源）
+    CHECK_TRUE(ui::easeOut(0.5f) > 0.5f, "中点已过半（缓出而非线性）");
+    CHECK_TRUE(ui::easeOut(0.5f) > 0.70f, "中点至少走了 70% 路程");
+    // 起步斜率要明显大于 1：把 t 从 0 挪一点点，返回值应明显大于 t
+    {
+        const float small = 0.05f;
+        const float v = ui::easeOut(small);
+        CHECK_TRUE(v > small * 1.5f, "起步斜率足（缓出初见即动）");
+    }
 
     TEST_BEGIN("theme.json 解析 - 完整配置");
     std::string sample_json = R"JSON({
@@ -133,5 +212,5 @@ int main() {
     applyThemeById("dark");
     CHECK_EQ(resolveThemeId(), "dark", "还原为 dark");
 
-    TEST_SUMMARY();
+    return TEST_SUMMARY();
 }

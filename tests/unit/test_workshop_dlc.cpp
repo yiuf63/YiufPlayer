@@ -9,6 +9,7 @@ using namespace muvik;
 namespace fs = std::filesystem;
 
 int main() {
+    TEST_SUITE();
     auto& pm = PluginManager::getInstance();
 
     TEST_BEGIN("Steam / App ID 解析");
@@ -72,5 +73,5 @@ int main() {
     p_dlc.source_badge = "[DLC]";
     CHECK_EQ(p_dlc.source_badge, "[DLC]", "DLC 插件徽标");
 
-    TEST_SUMMARY();
+    return TEST_SUMMARY();
 }

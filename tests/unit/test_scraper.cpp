@@ -20,6 +20,7 @@ using namespace muvik;
 namespace fs = std::filesystem;
 
 int main() {
+    TEST_SUITE();
     auto& pm = PluginManager::getInstance();
 
     // 需要显式加载：测试进程不经过 main()，没有自动扫描。

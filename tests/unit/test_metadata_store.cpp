@@ -17,6 +17,7 @@ void isolateConfig(const char* dir) {
 } // namespace
 
 int main() {
+    TEST_SUITE();
     isolateConfig("/tmp/muvik_test_metadata");
     std::system("rm -rf /tmp/muvik_test_metadata");
 

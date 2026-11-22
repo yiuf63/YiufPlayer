@@ -35,6 +35,7 @@ void runCase(const Case& c) {
 } // namespace
 
 int main() {
+    TEST_SUITE();
     TEST_BEGIN("文件名解析 / 常见影视命名");
 
     const Case cases[] = {

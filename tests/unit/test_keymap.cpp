@@ -9,6 +9,7 @@
 using namespace muvik;
 
 int main() {
+    TEST_SUITE();
     setenv("XDG_CONFIG_HOME", "/tmp/muvik_test_keymap", 1);
     std::system("rm -rf /tmp/muvik_test_keymap");
 
@@ -68,5 +69,5 @@ int main() {
     CHECK_EQ((int)Keymap::resolveActiveStyle(), (int)KeymapStyle::Switch, "MUVIK_FORCE_TRIMUI=1 时自动解析为 Switch 风格");
     unsetenv("MUVIK_FORCE_TRIMUI");
 
-    TEST_SUMMARY();
+    return TEST_SUMMARY();
 }

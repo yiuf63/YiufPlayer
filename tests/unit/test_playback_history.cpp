@@ -8,6 +8,7 @@
 using namespace muvik;
 
 int main() {
+    TEST_SUITE();
     setenv("XDG_CONFIG_HOME", "/tmp/muvik_test_history", 1);
     std::system("rm -rf /tmp/muvik_test_history");
 
@@ -51,12 +52,68 @@ int main() {
     CHECK_TRUE(r.completed, "播 97% 算看完");
 
     TEST_BEGIN("播放历史 / 边界");
+    // 0/0 表示「没有有效进度」：不创建记录（或已有记录时保持原样），
+    // 都不应被判成「已看完」。注意不能用 r.completed 断言 ——
+    // getRecord 返回 false 时 r 还保留着上一条记录的旧值，
+    // 必须先确认返回值再读字段。
     h.updateProgress("/m/zero.mkv", 0, 0);
-    h.getRecord("/m/zero.mkv", r);
-    CHECK_FALSE(r.completed, "时长为 0 时不判为看完");
+    HistoryRecord zero_rec;
+    if (h.getRecord("/m/zero.mkv", zero_rec)) {
+        CHECK_FALSE(zero_rec.completed, "时长为 0 时不判为看完");
+    } else {
+        CHECK_TRUE(true, "时长为 0 时不创建记录");
+    }
 
     h.updateProgress("", 100, 200);
     CHECK_FALSE(h.getRecord("", r), "空路径不记录");
+
+    // ── 回归：0/0 落盘曾把「已看完」抹成从头开始 ────────────────────
+    //
+    // 实测事故：MPVPlayerView::selectTrack() 在文件刚加载、time-pos 事件
+    // 还没到的时候无条件落盘，把 3|20|...|completed=1 覆盖成 0|0|...|0。
+    // 用户看到的是「已看完的片子点开一下，徽标变回 0%，续播点丢失」。
+    TEST_BEGIN("播放历史 / 0/0 不覆盖已有进度（回归）");
+    h.updateProgress("/m/finished.mkv", 19, 20, /*sid*/1, /*aid*/1);
+    h.getRecord("/m/finished.mkv", r);
+    CHECK_TRUE(r.completed, "先标记为已看完");
+
+    // 模拟「刚打开文件就自动选轨」：此时 position/duration 都还是 0
+    h.updateProgress("/m/finished.mkv", 0, 0, /*sid*/2, /*aid*/3);
+    h.getRecord("/m/finished.mkv", r);
+    CHECK_TRUE(r.completed, "0/0 落盘后仍保持「已看完」");
+    CHECK_EQ(r.position, (int64_t)19, "0/0 落盘不抹掉进度");
+    CHECK_EQ(r.duration, (int64_t)20, "0/0 落盘不抹掉时长");
+    CHECK_EQ(r.sid, 2, "但轨道选择仍然更新");
+    CHECK_EQ(r.aid, 3, "音轨选择也仍然更新");
+
+    // 未播放过的文件收到 0/0 时应当**建一条空进度记录**，只为存住轨道偏好。
+    // 这一条必须存在，否则「第一次打开就选字幕轨」的偏好无处可写，
+    // 下次打开又变回第一条（第 38 轮修过的「选过不记住」会复发）。
+    TEST_BEGIN("播放历史 / 0/0 首次写入只记轨道、不记进度");
+    h.updateProgress("/m/never-played.mkv", 0, 0, /*sid*/3, /*aid*/2);
+    HistoryRecord np;
+    CHECK_TRUE(h.getRecord("/m/never-played.mkv", np),
+               "没有旧记录时 0/0 也要建条目（供轨道偏好落地）");
+    if (h.getRecord("/m/never-played.mkv", np)) {
+        CHECK_EQ(np.position, (int64_t)0, "进度保持 0");
+        CHECK_EQ(np.duration, (int64_t)0, "时长保持 0");
+        CHECK_FALSE(np.completed, "不会被误解为已看完");
+        CHECK_EQ(np.sid, 3, "字幕轨偏好被记住");
+        CHECK_EQ(np.aid, 2, "音轨偏好被记住");
+    }
+
+    TEST_BEGIN("播放历史 / 0/0 不抹掉续播点");
+    h.updateProgress("/m/half.mkv", 600, 3600);
+    h.updateProgress("/m/half.mkv", 0, 0);
+    h.getRecord("/m/half.mkv", r);
+    CHECK_EQ(r.position, (int64_t)600, "续播点保留");
+    CHECK_FALSE(r.completed, "仍未看完");
+
+    TEST_BEGIN("播放历史 / 正常进度仍可覆盖");
+    h.updateProgress("/m/finished.mkv", 100, 3600, 1, 1);
+    h.getRecord("/m/finished.mkv", r);
+    CHECK_EQ(r.position, (int64_t)100, "带进度的写入正常覆盖");
+    CHECK_FALSE(r.completed, "重看时 completed 被正确清掉");
 
     TEST_END();
     return TEST_SUMMARY();
