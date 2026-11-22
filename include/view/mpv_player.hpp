@@ -240,6 +240,18 @@ private:
     int64_t current_position_ = 0; // 秒
     int64_t total_duration_ = 0;   // 秒
     int64_t pending_resume_position_ = 0; // 断点续播等待 FILE_LOADED 确认加载
+    // 字幕轨延迟就位重试计数。
+    //
+    // 为什么需要：Android 上实测 FILE_LOADED 触发的瞬间，mpv 的 track-list
+    // 里还**没有**内嵌字幕轨（getTracks("sub") 返回 0 条）；而 track-list
+    // 的 property-change 事件在此之前就发过了，之后不再重发。
+    // 于是「等事件」永远等不到，字幕永远不会被自动选中。
+    // 这里改为在每帧 tick 里轮询若干次，拿到轨道就立刻选中。
+    int sub_retry_left_ = 0;
+    // 格式徽标是否待计算（推迟一帧，避开 FILE_LOADED 时的属性同步等待）
+    bool badges_pending_ = false;
+    // pause 复位推迟到事件循环外执行（见 FILE_LOADED 分支的注释）
+    bool pause_reset_pending_ = false;
     int64_t last_saved_position_ = 0;     // 上次已持久化到历史的秒数（节流落盘）
     int volume_ = 100;
     float brightness_ = 1.0f;

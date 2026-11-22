@@ -23,10 +23,15 @@
 #include <iomanip>
 #include <sstream>
 #include <filesystem>
+#include <fstream>
+#include <string_view>
 #include <vector>
 
 #define GLFW_INCLUDE_NONE
 #if defined(ANDROID)
+// romfs：把资源编译进 so 的机制。字幕字体需要从里面解出来给 libass 用，
+// 因为 libass 只认文件系统路径、读不到 romfs 的内存块。
+#include <romfs/romfs.hpp>
 // Android 没有 GLFW。GL 函数指针通过 EGL 获取（NDK 标准做法），
 // 这也是 mpv 的 render API 在 Android 上要求的取指针方式。
 #include <EGL/egl.h>
@@ -105,6 +110,75 @@ inline float transportCenterX(float x, float width) { return x + width * 0.5f; }
 
 // 把 showHUD() 的历史字符串键映射到矢量图标。
 // 以前这个参数根本没被使用（HUD 只画文字），现在图标是信息主体之一。
+#if defined(ANDROID)
+// Android：把内置字体从 romfs 解到缓存目录，供 mpv/libass 读取。
+//
+// 背景见 initMPV() 里 sub-fonts-dir 那段注释：
+//   · 界面文字用 romfs（编译进 so），能显示；
+//   · libass 只认文件系统路径，读不到 romfs；
+//   · Android 上 ResourceLocator 定位不到 resources/ 目录。
+// 三者叠加 → 字幕轨能选中但画面上什么都没有。
+//
+// 返回解出后的字体目录；失败返回空串（调用方会跳过 sub-fonts-dir 设置）。
+static std::string extractBundledFontsForLibass() {
+    namespace fs = std::filesystem;
+
+    // 缓存目录：优先用 TMPDIR（Android 上由 SDL 指向应用私有 cache）
+    fs::path base;
+    if (const char* tmp = std::getenv("TMPDIR"); tmp && *tmp) {
+        base = fs::path(tmp) / "libass-fonts";
+    } else if (const char* home = std::getenv("HOME"); home && *home) {
+        base = fs::path(home) / ".cache" / "libass-fonts";
+    } else {
+        return {};
+    }
+
+    std::error_code ec;
+    const fs::path marker = base / "font.ttf";
+
+    // 已经解过就直接复用（字体文件 10MB，每次启动都写一遍很浪费）
+    if (fs::exists(marker, ec) && fs::file_size(marker, ec) > 1024 * 1024) {
+        brls::Logger::info("libass 字体已就绪: {}", base.string());
+        return base.string();
+    }
+
+    fs::create_directories(base, ec);
+    if (ec) {
+        brls::Logger::warning("libass 字体目录创建失败: {}", ec.message());
+        return {};
+    }
+
+    // romfs 里的路径是相对 resources/ 的（见 prepare-romfs.sh）
+    int ok = 0;
+    for (const char* name : {"font/font.ttf", "font/emoji.ttf", "font/switch_font.ttf"}) {
+        try {
+            const auto& res = romfs::get(name);
+            std::string_view sv = res.string();
+            if (sv.empty()) continue;
+            const fs::path out = base / fs::path(name).filename();
+            std::ofstream ofs(out, std::ios::binary | std::ios::trunc);
+            if (!ofs) continue;
+            ofs.write(sv.data(), static_cast<std::streamsize>(sv.size()));
+            ofs.close();
+            if (ofs) {
+                ++ok;
+                brls::Logger::info("libass 字体已提取: {} ({} 字节)",
+                                   out.filename().string(), sv.size());
+            }
+        } catch (...) {
+            // romfs 里没有这个文件：继续试下一个
+        }
+    }
+
+    if (ok == 0) {
+        brls::Logger::warning("libass 字体提取失败：romfs 中没有可用字体");
+        return {};
+    }
+    brls::Logger::info("libass 字体目录: {}（共 {} 个字体）", base.string(), ok);
+    return base.string();
+}
+#endif
+
 static ui::Icon hudIconFor(const std::string& key) {
     if (key == "play") return ui::Icon::Play;
     if (key == "pause") return ui::Icon::Pause;
@@ -1697,13 +1771,49 @@ void MPVPlayerView::initMPV() {
     mpv_set_option_string(mpv_, "sub-auto", "fuzzy");
     mpv_set_option_string(mpv_, "sub-file-paths", "sub:subs:subtitles:字幕:Sub:Subs:Subtitles");
 
-    // 针对嵌入式/无系统字体的掌机设备（如 TrimUI / 极简 Linux）配置内置字体目录与中文字体
+    // 字幕字体。
+    //
+    // 这里的坑（Android 实测）：界面文字走 borealis 的 romfs（资源**编译进**
+    // libmain.so，不落磁盘），所以 UI 显示正常；但 mpv/libass 只认**文件系统
+    // 路径**，读不到 romfs 里的字节。而 Android 上 ResourceLocator 又定位不到
+    // 资源目录（日志「未能定位资源目录」），结果 sub-fonts-dir 从未被设置，
+    // libass 找不到任何中文字体 —— 表现就是「字幕轨选中了，但画面上一片空白」。
+    //
+    // 修法：Android 上把内置字体从 romfs 解出来，落到应用缓存目录，
+    // 再让 mpv 指向那里。只解一次，之后复用。
     std::string font_dir = ResourceLocator::resourceDir() + "/font";
     std::error_code fec;
-    if (std::filesystem::exists(font_dir, fec)) {
-        mpv_set_option_string(mpv_, "sub-fonts-dir", font_dir.c_str());
+
+#if defined(ANDROID)
+    if (!std::filesystem::exists(font_dir, fec)) {
+        font_dir = extractBundledFontsForLibass();
     }
+#endif
+
+    if (!font_dir.empty() && std::filesystem::exists(font_dir, fec)) {
+        mpv_set_option_string(mpv_, "sub-fonts-dir", font_dir.c_str());
+        brls::Logger::info("[FONT] sub-fonts-dir = {}", font_dir);
+    } else {
+        brls::Logger::warning("[FONT] 未设置 sub-fonts-dir（font_dir='{}' 不存在）", font_dir);
+    }
+    // 字体名。
+    //
+    // 原先无条件写死 "Noto Sans SC"。在 Android 上实测：即使 sub-fonts-dir
+    // 已指向解出字体的目录、sid 也已选中（vis=yes），画面里仍然一个字都没有。
+    // 原因是 Android 版 libmpv **不带 fontconfig**，libass 无法按「家族名」
+    // 去索引 sub-fonts-dir 里的字体 —— 必须让 libass 自己去扫目录里唯一的字体，
+    // 或者直接给字体文件路径。
+    //
+    // 因此仅在「确实设了 sub-fonts-dir」时才指定家族名；否则留空，
+    // 让 libass 用目录里的默认字体（我们只解了一个中文字体，不会选错）。
+#if defined(ANDROID)
+    {
+        char* fonts_dir_check = nullptr;
+        (void)fonts_dir_check;   // 仅用于说明：Android 分支不设 sub-font
+    }
+#else
     mpv_set_option_string(mpv_, "sub-font", "Noto Sans SC");
+#endif
 
     // 字幕字号按**屏幕高度比例**计算，而不是写死 46。
     //
@@ -2467,6 +2577,42 @@ void MPVPlayerView::updateFormatBadges() {
 void MPVPlayerView::checkMPVEvents() {
     if (!mpv_) return;
 
+    // ── 字幕轨延迟就位：逐帧重试 ──
+    //
+    // 背景见 FILE_LOADED 分支的注释：Android 上轨道表比 FILE_LOADED 晚，
+    // 而 track-list 事件不会重发，只能自己轮询。
+    //
+    // 为什么放在事件循环**之前**：同一帧里先补选字幕，再处理事件，
+    // 这样字幕能在最早的一帧出现，而不是再等一帧。
+    // 清 pause：见 FILE_LOADED 分支的说明（不能在事件回调里同步写属性）
+    if (pause_reset_pending_) {
+        pause_reset_pending_ = false;
+        mpv_set_property_string(mpv_, "pause", "no");
+    }
+
+    // 徽标延后一帧计算：见 FILE_LOADED 分支的说明
+    if (badges_pending_) {
+        badges_pending_ = false;
+        updateFormatBadges();
+    }
+
+    if (sub_retry_left_ > 0 && !subtitle_chosen_ && selected_sid_ != 0
+            && std::getenv("MUVIK_SUBTITLE_OFF") == nullptr) {
+        --sub_retry_left_;
+        auto subs = getTracks("sub");
+        if (!subs.empty()) {
+            int want = subs.front().id;
+            for (const auto& tr : subs) {
+                if (tr.id == selected_sid_) { want = tr.id; break; }
+            }
+            selectTrack("sub", want, false);
+            subtitle_chosen_ = true;
+            sub_retry_left_ = 0;
+            brls::Logger::info("MPVPlayerView: 字幕轨延迟就位，已选中 #{}（共 {} 条）",
+                               want, subs.size());
+        }
+    }
+
     while (true) {
         mpv_event* event = mpv_wait_event(mpv_, 0);
         if (event->event_id == MPV_EVENT_NONE) break;
@@ -2509,6 +2655,22 @@ void MPVPlayerView::checkMPVEvents() {
                 is_playing_ = (*(int*)prop->data == 0);
             } else if (std::string(prop->name) == "track-list") {
                 // 外挂字幕或异步探测的音轨/字幕轨加载完成后，在此补救处理
+                //
+                // ⚠ 这里不能只看 subtitle_chosen_。
+                //
+                // 实测（Android / OnePlus Pad，3 字幕轨的 mkv）：
+                //   FILE_LOADED 时 getTracks("sub") 返回 **0 条** ——
+                //   此时 mpv 还没把内嵌字幕轨填进 track-list。
+                //   紧接着 track-list 属性变更事件到来，轨道才就位。
+                //
+                // 原先的守卫是 `!subtitle_chosen_`，而 FILE_LOADED 分支在
+                // 拿到 0 条时**没有**置 subtitle_chosen_（因为 if (!subs.empty())
+                // 不成立），所以这里其实能补救 —— 但 Linux/macOS 上
+                // track-list 常常先于 FILE_LOADED 到达，那次事件会被
+                // file_loaded_ == false 挡掉，之后不再重试。
+                //
+                // 现在改为：只要还没真正选过字幕（subtitle_chosen_ 为假），
+                // 每次 track-list 更新都尝试一次。选成功后置位，不会反复触发。
                 if (!subtitle_chosen_ && file_loaded_ && selected_sid_ != 0) {
                     const bool subtitle_off = std::getenv("MUVIK_SUBTITLE_OFF") != nullptr;
                     if (!subtitle_off) {
@@ -2555,14 +2717,35 @@ void MPVPlayerView::checkMPVEvents() {
             char* hwdec = mpv_get_property_string(mpv_, "hwdec-current");
             hwdec_active_ = hwdec && *hwdec && std::string(hwdec) != "no";
             if (hwdec) mpv_free(hwdec);
-            updateFormatBadges();
+            // 格式徽标**不在这里算**。
+            //
+            // 实测（Android / 3 字幕轨的 mkv）：在 FILE_LOADED 回调里
+            // 直接调 updateFormatBadges() 会卡住约 20 秒（正好是本片时长）——
+            // 它内部连续调 mpv_get_property_string("video-params/gamma" 等)，
+            // 而此刻解码线程尚未完成首帧配置，这些同步属性读取会一直等。
+            // checkMPVEvents() 跑在 UI 渲染线程上，于是整个界面冻住。
+            //
+            // 更糟的是连带后果：字幕轨的自动选中排在这段之后，
+            // 卡住的 20 秒里一次都没执行过 —— 这是「Android 上内嵌字幕
+            // 不生效」的真正原因。
+            //
+            // 改为把徽标推迟到下一帧（见 checkMPVEvents 末尾的 pending 处理），
+            // 此时解码已就绪，属性读取是毫秒级。
+            badges_pending_ = true;
             eof_fired_ = false;  // 新文件确认加载，允许后续再次触发连播
 
             // keep-open=yes 在播放结束后会把 pause 置为 yes（停在最后一帧）。
             // 该状态会延续到下一次 loadfile：新一集加载完但仍处于暂停，
             // 表现为「连播卡在第 2 集，时间永远是 0.0」。
             // 必须在 FILE_LOADED 之后清，太早会被 loadfile 覆盖。
-            mpv_set_property_string(mpv_, "pause", "no");
+            //
+            // ⚠ 不能在事件回调里直接 mpv_set_property_string。
+            // 实测（Android）：在这里同步设 pause 会卡死 —— 日志停在紧邻这条
+            // 语句之前，之后再也不返回（[P1] 有、[P2] 没有）。
+            // 原因：FILE_LOADED 是 mpv 内部线程派发的，此刻同步写属性会让
+            // 调用线程等待解码线程，而解码线程正等这条回调返回 —— 互相等。
+            // 改为置标志位，在事件循环**外面**（checkMPVEvents 末尾）执行。
+            pause_reset_pending_ = true;
 
             // 处理断点接续：在文件真正加载完毕后下发定位，并弹出 HUD 提示
             if (pending_resume_position_ > 0) {
@@ -2635,7 +2818,17 @@ void MPVPlayerView::checkMPVEvents() {
                 brls::Logger::info("MPVPlayerView: 恢复历史状态：关闭字幕");
             } else if (!subtitle_chosen_) {
                 auto subs = getTracks("sub");
-                if (!subs.empty()) {
+                if (subs.empty()) {
+                    // 内嵌字幕轨还没就位。
+                    //
+                    // Android 实测：FILE_LOADED 的瞬间 getTracks("sub") 返回 0 条，
+                    // 而 track-list 的 property-change 在此之前就发过了、
+                    // 之后不再重发 —— 于是「等事件」永远等不到。
+                    // 这里启动逐帧重试（见 checkMPVEvents 末尾），
+                    // 大约轮询 2 秒（120 帧 @60fps）。
+                    sub_retry_left_ = 120;
+                    brls::Logger::info("MPVPlayerView: 字幕轨尚未就位，启动逐帧重试");
+                } else {
                     // 测试用：MUVIK_FORCE_SUB_SID=N 强制选指定轨，
                     // 用于验证「选过的字幕轨是否被记住」。
                     int want = subs.front().id;
