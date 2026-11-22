@@ -92,9 +92,22 @@ def main():
             print(f" {'✓' if o else '✗'} {n} {d}")
         return 1
 
-    binp = prefix / "bin" / "muvik" if (prefix / "bin" / "muvik").exists() else prefix / "bin" / "muvik"
+    # 注意：下面这三处原先写成
+    #     x = A if A.exists() else A        # 两个分支同一个值
+    # 等于恒真地只看一个候选，于是「安装布局与查找路径不一致」这类缺陷
+    # 永远检查不出来（实测漏掉了 share/yiufplayer vs share/muvik 那次）。
+    # 现在按候选列表逐个尝试，并显式要求安装布局落在代码能查到的位置。
+    def first_existing(*paths):
+        for p in paths:
+            if Path(p).exists():
+                return Path(p)
+        return Path(paths[0])   # 都不存在时返回第一个，供断言报出期望路径
+
+    binp = first_existing(prefix / "bin" / "yiufplayer", prefix / "bin" / "muvik")
     check("可执行文件已安装", binp.exists(), str(binp))
-    res = prefix / "share" / "muvik" / "resources" if (prefix / "share" / "muvik").exists() else prefix / "share" / "muvik" / "resources"
+
+    res = first_existing(prefix / "share" / "yiufplayer" / "resources",
+                         prefix / "share" / "muvik" / "resources")
     check("资源目录已安装", res.is_dir(), str(res))
     check("字体已安装", (res / "font").is_dir(), "")
     check("图标资源已安装", (res / "icon").is_dir(), "")
@@ -153,7 +166,11 @@ def main():
 
     # ── 4. 许可证合规 ───────────────────────────────────────
     section("许可证合规")
-    docdir = prefix / "share" / "doc" / "muvik" if (prefix / "share" / "doc" / "muvik").exists() else prefix / "share" / "doc" / "muvik"
+    # 同一类死代码：docdir 的三元两个分支都写 "muvik"，而安装目标是
+    # share/doc/yiufplayer，于是许可证检查永远报「缺失」——不是包真的缺，
+    # 是检查看错了目录。
+    docdir = first_existing(prefix / "share" / "doc" / "yiufplayer",
+                            prefix / "share" / "doc" / "muvik")
     notices = ROOT / "THIRD-PARTY-NOTICES.md"
     check("THIRD-PARTY-NOTICES 已安装",
           (docdir / "THIRD-PARTY-NOTICES.md").exists(), "")

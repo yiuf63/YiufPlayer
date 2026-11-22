@@ -60,11 +60,19 @@ ssh "$DECK_HOST" "cd $REMOTE_DIR && \
 
 echo "=== 完成 ==="
 
+# 产物名必须与 CMakeLists.txt 的 OUTPUT_NAME 一致（yiufplayer）。
+#
+# 早先这里写的是 ./build-linux/muvik，靠 CMake POST_BUILD 建的
+# muvik -> yiufplayer 软链才碰巧能跑。软链一旦不存在（比如手动拷二进制、
+# 或者归档时丢掉了软链），启动就会报「No such file or directory」。
+# 直接指向真实产物，不再依赖别名。
+LAUNCH_BIN="./build-linux/yiufplayer"
+
 if [ "$RUN_AFTER" = "1" ]; then
     echo "=== 启动（按 Ctrl+C 停止）==="
-    ssh -t "$DECK_HOST" "cd $REMOTE_DIR && ./build-linux/muvik"
+    ssh -t "$DECK_HOST" "cd $REMOTE_DIR && $LAUNCH_BIN"
 else
-    echo "运行：ssh -t $DECK_HOST 'cd $REMOTE_DIR && ./build-linux/muvik'"
+    echo "运行：ssh -t $DECK_HOST 'cd $REMOTE_DIR && $LAUNCH_BIN'"
 fi
 
 echo

@@ -3,6 +3,11 @@ build/
 build-*/
 cmake-build-*/
 
+# ── 发布包 ──
+# scripts/package-steamos.sh 的输出（二进制 + 10MB 字体，约 12MB/个）。
+# 发布包应挂在 GitHub Releases 上，不进仓库历史。
+dist/
+
 # ── Android ──
 android/app/build/
 android/build/

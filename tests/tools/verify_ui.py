@@ -26,9 +26,33 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-BIN = ROOT / "build" / "muvik"
-if not BIN.exists():
-    BIN = ROOT / "build" / "muvik"
+
+# 产物名可能是 yiufplayer，也可能只有旧别名 muvik。
+#
+# 注意这里**原先写的是**
+#     BIN = ROOT / "build" / "muvik"
+#     if not BIN.exists():
+#         BIN = ROOT / "build" / "muvik"        # 两个分支同一个值
+# 等于完全没有回退。ASan 段照抄了同样的写法（只找 build-asan/muvik），
+# 于是「ASan 内存安全检查」在 build-asan 只有 yiufplayer 时会静默跳过 ——
+# 打印一行「跳过：未找到 ASan 版本」，然后把这一组算作没失败，实际一次都没跑。
+def _resolve_bin(dirname):
+    """在给定构建目录里找可执行文件。
+
+    只认 yiufplayer / muvik 两个当前名字。
+    **不要回退到 deck-player** —— 那是改名前的旧产物，可能几个月没重建；
+    实测 build-asan/ 里就躺着一个 10 月 29 日的 deck-player（39MB，debug 符号），
+    选中它会让整组 ASan 检查跑在一个与当前源码无关的二进制上，
+    表现为「全部超时」，比跳过更具误导性。
+    """
+    d = ROOT / dirname
+    for name in ("yiufplayer", "muvik"):
+        p = d / name
+        if p.exists():
+            return p
+    return d / "yiufplayer"   # 都不存在时返回期望路径，供断言报错
+
+BIN = _resolve_bin("build")
 
 # ── 结果收集 ──────────────────────────────────────────────────────────
 RESULTS = []
@@ -743,9 +767,11 @@ def check_asan(tmpdir, media):
     只有 ASan 能稳定暴露。本项目实测靠它抓到两个真实缺陷。
     """
     section("内存安全（ASan）")
-    asan_bin = ROOT / "build-asan" / "muvik"
+    # 用与主构建相同的解析逻辑：build-asan 里可能只有 yiufplayer，
+    # 写死 "muvik" 会让这一整组静默跳过（等于没测）。
+    asan_bin = _resolve_bin("build-asan")
     if not asan_bin.exists():
-        record("ASan", "已构建 build-asan", False, "跳过：未找到 ASan 版本")
+        record("ASan", "已构建 build-asan", False, f"跳过：{asan_bin} 不存在")
         return
 
     env_base = os.environ.copy()
@@ -765,9 +791,25 @@ def check_asan(tmpdir, media):
         except subprocess.TimeoutExpired:
             record("ASan", name, False, "超时（ASan 下较慢，但不该卡死）")
             return
-        hits = out.count("ERROR: AddressSanitizer") + out.count("runtime error")
-        record("ASan", name, hits == 0 and rc == 0,
-               f"rc={rc} 报告={hits}" if hits or rc else "干净")
+
+        # 只统计**本项目代码**的报告。
+        #
+        # external/ 下的第三方库有已知的 UBSan 噪音，例如 QuickJS：
+        #   quickjs.h:557  runtime error: 2.14748e+09 is outside the range of 'int'
+        #   quickjs.c:32685 runtime error: left shift of 171 by 24 places ...
+        # 按项目约定（AGENTS.md「不要为了消警告去改 external/」）不修它们，
+        # 但也不该让它们把整组检查永远打成红 —— 那会让真正的 UAF 淹没在
+        # 固定噪音里。这里按报告里的源码路径过滤。
+        own_hits = 0
+        for line in out.splitlines():
+            if "runtime error" not in line and "ERROR: AddressSanitizer" not in line:
+                continue
+            if "external/" in line:
+                continue          # 第三方库的已知噪音，不计
+            own_hits += 1
+
+        record("ASan", name, own_hits == 0 and rc == 0,
+               f"rc={rc} 本项目报告={own_hits}" if own_hits or rc else "干净")
 
     frame = lambda n: {"MUVIK_FRAMEGRAB": str(Path(tmpdir) / f"{n}.ppm"),
                        "MUVIK_FRAMEGRAB_START": "100"}
@@ -1030,20 +1072,15 @@ def check_track_memory(tmpdir, media):
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    # 清掉该文件的历史，保证从干净状态开始
-    hist_candidates = [
-        Path.home() / ".config" / "muvik" / "history.dat",
-        Path.home() / ".config" / "muvik" / "history.dat",
-    ]
-    for hist in hist_candidates:
-        if hist.exists():
-            keep = [ln for ln in hist.read_text(encoding="utf-8").splitlines()
-                    if str(clip) not in ln]
-            hist.write_text("\n".join(keep) + ("\n" if keep else ""), encoding="utf-8")
+    # 用**隔离的**配置目录跑这两次，因此不需要再清理用户真实历史
+    # （原先那段清理写的还是过期的 ~/.config/muvik 路径，从未生效）。
+    sid_cfg = Path(tmpdir) / "sid_cfg"
+    (sid_cfg / "yiufplayer").mkdir(parents=True, exist_ok=True)
 
     def run(tag, extra_env, start=250):
         env = {"MUVIK_FRAMEGRAB": str(Path(tmpdir) / f"sidx_{tag}.ppm"),
-               "MUVIK_FRAMEGRAB_START": str(start)}
+               "MUVIK_FRAMEGRAB_START": str(start),
+               "XDG_CONFIG_HOME": str(sid_cfg)}
         env.update(extra_env)
         rc, log, files = grab(tmpdir, f"sidx_{tag}", env, args=[str(clip)], start=start)
         m = re.search(r"自动选中字幕轨 #(\d+)", log)
@@ -1075,7 +1112,13 @@ def check_functional(tmpdir, media):
     # 冒烟流程自己会在结束时 quick_exit，不依赖抓帧退出。
     cfg = Path(tmpdir) / "smoke_cfg"
     cfg.mkdir(parents=True, exist_ok=True)
-    muvik_cfg = cfg / "muvik"
+    # 配置目录名必须用实际值 yiufplayer（不是旧名 muvik）。
+    #
+    # 写错目录的后果不是「测试失败得莫名其妙」，而是**测试在空库上跑**：
+    # 媒体库为空 → 冒烟里「按 A 进入文件夹 / 按 A 压入播放页」必然失败，
+    # 于是这几项看起来像产品坏了。实测直接手跑 MUVIK_SMOKE=1 全过，
+    # 而 verify_ui 报失败，差别只在这行路径。
+    muvik_cfg = cfg / "yiufplayer"
     muvik_cfg.mkdir(parents=True, exist_ok=True)
     if media and "series_dir" in media:
         with open(muvik_cfg / "libraries.dat", "w") as f:
