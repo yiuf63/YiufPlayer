@@ -16,7 +16,16 @@ public:
 };
 }
 #endif
+
+// WebDAV 客户端完全依赖 libcurl。Android 版不链接 curl
+// （CMakeLists 在 ANDROID 分支里把 CURL_FOUND 置为 FALSE），
+// 因此整个实现必须条件编译，只保留能让链接通过的桩，
+// 否则 Android 会在
+//   #include <curl/curl.h>
+// 处直接编译失败（实测：NDK 28 + build.gradle 原样参数编不过）。
+#if !defined(ANDROID)
 #include <curl/curl.h>
+#endif
 
 #include <cstring>
 #include <cctype>
@@ -25,6 +34,8 @@ public:
 #include <iomanip>
 
 namespace muvik {
+
+#if !defined(ANDROID)
 
 namespace {
 
@@ -453,5 +464,37 @@ std::string WebDAVClient::buildPlayUrl(const NetworkSource& source, const std::s
 
     return play_url;
 }
+
+#else  // ANDROID：无 libcurl，提供可链接的桩实现
+
+// Android 首版不提供网络存储浏览（见 android/README.md 的「已知限制」）。
+// 这里保留同名签名，让界面层能正常编译与链接，并在运行时给出明确提示，
+// 而不是让整个 APK 编不出来。
+//
+// 所有方法都返回 false / 空串，UI 会走到既有的错误分支显示
+// 「无法访问此目录」，用户能看到「当前平台不支持」而不是无声失败。
+
+bool WebDAVClient::listDirectory(const NetworkSource&, const std::string&,
+                                 std::vector<MediaItem>& out_items,
+                                 std::string& err_msg) {
+    out_items.clear();
+    err_msg = "当前平台（Android）暂不支持网络存储：未链接 libcurl";
+    return false;
+}
+
+bool WebDAVClient::testConnection(const NetworkSource&, std::string& err_msg) {
+    err_msg = "当前平台（Android）暂不支持网络存储：未链接 libcurl";
+    return false;
+}
+
+std::string WebDAVClient::buildPlayUrl(const NetworkSource&, const std::string&) {
+    return "";
+}
+
+std::string WebDAVClient::urlDecode(const std::string& in) { return in; }
+
+std::string WebDAVClient::urlEncode(const std::string& in) { return in; }
+
+#endif  // !defined(ANDROID)
 
 } // namespace muvik

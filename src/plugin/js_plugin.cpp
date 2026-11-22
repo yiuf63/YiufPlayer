@@ -71,20 +71,63 @@ std::shared_ptr<JSPlugin> JSPlugin::loadFromDirectory(const std::string& dir_pat
     plugin->description_ = description;
 
     // 解析 capabilities
+    //
+    // 这里把文档里的能力名翻译成内部名。为什么必须做这层映射：
+    // docs/PLUGIN-DEV.md 与 examples/ 里的示例插件都写 "video_source"，
+    // 但 host 侧判断视频源用的是 hasMediaStream()/hasStorage()，
+    // 于是「完全照文档写」的插件反而不出现在「文件 → 插件视频源」里，
+    // 而「不写 capabilities」的插件靠自动探测却能出现。
+    // 实测：同一份 main.js，写 ["video_source"] 时主界面看不到该插件，
+    // 删掉 capabilities 后正常显示 —— 文档与实现直接冲突。
+    //
+    // 现在两种写法等价：
+    //   "video_source" → media_stream（能出列表/搜索）+ storage（能进目录）
+    //   "storage"      → 保留，兼容旧写法
+    //   "media_stream" → 保留
+    //   "scraper"      → 保留
     if (meta.contains("capabilities") && meta["capabilities"].is_array()) {
         for (const auto& cap : meta["capabilities"]) {
-            if (cap.is_string()) plugin->capabilities_.push_back(cap.get<std::string>());
+            if (!cap.is_string()) continue;
+            const std::string name = cap.get<std::string>();
+            if (name == "video_source") {
+                // 视频源插件按定义就同时要「列目录」与「出条目」两种能力
+                plugin->capabilities_.push_back("media_stream");
+                plugin->capabilities_.push_back("storage");
+            } else {
+                plugin->capabilities_.push_back(name);
+            }
         }
     }
 
-    // 解析 settings
+    // 解析设置项。
+    //
+    // 同时接受 "settings" 与 "configSchema" 两种键名：
+    // 文档和 examples/tmdb_scraper_plugin 用的是 configSchema（字段名 title/
+    // description），而早期代码只认 settings（字段名 label）。结果是照文档装的
+    // 插件一条配置项都不显示，插件管理页只有「该插件无需额外配置。」，
+    // API Key 永远填不进去。官方示例自己就是错的示范。
+    //
+    // 两种写法都支持后，谁也不用改自己的既有插件。
+    const nlohmann::json* settings_arr = nullptr;
     if (meta.contains("settings") && meta["settings"].is_array()) {
+        settings_arr = &meta["settings"];
+    } else if (meta.contains("configSchema") && meta["configSchema"].is_array()) {
+        settings_arr = &meta["configSchema"];
+    }
+    if (settings_arr) {
         bool config_changed = false;
-        for (const auto& s : meta["settings"]) {
+        for (const auto& s : *settings_arr) {
             if (s.is_object()) {
                 PluginSettingField f;
                 f.key = s.value("key", "");
-                f.label = s.value("label", f.key);
+                // title（文档写法）与 label（旧写法）都认，最后回退到 key
+                if (s.contains("label") && s["label"].is_string()) {
+                    f.label = s.value("label", f.key);
+                } else if (s.contains("title") && s["title"].is_string()) {
+                    f.label = s.value("title", f.key);
+                } else {
+                    f.label = f.key;
+                }
                 f.type = s.value("type", "string");
                 f.default_value = s.contains("default") ? s.value("default", "") : s.value("default_value", "");
                 if (!f.key.empty()) {
@@ -140,11 +183,21 @@ std::shared_ptr<JSPlugin> JSPlugin::loadFromDirectory(const std::string& dir_pat
         plugin->capabilities_.push_back("search");
     }
 
-    // 如果插件定义了 init(config)，自动传入当前持久化配置
+    // 如果插件定义了 init(config)，自动传入当前持久化配置。
+    //
+    // 启动路径上的 init 必须短超时：它是在 UI 线程同步跑的，
+    // 一个写错（或恶意）的插件在这里死循环就会让播放器卡在启动画面。
+    // 默认 30 秒对「启动」来说仍然太长，这里收紧到 5 秒 ——
+    // 正常的 init 只是解析配置、拼几个 URL，连网络请求都不该发。
     if (runtime->hasFunction("init")) {
+        runtime->setExecutionTimeout(5);
         std::string cfg_json = PluginConfigStore::getInstance().toJson(id);
         std::string init_res, init_err;
-        runtime->callFunction("init", { cfg_json }, init_res, &init_err);
+        if (!runtime->callFunction("init", { cfg_json }, init_res, &init_err)) {
+            brls::Logger::warning("插件 {} 的 init() 执行失败: {}", id, init_err);
+        }
+        // 之后的常规调用（搜索 / 解析直链）可能要走网络，恢复默认超时。
+        runtime->setExecutionTimeout(30);
     }
 
     plugin->runtime_ = std::move(runtime);
@@ -156,6 +209,15 @@ bool JSPlugin::hasSearch() const {
     if (hasCapability("search")) return true;
     std::lock_guard<std::mutex> lock(runtime_mutex_);
     return runtime_ && runtime_->hasFunction("search");
+}
+
+void JSPlugin::reloadConfig() {
+    std::lock_guard<std::mutex> lock(runtime_mutex_);
+    if (runtime_ && runtime_->hasFunction("init")) {
+        std::string cfg_json = PluginConfigStore::getInstance().toJson(id_);
+        std::string init_res, init_err;
+        runtime_->callFunction("init", { cfg_json }, init_res, &init_err);
+    }
 }
 
 // --- MediaStreamProvider / 搜索实现 ---
@@ -377,6 +439,45 @@ bool JSPlugin::listDirectory(const std::string& path, std::vector<MediaItem>& ou
 
 bool JSPlugin::resolvePlayUrl(const std::string& path, StreamSource& out_source) {
     std::lock_guard<std::mutex> lock(runtime_mutex_);
+    // 加锁后转调无锁实现：保证「谁持有锁」只有一个地方决定，
+    // 也避免 onLinkExpired 的降级路径重入死锁（见那里的说明）。
+    return resolvePlayUrlLocked(path, out_source);
+}
+
+bool JSPlugin::onLinkExpired(const std::string& path, StreamSource& out_source) {
+    std::lock_guard<std::mutex> lock(runtime_mutex_);
+    if (!runtime_) return false;
+    if (runtime_->hasFunction("onLinkExpired")) {
+        std::string out_json, err;
+        json arg_path = path;
+        if (runtime_->callFunction("onLinkExpired", { arg_path.dump() }, out_json, &err)) {
+            try {
+                json root = json::parse(out_json);
+                out_source.url = root.value("url", "");
+                out_source.name = root.value("name", "刷新直链");
+                out_source.format = root.value("format", "mp4");
+                out_source.expires_at = root.value("expiresAt", 0);
+                if (root.contains("headers") && root["headers"].is_object()) {
+                    for (auto it = root["headers"].begin(); it != root["headers"].end(); ++it) {
+                        if (it.value().is_string()) out_source.headers[it.key()] = it.value().get<std::string>();
+                    }
+                }
+                return !out_source.url.empty();
+            } catch (...) {}
+        }
+    }
+    // 降级调用 resolvePlayUrl。
+    //
+    // **必须走无锁内部版**：本函数已持有 runtime_mutex_，而 runtime_mutex_
+    // 是普通的 std::mutex（非递归）。直接调公开的 resolvePlayUrl()
+    // 会让同一线程对同一把锁第二次加锁 → 自死锁，且无法从 UI 恢复。
+    // 这正是 AGENTS.md 陷阱 21（ThumbnailCache）的同一类写法，换了个文件而已。
+    // 所有「持锁状态下调用可能再加锁的函数」都必须走 *Locked 内部版。
+    return resolvePlayUrlLocked(path, out_source);
+}
+
+// 无锁内部实现：调用方必须已持有 runtime_mutex_。
+bool JSPlugin::resolvePlayUrlLocked(const std::string& path, StreamSource& out_source) {
     if (!runtime_ || !runtime_->hasFunction("resolvePlayUrl")) return false;
 
     std::string out_json, err;
@@ -402,32 +503,6 @@ bool JSPlugin::resolvePlayUrl(const std::string& path, StreamSource& out_source)
         brls::Logger::error("[JSPlugin:{}] resolvePlayUrl 解析失败: {}", id_, e.what());
         return false;
     }
-}
-
-bool JSPlugin::onLinkExpired(const std::string& path, StreamSource& out_source) {
-    std::lock_guard<std::mutex> lock(runtime_mutex_);
-    if (!runtime_) return false;
-    if (runtime_->hasFunction("onLinkExpired")) {
-        std::string out_json, err;
-        json arg_path = path;
-        if (runtime_->callFunction("onLinkExpired", { arg_path.dump() }, out_json, &err)) {
-            try {
-                json root = json::parse(out_json);
-                out_source.url = root.value("url", "");
-                out_source.name = root.value("name", "刷新直链");
-                out_source.format = root.value("format", "mp4");
-                out_source.expires_at = root.value("expiresAt", 0);
-                if (root.contains("headers") && root["headers"].is_object()) {
-                    for (auto it = root["headers"].begin(); it != root["headers"].end(); ++it) {
-                        if (it.value().is_string()) out_source.headers[it.key()] = it.value().get<std::string>();
-                    }
-                }
-                return !out_source.url.empty();
-            } catch (...) {}
-        }
-    }
-    // 降级调用 resolvePlayUrl
-    return resolvePlayUrl(path, out_source);
 }
 
 // --- ScraperProvider 实现 ---

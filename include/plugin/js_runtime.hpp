@@ -66,6 +66,17 @@ public:
 
     const std::string& getPluginId() const { return plugin_id_; }
 
+    void* current_wait_ctx_ = nullptr;
+
+    // 供 QuickJS 的中断回调查询「这次执行是否已经超时」。
+    //
+    // 中断回调是 C 函数指针，拿到的只有 JSRuntime* 的 opaque（即 this），
+    // 无法访问 private 成员，因此把这三个查询开放成 public 只读接口。
+    // 它们只被 jsInterruptHandler 使用，不属于对外 API。
+    bool isExecuting() const { return is_running_; }
+    int getExecutionTimeout() const { return timeout_seconds_; }
+    std::chrono::steady_clock::time_point getOpStartTime() const { return op_start_time_; }
+
 private:
     void initSandbox();
     void cleanup();

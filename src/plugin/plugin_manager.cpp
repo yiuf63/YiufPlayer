@@ -250,6 +250,13 @@ std::vector<std::string> PluginManager::getDlcSearchPaths() const {
 bool PluginManager::loadPlugin(const std::string& file_path, PluginSourceType source, const std::string& workshop_id) {
     if (file_path.empty()) return false;
 
+    // 加锁：本函数会读 plugins_（去重）并写 plugins_ / js_plugins_。
+    // 它是 public 的，而且 loadAll() 在网络线程里被调用（门户上传插件后热重载），
+    // 与主线程的 getPlugins()/getScraperPluginPaths() 并发就会撞上
+    // vector 扩容 —— 另一个线程遍历到的是已释放的旧缓冲区。
+    // 锁是 recursive 的，loadAll 持锁再调本函数不会自死锁。
+    std::lock_guard<std::recursive_mutex> lock(plugins_mutex_);
+
     // 防止重复加载同一插件
     for (const auto& p : plugins_) {
         if (p.path == file_path) return false;
@@ -546,9 +553,9 @@ bool PluginManager::loadStreamLinks(const std::string& plugin_path_or_id,
                                     const std::string& episode_id,
                                     PlayLinksResult& out_links) {
     std::lock_guard<std::recursive_mutex> lock(plugins_mutex_);
-    auto it = js_plugins_.find(plugin_path_or_id);
-    if (it != js_plugins_.end() && it->second) {
-        return it->second->loadLinks(episode_id, out_links);
+    auto js_p = getJSPlugin(plugin_path_or_id);
+    if (js_p) {
+        return js_p->loadLinks(episode_id, out_links);
     }
     return false;
 }
@@ -557,9 +564,9 @@ bool PluginManager::resolvePlayUrl(const std::string& plugin_path_or_id,
                                    const std::string& path,
                                    StreamSource& out_source) {
     std::lock_guard<std::recursive_mutex> lock(plugins_mutex_);
-    auto it = js_plugins_.find(plugin_path_or_id);
-    if (it != js_plugins_.end() && it->second) {
-        return it->second->resolvePlayUrl(path, out_source);
+    auto js_p = getJSPlugin(plugin_path_or_id);
+    if (js_p) {
+        return js_p->resolvePlayUrl(path, out_source);
     }
     return false;
 }
@@ -568,9 +575,9 @@ bool PluginManager::loadDetail(const std::string& plugin_path_or_id,
                                const std::string& id,
                                MediaDetail& out_detail) {
     std::lock_guard<std::recursive_mutex> lock(plugins_mutex_);
-    auto it = js_plugins_.find(plugin_path_or_id);
-    if (it != js_plugins_.end() && it->second) {
-        return it->second->loadDetail(id, out_detail);
+    auto js_p = getJSPlugin(plugin_path_or_id);
+    if (js_p) {
+        return js_p->loadDetail(id, out_detail);
     }
     return false;
 }
@@ -769,6 +776,11 @@ bool PluginManager::scrapeForFile(const std::string& plugin_path,
 }
 
 std::vector<std::string> PluginManager::getScraperPluginPaths() const {
+    // 必须加锁：遍历 plugins_ 时，另一线程可能正在 loadAll() 里 push_back。
+    // 真实时序：WebPortal 的 /api/plugins/upload 在网络线程调 loadAll()，
+    // 同时刮削流程在主线程调本函数；vector 扩容会重新分配并搬移元素，
+    // 遍历方读到的是已释放的旧缓冲区（含 std::string 成员）。
+    std::lock_guard<std::recursive_mutex> lock(plugins_mutex_);
     std::vector<std::string> out;
     for (const auto& p : plugins_) {
         if (p.has_scraper) out.push_back(p.path);

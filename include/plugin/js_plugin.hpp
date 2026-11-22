@@ -80,6 +80,8 @@ public:
     bool hasScraper() const { return hasCapability("scraper"); }
     bool hasSearch() const;
 
+    void reloadConfig();
+
     const std::vector<PluginSettingField>& getSettings() const { return settings_; }
 
     // --- MediaStreamProvider / 搜索接口 ---
@@ -97,6 +99,11 @@ public:
     bool scrapeDetail(const std::string& id, ScrapeDetail& out_detail);
 
 private:
+    // 无锁内部实现：调用方必须已经持有 runtime_mutex_。
+    // 存在的原因是有「持锁路径还要复用同一逻辑」的场景（onLinkExpired 的降级），
+    // 那时不能去调会再次加锁的公开版，否则同一线程对非递归 mutex 重入 = 自死锁。
+    bool resolvePlayUrlLocked(const std::string& path, StreamSource& out_source);
+
     std::string dir_path_;
     std::string id_;
     std::string name_;
