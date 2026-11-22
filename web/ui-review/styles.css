@@ -556,13 +556,14 @@ code { font-family: var(--font-num); font-size: .92em; color: #B9C1CC; }
 /* 主体 */
 .app-body { flex: 1; display: flex; min-height: 0; }
 
-/* 侧栏 160 = 1280 的 12.5%，图标 + 文字。
+/* 侧栏 176 = 1280 的 13.75%，图标 + 文字。
+ * （实机 src/theme/muvik_theme.cpp: style.addMetric("brls/tab_frame/sidebar_width", 176.0f)）
    只靠纯文字时，180 左右的宽度里汉字只占 51px，右边一大片空 —— 这正是
    「看着还是太宽」的根源：不是数字大，是内容撑不起来。
    加上 18px 图标之后同样的宽度有了密度，还能再收到 160。
    低于 148 时「媒体库」会贴到内边距上，不能再窄。 */
 .sidebar {
-  flex: none; width: 160px;
+  flex: none; width: 176px;
   padding: 18px 0;
   background: var(--sidebar);
   display: flex; flex-direction: column; gap: 6px;

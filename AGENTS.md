@@ -256,7 +256,7 @@ for (auto& f : alive_flags_) if (f) f->store(false);
 宿主的 `g_config` 曾经是一个**从未被填充的空表**，导致 `init()` 永远收到
 `nullptr`，插件只能靠环境变量配置。
 
-现状：配置存在 `PluginConfigStore`（`~/.config/muvik/plugin_config.dat`），
+现状：配置存在 `PluginConfigStore`（`~/.config/yiufplayer/plugin_config.dat`），
 加载插件时以 JSON 形式传给 `init()`，同时 `host->get_config` 也会转发过去。
 
 **新插件应优先读 `config_json`**，环境变量只作为调试后备。
@@ -412,6 +412,94 @@ borealis 的 `deadViews` 原来只增不减：View 销毁后地址登记还在�
 
 在 C++ 单元测试中构造内嵌 JS 脚本时，如果脚本包含括号后接引号（如 `format: "ass" })`），默认的 `R"( ... )"` 会把 `)"` 当作字面量结束符，导致后续 JS 代码被当成 C++ 代码编译并报大片语法错误。
 对策：必须使用带自定义标签的原始字符串字面量，如 `R"JS( ... )JS"`。
+
+### 29. `std::mutex` 持锁后只能调 `*Locked` 内部版（onLinkExpired 自死锁）
+
+同陷阱 21，换了个文件又犯一次：`JSPlugin::onLinkExpired` 持有
+`runtime_mutex_`（**非递归** `std::mutex`）时，降级分支直接调了公开的
+`resolvePlayUrl()`，而后者也锁同一把 —— 同一线程二次加锁，永久挂死。
+
+对策：把逻辑抽成 `resolvePlayUrlLocked()`（调用方必须已持锁），
+公开版只负责加锁再转调。**新增任何 `*Locked` 函数时，注释里写明前置条件。**
+验证手段：`tests/unit/test_js_plugin.cpp` 有一条直接调 `onLinkExpired` 的用例，
+把修复改回旧写法后整个测试会挂住（不是失败，是超时）——
+所以这条测试必须用 `timeout` 包着跑。
+
+### 30. `verify_ui.py` 里「两个分支写成同一个值」的三元表达式都是死代码
+
+已修掉三处（`BIN` 回退、`release_check.py` 的 `binp`/`res`/`docdir`）。
+它们的共同后果是**检查静默失效**而不是报错：
+
+- `asan_bin = ROOT/"build-asan"/"muvik"`：CMake 只给 `build/` 建了
+  `muvik -> yiufplayer` 软链，`build-asan/` 没有，于是「ASan 10 项」每次
+  都打印「跳过：未找到 ASan 版本」然后算作没失败，**一次都没真跑**。
+- 安装路径检查只看 `share/muvik`，而 `install()` 写的是 `share/yiufplayer`
+  —— 真实缺陷（装完找不到资源）因此长期没被发现。
+
+写检查时问一句：**这个条件有没有可能两条分支完全一样？**
+一行 `x = A if A.exists() else A` 看着像回退，其实是恒等式。
+
+### 31. 门户的鉴权、SIGPIPE 与未捕获异常（一次攻击面清理）
+
+`WebPortal` 对 LAN 提供插件配置读写 / 按键注入 / 插件安装，早先是
+**零鉴权 + 绑 INADDR_ANY + CORS `*`**。实测 `curl .../api/plugins`
+直接返回网盘 token（966 字符）。现已改为：
+
+- 每进程随机生成 128 位访问令牌，`/api/*` 全部校验；
+  令牌接受 `X-Auth-Token` 头、`?token=` 查询串、`portal_token` Cookie 三种；
+  二维码里带 token（`getPortalUrlWithToken()`）。
+- 去掉了 CORS 通配，浏览器只允许同源。
+- `send()` 改成 `sendAll()` 循环写 + `MSG_NOSIGNAL`（macOS 用
+  `SO_NOSIGPIPE`）。**不加防护时客户端 RST 会让进程以 141 退出。**
+- `handleClient` 整个包 try/catch：`?q=%FF%FE` 会让 nlohmann 的 `dump()`
+  抛 `type_error.316`，异常穿出线程入口 = `std::terminate`。
+  另加了 `sanitizeUtf8()` 在入 JSON 前净化。
+- socket 设 5s `SO_RCVTIMEO/SNDTIMEO`：否则一个挂起的半截请求能把
+  服务线程（以及退出时的 `join`）永久占住，实测退出被拖 24 秒。
+- 上传临时文件改 `mkstemps()` 唯一名；原来的固定
+  `/tmp/uploaded_plugin.zip` 会被**预置的符号链接穿透写入**（实测确认
+  `ofstream` 穿透、`std::remove` 只删链接不删目标）。加了 32MB 请求体上限。
+
+### 32. JS 沙箱的三个「看起来有、其实没有」的保护
+
+| 保护 | 声称 | 实际（修前） |
+| :--- | :--- | :--- |
+| 栈溢出 | 注释说 0 = 无限制 | `JS_SetMaxStackSize(rt_, 0)` 真关掉了保护，深递归**段错误**（139） |
+| 执行超时 | `setExecutionTimeout()` | 中断回调恒 `return 0`，`timeout_seconds_` 无人读取，`while(true){}` 永久挂死 |
+| 协议白名单 | C ABI 路径有 | JS 的 `host.http` 没有，`file:///etc/passwd` 实测可读 |
+
+修法：栈上限恢复 `JS_DEFAULT_STACK_SIZE`；中断回调按
+`op_start_time_ + timeout_seconds_` 真判断（`evaluate()` 里也要置
+`is_running_`，否则插件顶层死循环不受控）；`host.http` 只接受
+`http://` / `https://` 前缀。插件 `init()` 单独收紧到 5 秒。
+
+### 33. 0/0 进度不是「用户拖到开头」，而是「调用方还不知道」
+
+`MPVPlayerView::selectTrack()` 在文件刚加载、`time-pos` 还没到时就会落盘一次，
+把一条 `completed=1` 的记录覆盖成 `0|0|...|0`。用户视角：点开「已看完」的
+片子 1.5 秒再退出，徽标变回 0%，续播点消失。
+
+修在**数据层**而不是调用点：`PlaybackHistory::updateProgress()` 收到
+`position <= 0` 时**不覆盖**已有 position/duration/completed，只更新 sid/aid
+与时间戳；没有旧记录时仍建一条 position=0 的（否则「第一次打开就选字幕轨」
+的偏好无处可存，第 38 轮的「选过不记住」会复发）。
+
+### 34. 自动显示的控制栏不得吞掉 B 键
+
+进入播放页时 OSD 自动显示并保持「活跃」4.5 秒。B 键原本只判
+`isOsdActive()`，于是首按只收控制栏、不退出播放页 —— 用户以为「返回没反应」，
+必须按两次。冒烟测试因此长期红着两项。
+
+修法：新增 `osd_user_invoked_`，**只有用户主动唤出**（按方向键 / 点屏幕 /
+双击解锁）的控制栏才拦 B；自动显示的直接退页。
+`showOSD(true)` 会置位，构造时的初值不经过它，所以「进页面自动显示」不会被误标。
+
+### 35. `postDrawHook` 是单槽，且与 `osd_visible_` 的初值耦合
+
+`MPVPlayerView` 构造时无条件覆盖 `postDrawHook`、析构时无条件置
+`nullptr`。两个视图短暂共存（pushActivity 动画期间）时，后析构的会把
+hook 清掉，新视图就再也不渲染 —— 表现为「切下一集后黑屏但有声音」。
+需要多路输出时要改成回调列表（见第 19 轮的同类说明）。
 
 ---
 

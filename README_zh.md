@@ -21,7 +21,7 @@
 
 **Yiuf Player** 将主机级 60FPS 流畅渲染引擎 [Borealis](https://github.com/dragonflylee/borealis) 与业界顶尖的解码内核 [libmpv](https://mpv.io) 深度融合，专为掌机场景量身定做：
 
-* **秒级瞬启**：纯原生 C++17 二进制文件（< 7 MB），冷启动用时 **< 100 ms**，常驻内存仅约 40 MB。
+* **秒级瞬启**：纯原生 C++17 二进制文件（约 6.6 MB），首帧在一秒内出现（M4 机器上端到端实测约 430 ms，含建窗口与 GL 初始化）。
 * **原生手柄与掌机优先**：为十字键、双摇杆、肩键、扳机键与完整触控手势全面优化，告别模拟鼠标。
 * **深度契合 SteamOS**：自动识别 MicroSD 存储卡、呼出 SteamDeck 官方原生屏幕键盘，附带无缝整合的 Steam 封面网格图。
 * **开源纯净**：基于 GNU GPL-3.0 协议完全开源，无任何遥测或强制登录。
@@ -73,48 +73,77 @@
 | 按键 | 视频播放界面 | 媒体库 / 文件浏览界面 |
 | :--- | :--- | :--- |
 | **A** | 播放 / 暂停（确认 OSD 控件） | 进入目录 / 播放选中项 |
-| **B** | 退出播放（立即返回媒体库） | 返回上一层目录 / 取消 |
+| **B** | 退出播放（立即返回；只关闭**你主动唤出**的控制栏） | 返回上一层目录 / 取消 |
 | **十字键 左 / 右** | 快退 / 快进（-10s / +10s） | 网格光标移动 |
-| **LT / RT（扳机键）**| 音量减 / 音量加（-5% / +5%） | 列表快速翻页 |
-| **LB / RB（肩键）**  | 跳转（-15s / +15s） | 切换上一个 / 下一个标签页 |
-| **十字键 上** | 打开剧集播放列表对话框 | 光标跳到顶部搜索按钮 |
+| **LT / RT（扳机键）**| 音量减 / 音量加（-5% / +5%） | — |
+| **LB / RB（肩键）**  | 跳转（-15s / +15s） | — |
+| **十字键 上** | 打开剧集播放列表对话框 | — |
 | **十字键 下** | 聚焦到底部 OSD 控制栏 | 向下滚动浏览 |
+| **左摇杆** | 在 OSD 控件间移动 | 网格光标移动 |
 | **X** | 打开音轨选择菜单 | 触发影视元数据刮削 |
 | **Y** | 打开字幕选择与样式菜单 | 重新扫描当前媒体库 |
-| **R3（按下右摇杆）** | 循环切换播放倍速（`1.0x → 1.25x → 1.5x → 2.0x → 0.75x`） | - |
-| **L3（按下左摇杆）** | 循环切换画面比例（原始比例 → 16:10 铺满 → 16:9 → 4:3 → 智能裁切） | - |
-| **START** | 开关触控锁 | - |
+| **SELECT（Back）** | — | 视图与排序菜单 |
+| **R3（按下右摇杆）** | 循环切换播放倍速（`1.0x → 1.25x → 1.5x → 2.0x → 0.75x`） | — |
+| **L3（按下左摇杆）** | 循环切换画面比例（原始比例 → 16:10 铺满 → 16:9 → 4:3 → 智能裁切） | — |
+| **START** | 开关触控锁 | 跳到「设置」标签页 |
+
+> 表格里的「—」表示该界面上**没有绑定**这个键。
+> 早先这里写着「列表快速翻页」「切换上一个 / 下一个标签页」「光标跳到顶部搜索按钮」，
+> 但媒体库与文件浏览界面从未注册过对应的处理函数，按下去什么都不会发生。
+> 现在表格只列真实注册过的绑定（可用 `grep registerAction src/activity/` 核对）。
 
 ---
 
 ## 📥 安装与运行
 
-预编译发布安装包可在 [GitHub Releases](https://github.com/yiuf63/YiufPlayer/releases) 直接下载：
+> **当前状态：还没有预编译发布包。** 构建脚本可用、能产出可运行的包，
+> 但**未在 Steam Deck 实机验证过**（见下方「验证状态」）。请按下面步骤自行构建。
 
 ### Steam Deck (SteamOS)
-1. 将 Steam Deck 切换至 **桌面模式（Desktop Mode）**。
-2. 下载 `yiufplayer-linux-x86_64.tar.gz` 并解压至 `~/yiufplayer`。
-3. 运行 `python3 add_to_steam.py`，脚本将自动在 Steam 库中注册 Yiuf Player 非 Steam 游戏快捷方式，并自动设置官方海报及封面网格图。
-4. 切回 **游戏模式（Gaming Mode）** —— 在非 Steam 游戏库中点击 Yiuf Player 即可享受 60FPS 掌机大屏播放！
+
+```bash
+# 在你的电脑上（需要 Docker）：
+./scripts/package-steamos.sh
+# -> dist/yiufplayer-steamos-x86_64-<日期>.tar.gz
+
+# 拷到 Deck 上运行：
+scp dist/yiufplayer-steamos-*.tar.gz deck@steamdeck:~
+ssh deck@steamdeck 'tar xzf yiufplayer-steamos-*.tar.gz'
+```
+
+解压后可以：
+
+- 直接跑：`./run.sh /path/to/video.mp4`
+- 或注册到 Steam：切到 **桌面模式**，`cd` 进解压目录执行 `python3 add_to_steam.py`，
+  之后在 **游戏模式 → 非 Steam 游戏** 里就能找到。
+
+**这个包故意不带视频缩略图**：链接 FFmpeg 会把 Debian 的 `libavcodec.so.59`
+写进二进制，而 SteamOS 是 Arch、FFmpeg soname 不同，装上去会直接报
+`error while loading shared libraries` 起不来。代价是影片卡片显示自动生成的
+占位画面。若只在自己的 Ubuntu 桌面上分发，可用 `MODE=full ./scripts/package-steamos.sh`
+保留缩略图。
 
 ### Linux 桌面与其它 Linux 掌机（Arch / Ubuntu / Fedora）
-解压 `yiufplayer-linux-x86_64.tar.gz` 并运行 `./yiufplayer`。请确保系统已安装 `libmpv`、`ffmpeg` 和 `libcurl`：
+解压后运行 `./run.sh`（或 `./yiufplayer`）。确保装有 `libmpv` 与 `libcurl` ——
+**默认构建不需要 FFmpeg**：
 ```bash
 # Ubuntu / Debian
-sudo apt install libmpv2 libavcodec-dev libcurl4
+sudo apt install libmpv2 libcurl4
 
 # Arch / Manjaro
-sudo pacman -S mpv ffmpeg curl
+sudo pacman -S mpv curl
 ```
 
 ### macOS (Apple Silicon arm64)
-下载 `yiufplayer-macos-arm64.zip` 解压后直接运行 `./yiufplayer`。如需从源码编译，可通过 Homebrew 安装依赖：
+暂无预编译包，本地构建：
 ```bash
 brew install mpv ffmpeg fmt tinyxml2
+cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
+./build/yiufplayer
 ```
 
 ### Android (arm64-v8a)
-下载 `yiufplayer-android-arm64.apk`，可直接安装于 Android 平板、安卓掌机（如 Odin、Retroid Pocket）及 Android TV 智能电视。
+暂无预编译 APK，且 Android 版尚未在设备上验证。工具链要求见 `android/README.md`。
 
 ---
 

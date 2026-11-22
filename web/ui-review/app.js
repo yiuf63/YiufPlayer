@@ -944,7 +944,7 @@ function renderApp() {
     '</header>' +
     '<div class="app-body">' +
       '<nav class="sidebar" id="sidebar" data-name="侧边栏" ' +
-        'data-spec="宽 160（1280 的 12.5%）· 条目高 56 · 图标 18 + 文字 17 · 强调条 3×26">' +
+        'data-spec="宽 176（1280 的 13.75%）· 条目高 56 · 图标 18 + 文字 17 · 强调条 3×26">' +
         navHTML() + '</nav>' +
       '<section class="main" id="main">' +
         '<div id="toolbar">' + toolbarHTML() + '</div>' +

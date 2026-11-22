@@ -63,11 +63,26 @@ my_awesome_plugin/
 * `id` (string, 必须): 插件唯一包名（推荐反向域名格式，如 `com.author.plugin_name`）。
 * `name` (string, 必须): 界面展示的插件名称。
 * `version` (string, 必须): 语义化版本号，如 `1.0.0`。
-* `capabilities` (array, 必须): 声明插件能力，可包含：
+* `capabilities` (array, 可选): 声明插件能力，可包含：
   * `"scraper"`: 刮削器插件（提供在线影视信息与海报拉取）；
-  * `"video_source"`: 视频源插件（提供目录树浏览与视频流播放）。
+  * `"video_source"`: 视频源插件（提供目录树浏览与视频流播放）；
+  * `"media_stream"` / `"storage"` / `"search"`: 上面两种的高级写法（旧版插件用）。
 * `main` (string, 可选): 入口 JS 文件，默认为 `"main.js"`。
-* `configSchema` (array, 可选): 声明插件的自定义设置项。Muvik 会在“设置 -> 插件管理”中自动生成对应的可视化配置界面。
+* `configSchema` (array, 可选): 声明插件的自定义设置项，会在「设置 → 插件管理」中自动生成可视化配置界面。
+
+> **两套名字都支持，随便用哪套**
+>
+> * 能力名：`"video_source"` 等价于同时声明 `"media_stream"` + `"storage"`。
+> * 设置项键名：`"configSchema"` 与 `"settings"` 等价；设置项里的标题字段
+>   `"title"` 与 `"label"` 等价（都没有时回退到 `key`）。
+>
+> 早期实现只认 `media_stream`/`storage` 与 `settings`，导致**完全照本文档写的插件
+> 反而不出现在「文件 → 插件视频源」里、配置项也一条都不显示**，而省略
+> `capabilities` 靠自动探测却能工作。现在两条路径等价，按文档写即可。
+>
+> 另外 `capabilities` 可以整段省略：宿主会通过 `hasFunction()` 自动探测
+> （实现 `listDirectory`/`resolvePlayUrl` → storage，`search`/`loadLinks` → media_stream，
+> `scrapeSearch`/`scrapeDetail` → scraper）。
 
 ---
 
@@ -236,8 +251,8 @@ console.error("错误记录:", err);
 ### 1. 本地免安装调试
 开发时无需打包 ZIP，直接将开发文件夹放置在 Muvik 的本地插件目录即可自动识别并热加载：
 
-* **Linux / Steam Deck**: `~/.config/muvik/plugins/<插件名>/`
-* **macOS**: `~/.config/muvik/plugins/<插件名>/`
+* **Linux / Steam Deck**: `~/.config/yiufplayer/plugins/<插件名>/`
+* **macOS**: `~/.config/yiufplayer/plugins/<插件名>/`
 * **Windows**: `%APPDATA%/muvik/plugins/<插件名>/`
 
 ### 2. 打包分发

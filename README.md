@@ -21,7 +21,7 @@ On gaming handhelds like **Steam Deck**, **ROG Ally**, **Legion Go**, or on livi
 
 **Yiuf Player** bridges this gap by marrying the console-grade 60FPS UI of [Borealis](https://github.com/dragonflylee/borealis) with the industry-leading decoding powerhouse of [libmpv](https://mpv.io):
 
-* **Instant Startup**: Native C++17 binary (< 7 MB), boots in **< 100 ms**, uses ~40 MB RAM.
+* **Instant Startup**: Native C++17 binary (~6.6 MB), first frame in **well under a second** (measured ~430 ms end-to-end on an Apple M4 including window creation and GL init).
 * **Handheld & Controller First**: Built entirely for D-Pad, thumbsticks, triggers, and full touch gestures.
 * **SteamOS Native**: Integrates seamlessly with Steam Deck — auto-detects MicroSD cards, invokes the native Steam virtual keyboard, and provides Steam grid art assets.
 * **Pure & Free**: 100% open source under GNU GPL-3.0, zero tracking, zero mandatory cloud accounts.
@@ -73,48 +73,79 @@ On gaming handhelds like **Steam Deck**, **ROG Ally**, **Legion Go**, or on livi
 | Button | In Player View | In Library / File View |
 | :--- | :--- | :--- |
 | **A** | Play / Pause (Confirm OSD control) | Enter directory / Play item |
-| **B** | Exit playback (Instant return to library) | Back to upper directory / Cancel |
+| **B** | Exit playback (returns immediately; only closes a control bar **you** opened) | Back to upper directory / Cancel |
 | **D-Pad Left / Right** | Quick seek (-10s / +10s) | Navigate grid |
-| **LT / RT (Triggers)** | Volume down / up (-5% / +5%) | Page down / up |
-| **LB / RB (Bumpers)** | Seek (-15s / +15s) | Previous / Next Tab |
-| **D-Pad Up** | Open episode playlist dialog | Jump to search button |
+| **LT / RT (Triggers)** | Volume down / up (-5% / +5%) | — |
+| **LB / RB (Bumpers)** | Seek (-15s / +15s) | — |
+| **D-Pad Up** | Open episode playlist dialog | — |
 | **D-Pad Down** | Focus OSD controls bar | Scroll down |
+| **Left Stick** | Navigate OSD controls | Navigate grid |
 | **X** | Open Audio Track menu | Scrape movie metadata |
 | **Y** | Open Subtitle menu | Rescan media library |
-| **R3 (Right Stick Press)** | Cycle playback speed (`1.0x → 1.25x → 1.5x → 2.0x → 0.75x`) | - |
-| **L3 (Left Stick Press)** | Cycle aspect ratio (Original → 16:10 Fill → 16:9 → 4:3 → Crop) | - |
-| **START** | Toggle touch lock | - |
+| **SELECT (Back)** | — | View & sort menu |
+| **R3 (Right Stick Press)** | Cycle playback speed (`1.0x → 1.25x → 1.5x → 2.0x → 0.75x`) | — |
+| **L3 (Left Stick Press)** | Cycle aspect ratio (Original → 16:10 Fill → 16:9 → 4:3 → Crop) | — |
+| **START** | Toggle touch lock | Jump to Settings tab |
+
+> The "—" cells are intentionally empty: those buttons are not bound on that screen.
+> They were previously documented as "Page down / up", "Previous / Next Tab" and
+> "Jump to search button", but no such handlers ever existed in the library or file
+> views — pressing them did nothing. The table now lists only bindings that are
+> actually registered (`grep registerAction src/activity/`).
 
 ---
 
 ## 📥 Installation
 
-Pre-compiled release packages are available on [GitHub Releases](https://github.com/yiuf63/YiufPlayer/releases):
+> **Status: no pre-built release yet.** The build scripts work and produce a
+> runnable package, but it has **not been verified on real Steam Deck hardware**
+> (see "Verification status" below). Build it yourself with the steps below.
 
 ### Steam Deck (SteamOS)
-1. Switch Steam Deck to **Desktop Mode**.
-2. Download `yiufplayer-linux-x86_64.tar.gz` and extract it to `~/yiufplayer`.
-3. Run `python3 add_to_steam.py` to automatically register Yiuf Player into your Steam Library with official boxart and banner grids.
-4. Return to **Gaming Mode** — launch Yiuf Player directly from your Non-Steam Games library!
+
+```bash
+# On your PC (needs Docker):
+./scripts/package-steamos.sh
+# -> dist/yiufplayer-steamos-x86_64-<date>.tar.gz
+
+# Copy to the Deck and run:
+scp dist/yiufplayer-steamos-*.tar.gz deck@steamdeck:~
+ssh deck@steamdeck 'tar xzf yiufplayer-steamos-*.tar.gz'
+```
+
+Then either run it directly (`./run.sh /path/to/video.mp4`), or register it in
+Steam: switch to **Desktop Mode**, `cd` into the extracted folder and run
+`python3 add_to_steam.py`. It will appear under **Non-Steam Games** in Gaming Mode.
+
+The package deliberately **ships without video thumbnails**: linking FFmpeg
+would bake Debian's `libavcodec.so.59` into the binary, and SteamOS (Arch) has a
+different soname — the app would fail to start with
+`error while loading shared libraries`. Cards fall back to generated
+placeholder art instead. Run `MODE=full ./scripts/package-steamos.sh` if you only
+target distros matching your build host.
 
 ### Linux Desktop / Handhelds (Arch / Ubuntu / Fedora)
-Extract `yiufplayer-linux-x86_64.tar.gz` and run `./yiufplayer`. Ensure `libmpv`, `ffmpeg`, and `libcurl` are installed on your distribution:
+Extract the package and run `./run.sh` (or `./yiufplayer`). Ensure `libmpv`
+and `libcurl` are installed — **FFmpeg is not required** for the default build:
 ```bash
 # Ubuntu / Debian
-sudo apt install libmpv2 libavcodec-dev libcurl4
+sudo apt install libmpv2 libcurl4
 
 # Arch / Manjaro
-sudo pacman -S mpv ffmpeg curl
+sudo pacman -S mpv curl
 ```
 
 ### macOS (Apple Silicon arm64)
-Download `yiufplayer-macos-arm64.zip`, extract, and launch `./yiufplayer`. Alternatively build via Homebrew dependencies:
+No pre-built package yet. Build locally:
 ```bash
 brew install mpv ffmpeg fmt tinyxml2
+cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
+./build/yiufplayer
 ```
 
 ### Android (arm64-v8a)
-Download and install `yiufplayer-android-arm64.apk` directly on Android tablets, handhelds (Odin, Retroid), or Android TV.
+No pre-built APK yet; the Android build is not verified on device. See
+`android/README.md` for the toolchain requirements.
 
 ---
 
