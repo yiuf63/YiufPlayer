@@ -82,20 +82,38 @@ std::string ResourceLocator::findResourceDir() {
     candidates.push_back((fs::path(currentDir()) / "resources").string());
 
     // 3. 相对可执行文件的位置（安装布局）
+    //
+    // 目录名必须同时覆盖两个：
+    //   · "yiufplayer" —— 当前 CMakeLists 的 install(DIRECTORY ... DESTINATION
+    //                     share/yiufplayer)，也即实际安装出来的位置；
+    //   · "muvik"      —— 旧版安装布局与 Flatpak manifest，以及 /app 下的
+    //                     打包路径，保留以免升级后失效。
+    //
+    // 之前这里只查 "muvik"，而安装规则写的是 "share/yiufplayer"，
+    // 于是 `cmake --install` 装出来的程序一启动就报
+    // 「未能定位资源目录，字体与图标可能缺失」—— 桌面上从启动器点图标
+    // 进去就是没有文字的界面。实测复现。
+    //
+    // 顺带修掉一处笔误：原先 exe.parent_path().parent_path() / "share" / "muvik"
+    // 连写了两遍，第二行完全多余。
     if (!exe_dir.empty()) {
         fs::path exe(exe_dir);
-        candidates.push_back((exe / "resources").string());              // bin/resources
-        candidates.push_back((exe.parent_path() / "resources").string()); // ../resources
-        candidates.push_back((exe.parent_path() / "share" / "muvik" / "resources").string());
-        candidates.push_back((exe.parent_path().parent_path() / "share" / "muvik" / "resources").string());
-        // Flatpak 常见布局：/app/bin/muvik -> /app/share/muvik/resources
-        candidates.push_back((exe.parent_path().parent_path() / "share" / "muvik" / "resources").string());
+        for (const char* app : {"yiufplayer", "muvik"}) {
+            candidates.push_back((exe / "resources").string());                            // bin/resources
+            candidates.push_back((exe / "share" / app / "resources").string());            // bin/share/<app>
+            candidates.push_back((exe.parent_path() / "resources").string());              // ../resources
+            candidates.push_back((exe.parent_path() / "share" / app / "resources").string()); // /usr/bin -> /usr/share/<app>
+            candidates.push_back(
+                (exe.parent_path().parent_path() / "share" / app / "resources").string()); // /app/bin -> /app/share/<app>
+        }
     }
 
     // 4. 系统级安装路径
-    candidates.push_back("/app/share/muvik/resources");                 // Flatpak
-    candidates.push_back("/usr/share/muvik/resources");                  // 系统安装
-    candidates.push_back("/usr/local/share/muvik/resources");
+    for (const char* app : {"yiufplayer", "muvik"}) {
+        candidates.push_back(std::string("/app/share/") + app + "/resources");       // Flatpak
+        candidates.push_back(std::string("/usr/share/") + app + "/resources");       // 系统安装
+        candidates.push_back(std::string("/usr/local/share/") + app + "/resources");
+    }
 
     for (const auto& c : candidates) {
         if (isValidResourceDir(c)) {

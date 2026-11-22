@@ -115,16 +115,49 @@ endif ()
 #   · Android 的 jniLibs 里目前只有 libmpv.so，没有单独的 avformat/avcodec；
 #   · 抽帧只是一层装饰，拿不到就退回占位画面，界面照样能用。
 # 所以这里 find 不到就不定义 MUVIK_HAVE_FFMPEG，thumbnail_cache 走空实现。
-pkg_check_modules(AVFORMAT libavformat)
-pkg_check_modules(AVCODEC libavcodec)
-pkg_check_modules(AVUTIL libavutil)
-pkg_check_modules(SWSCALE libswscale)
-if (AVFORMAT_FOUND AND AVCODEC_FOUND AND AVUTIL_FOUND AND SWSCALE_FOUND)
+#
+# **Android 必须整个跳过**：pkg_check_modules 没有平台意识，交叉编译时它会
+# 去搜宿主机（macOS 的 Homebrew / CI 的 ubuntu）的 pkg-config 路径。
+# 实测：在 macOS 上给 arm64 Android 配置时，build.ninja 的 INCLUDES 里出现了
+#   -isystem /opt/homebrew/Cellar/ffmpeg/9.0.2_1/include
+# 以及 -lavformat/-lavcodec/-lavutil/-lswscale（x86_64 Mach-O）与
+# -DMUVIK_HAVE_FFMPEG=1 —— 宿主的库被链进了目标平台产物。
+# 这会在链接期报架构不匹配，或运行期 dlopen 失败，而且报错点随宿主环境漂移。
+# 对 libcurl 早就做了同样的排除（见下面 if (ANDROID) 分支），FFmpeg 漏了。
+# 抽帧可以显式关掉：-DMUVIK_ENABLE_THUMBNAILS=OFF
+#
+# 什么时候需要关：**给 SteamOS/Arch 构建发布包时**。
+# 直接链接 libavformat/libavcodec 会把具体的 soname 写进产物
+# （Debian 12 上是 libavcodec.so.59 / libavutil.so.57），
+# 而 SteamOS 是 Arch，FFmpeg 版本更高、soname 不同，
+# 拷过去就是「error while loading shared libraries」。
+#
+# 关掉之后产物只依赖 libmpv（SteamOS 自带，且 soname 稳定），
+# 代价是媒体库网格少了视频缩略图、退回占位画面 —— 界面照样能用。
+# 这是把「跑不起来」换成「少个装饰」的取舍，发布包里通常值得。
+option(MUVIK_ENABLE_THUMBNAILS "从视频抽帧生成缩略图（需要链接 FFmpeg）" ON)
+
+if (NOT ANDROID AND MUVIK_ENABLE_THUMBNAILS)
+    pkg_check_modules(AVFORMAT libavformat)
+    pkg_check_modules(AVCODEC libavcodec)
+    pkg_check_modules(AVUTIL libavutil)
+    pkg_check_modules(SWSCALE libswscale)
+endif ()
+if (NOT ANDROID AND MUVIK_ENABLE_THUMBNAILS
+        AND AVFORMAT_FOUND AND AVCODEC_FOUND AND AVUTIL_FOUND AND SWSCALE_FOUND)
     set(MUVIK_FFMPEG_FOUND TRUE)
     message(STATUS "FFmpeg 抽帧：启用（avformat ${AVFORMAT_VERSION} / avcodec ${AVCODEC_VERSION}）")
 else ()
     set(MUVIK_FFMPEG_FOUND FALSE)
-    message(STATUS "FFmpeg 抽帧：未找到 avformat/avcodec/avutil/swscale，缩略图退回占位画面")
+    if (ANDROID)
+        message(STATUS "FFmpeg 抽帧：Android 跳过（不使用宿主 FFmpeg，缩略图走占位画面）")
+    elseif (NOT MUVIK_ENABLE_THUMBNAILS)
+        message(STATUS "FFmpeg 抽帧：已按 MUVIK_ENABLE_THUMBNAILS=OFF 关闭")
+        message(STATUS "  → 产物不链接 libav*，只依赖 libmpv（跨发行版/SteamOS 更稳）")
+        message(STATUS "  → 代价：媒体库网格没有视频缩略图，显示占位画面")
+    else ()
+        message(STATUS "FFmpeg 抽帧：未找到 avformat/avcodec/avutil/swscale，缩略图退回占位画面")
+    endif ()
 endif ()
 
 # libcurl：为插件提供 HTTP 能力。许可证为 MIT/X 风格，允许闭源商业分发，
@@ -217,6 +250,25 @@ endif ()
 option(MUVIK_USE_GLES2 "使用 OpenGL ES 2.0 渲染（掌机）" OFF)
 option(MUVIK_USE_GLES3 "使用 OpenGL ES 3.0 渲染（掌机）" OFF)
 option(MUVIK_USE_EGL   "使用 EGL 而非原生 GL" OFF)
+
+# 旧名兼容：DECK_USE_GLES2 / DECK_USE_GLES3 / DECK_USE_EGL。
+#
+# 这三个选项在提交 3004939 里被改名为 MUVIK_USE_*，但
+# android/app/build.gradle 一直还在传 -DDECK_USE_GLES3=ON -DDECK_USE_EGL=ON。
+# CMake 对未定义的 -D 变量不会报错，只会静静地写进 cache 当作未使用变量，
+# 于是 Android 的图形后端选择**从未生效**：
+# 实测全新配置后 cache 里 USE_GLES3:BOOL=OFF、USE_EGL:BOOL=OFF，
+# 而 DECK_USE_GLES3:UNINITIALIZED=ON —— 是个死变量。
+# 这里把旧名接上，两套写法都能生效，不用去改各平台的构建脚本。
+if (DEFINED DECK_USE_GLES2 AND DECK_USE_GLES2)
+    set(MUVIK_USE_GLES2 ON)
+endif ()
+if (DEFINED DECK_USE_GLES3 AND DECK_USE_GLES3)
+    set(MUVIK_USE_GLES3 ON)
+endif ()
+if (DEFINED DECK_USE_EGL AND DECK_USE_EGL)
+    set(MUVIK_USE_EGL ON)
+endif ()
 
 if (MUVIK_USE_GLES2 AND MUVIK_USE_GLES3)
     message(FATAL_ERROR "MUVIK_USE_GLES2 与 MUVIK_USE_GLES3 不能同时开启。")
@@ -412,13 +464,23 @@ if (UNIX AND NOT APPLE)
             DESTINATION share/yiufplayer
             USE_SOURCE_PERMISSIONS)
 
+    # 桌面集成三件套的 ID 必须完全一致，否则桌面环境不认：
+    #   · desktop 文件名     = <app-id>.desktop
+    #   · desktop 的 Icon=    = <app-id>（图标文件名去掉 .png）
+    #   · metainfo 的 launchable = <app-id>.desktop
+    #
+    # 之前这里是三套不同命名撞在一起：install 重命名成 org.yiuf.YiufPlayer.*，
+    # 而 desktop 文件里写着 Icon=org.muvik.Muvik、metainfo 的 launchable 是
+    # org.muvik.Muvik.desktop —— 装出来的桌面图标找不到图、AppStream 关联断裂。
+    # 统一到 AppStream id 的既有值 org.muvik.Muvik（改名会破坏已发布的元数据
+    # 与 Flathub 关联），只改 install 的 RENAME 与 desktop 的 Icon。
     install(FILES flatpak/org.muvik.Muvik.desktop
             DESTINATION share/applications
-            RENAME org.yiuf.YiufPlayer.desktop)
+            RENAME org.muvik.Muvik.desktop)
 
     install(FILES resources/icon/icon.png
             DESTINATION share/icons/hicolor/256x256/apps
-            RENAME org.yiuf.YiufPlayer.png)
+            RENAME org.muvik.Muvik.png)
 
     install(FILES flatpak/org.muvik.Muvik.metainfo.xml
             DESTINATION share/metainfo)

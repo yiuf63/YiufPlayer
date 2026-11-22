@@ -15,6 +15,7 @@
 #include <atomic>
 #include <memory>
 #include <thread>
+#include <cstdlib>
 
 namespace muvik {
 
@@ -284,6 +285,30 @@ void PluginBrowserActivity::render() {
                         return true;
                     });
                     list_->addView(cell);
+                }
+
+                if (std::getenv("MUVIK_AUTOPLAY_FIRST_VIDEO")) {
+                    brls::Logger::info("测试钩子：自动触发首个视频播放: {}", playable[0].name);
+                    const auto& target_item = playable[0];
+                    std::string current_plugin = plugin;
+                    std::vector<MediaItem> playlist = playable;
+                    std::thread([playlist, current_plugin, target_item]() {
+                        StreamSource resolved_source;
+                        bool ok = PluginManager::getInstance().resolvePlayUrl(current_plugin, target_item.path, resolved_source);
+                        brls::sync([playlist, ok, resolved_source]() {
+                            std::vector<MediaItem> resolved_list = playlist;
+                            if (ok && !resolved_source.url.empty()) {
+                                resolved_list[0].path = resolved_source.url;
+                                auto* player_act = new PlayerActivity(resolved_list, 0);
+                                if (!resolved_source.headers.empty()) {
+                                    player_act->setStreamHeaders(resolved_source.headers);
+                                }
+                                brls::Application::pushActivity(player_act);
+                            } else {
+                                brls::Application::pushActivity(new PlayerActivity(playlist, 0));
+                            }
+                        });
+                    }).detach();
                 }
             }
             list_->setPaddingBottom(28.0f);

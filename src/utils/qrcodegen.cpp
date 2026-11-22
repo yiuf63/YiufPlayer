@@ -29,6 +29,8 @@
 #include <cstring>
 #include <sstream>
 #include <utility>
+#include <vector>
+#include <string>
 #include "utils/qrcodegen.hpp"
 
 using std::int8_t;

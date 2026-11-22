@@ -9,6 +9,8 @@
 #include <vector>
 #include <memory>
 #include <atomic>
+#include <string>
+#include <map>
 
 namespace muvik {
 

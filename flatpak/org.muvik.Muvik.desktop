@@ -1,8 +1,8 @@
 [Desktop Entry]
-Name=Muvik
+Name=Yiuf Player
 GenericName=Media Player
 Comment=A modern, controller-first and remote-native media player designed for handhelds, TV and desktop.
-Exec=muvik %U
+Exec=yiufplayer %U
 Icon=org.muvik.Muvik
 Terminal=false
 Type=Application

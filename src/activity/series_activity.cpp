@@ -1,6 +1,9 @@
 #include "activity/series_activity.hpp"
 
 #include <algorithm>
+#include <vector>
+#include <string>
+#include <thread>
 #include <borealis.hpp>
 #include <borealis/views/applet_frame.hpp>
 #include <borealis/views/scrolling_frame.hpp>

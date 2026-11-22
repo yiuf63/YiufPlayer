@@ -7,6 +7,7 @@
 #include <thread>
 #include "activity/plugin_manager_activity.hpp"
 #include "view/media_cell.hpp"
+#include "ui/design.hpp"
 #include "ui/icons.hpp"
 #include "utils/app_paths.hpp"
 #include "plugin/plugin_installer.hpp"
@@ -256,7 +257,7 @@ void PluginManagerActivity::render() {
                 } else if (!is_source) {
                     brls::Label* info = new brls::Label();
                     info->setText("该插件无需额外配置。");
-                    info->setFontSize(14.0f);
+                    info->setFontSize(ui::font::detail);
                     info->setMarginLeft(24.0f);
                     info->setMarginTop(8.0f);
                     info->setMarginBottom(8.0f);
@@ -332,7 +333,7 @@ void PluginManagerActivity::render() {
             } else {
                 brls::Label* info = new brls::Label();
                 info->setText("该插件没有可配置项。");
-                info->setFontSize(14.0f);
+                info->setFontSize(ui::font::detail);
                 info->setMarginLeft(24.0f);
                 info->setMarginTop(8.0f);
                 info->setMarginBottom(8.0f);
@@ -378,7 +379,7 @@ void PluginManagerActivity::render() {
     note->setText("插件必须导出统一入口符号 muvik_plugin_entry_v1，\n"
                   "且声明的 ABI 版本需与主程序一致，否则会被安全跳过。\n"
                   "这是为了防止跨编译器/标准库版本导致的内存布局错位崩溃。");
-    note->setFontSize(14.0f);
+    note->setFontSize(ui::font::detail);
     note->setTextColor(nvgRGBA(140, 146, 156, 255));
     note->setMarginLeft(24.0f);
     note->setMarginTop(4.0f);

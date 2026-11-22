@@ -58,11 +58,19 @@ nlohmann::json loadLocaleCatalog(const std::string& locale) {
     }
 
     // 2. 相对可执行文件目录
+    //
+    // 安装目录名必须同时覆盖 "yiufplayer"（当前 CMakeLists 的安装目标）与
+    // "muvik"（旧版布局 / Flatpak）。之前只查 muvik，配合
+    // install(DESTINATION share/yiufplayer)，装出来就是英文界面变中文 key、
+    // 或者整块文字消失 —— 与 resource_locator 的同一处缺陷同源。
     const std::string exe_dir = ResourceLocator::executableDir();
     if (!exe_dir.empty()) {
         candidates.push_back(exe_dir + "/resources/i18n/" + locale + "/muvik.json");
         candidates.push_back(exe_dir + "/../resources/i18n/" + locale + "/muvik.json");
-        candidates.push_back(exe_dir + "/../share/muvik/resources/i18n/" + locale + "/muvik.json");
+        for (const char* app : {"yiufplayer", "muvik"}) {
+            candidates.push_back(exe_dir + "/share/" + app + "/resources/i18n/" + locale + "/muvik.json");
+            candidates.push_back(exe_dir + "/../share/" + app + "/resources/i18n/" + locale + "/muvik.json");
+        }
     }
 
     // 3. 环境变量 MUVIK_RESOURCES
@@ -78,10 +86,12 @@ nlohmann::json loadLocaleCatalog(const std::string& locale) {
     candidates.push_back("./resources/i18n/" + locale + "/deck_player.json");
     candidates.push_back("../resources/i18n/" + locale + "/deck_player.json");
 
-    // 5. 常见系统安装路径
-    candidates.push_back("/app/share/muvik/resources/i18n/" + locale + "/muvik.json");
-    candidates.push_back("/usr/share/muvik/resources/i18n/" + locale + "/muvik.json");
-    candidates.push_back("/usr/local/share/muvik/resources/i18n/" + locale + "/muvik.json");
+    // 5. 常见系统安装路径（同样两个目录名都要覆盖）
+    for (const char* app : {"yiufplayer", "muvik"}) {
+        candidates.push_back(std::string("/app/share/") + app + "/resources/i18n/" + locale + "/muvik.json");
+        candidates.push_back(std::string("/usr/share/") + app + "/resources/i18n/" + locale + "/muvik.json");
+        candidates.push_back(std::string("/usr/local/share/") + app + "/resources/i18n/" + locale + "/muvik.json");
+    }
 
     for (const auto& path : candidates) {
         nlohmann::json j = loadJsonFile(path);

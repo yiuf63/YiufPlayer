@@ -205,9 +205,7 @@ void PlayerActivity::playCurrentIndex() {
         }
     }
 
-    if (!stream_headers_.empty()) {
-        player_view_->setStreamHeaders(stream_headers_);
-    }
+    player_view_->setStreamHeaders(stream_headers_);
     player_view_->openFile(item.path, item.name, resume_pos, item.matched_subtitles);
 }
 
