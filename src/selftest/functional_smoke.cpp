@@ -159,13 +159,77 @@ void runFunctionalSmoke() {
               "深度=" + std::to_string(stackDepth()));
     }});
 
+    // 4.2 暂停播放。
+    //
+    // 为什么必须暂停：后面两步（↑ 打开播放列表、B 返回）都依赖「此刻仍在播放页」。
+    // 而测试素材可能很短（verify_ui 造的系列剧集只有 3 秒），
+    // 播完会触发 eof-reached → 自动切下一集 → 最后 popActivity，
+    // 等步骤跑到时栈里已经没有播放页了。
+    // 暂停之后位置不再推进，素材长短就与断言无关了。
+    //
+    // 这里注入的是 A 键（播放页的 A = 播放/暂停），走真实按键路径；
+    // 不是直接调 pause()，所以顺带也验证了这个键还在工作。
+    steps.push_back({200, "暂停播放", []() {
+        brls::Application::injectButton(brls::BUTTON_A);
+    }});
+
+    // 4.5 十字键 ↑ 必须真的打开播放列表。
+    //
+    // 为什么值得单独断言：文档写着「十字键 ↑ = 打开播放列表」，但早先这个键
+    // 只是唤出控制栏并把焦点移到「播放/暂停」上，从不调用 on_show_playlist_cb_。
+    // 播放列表只有点屏幕上的图标才打得开，手柄用户永远进不去。
+    // 当时的自动检查全是绿的 —— check_docs.py 只核对「有没有 registerAction」，
+    // 核对不了「这个 lambda 到底干了什么」。这里改为断言可观测结果：
+    // 按下 ↑ 之后活动栈必须变深（Dialog 是压栈实现的）。
+    //
+    // ⚠ 前置条件：必须仍在播放页。
+    // 短素材（verify_ui 造的 3 秒系列剧集）在按下 ↑ 之前就已经播完并自动
+    // 跳到下一集 / 或已 popActivity 回到列表，此时 ↑ 本来就该在别的页面上
+    // 做别的事。早先没有这层判断，于是「素材太短」会被报成
+    // 「播放列表打不开」，误导性很强。
+    steps.push_back({500, "十字键 ↑ 打开播放列表", []() {
+        size_t before = stackDepth();
+        if (before < 2) {
+            brls::Logger::warning(
+                "[smoke] 跳过 ↑ 播放列表断言：已不在播放页（栈深 {}）。"
+                "若是短素材播完自动退出，属正常，不是缺陷。", before);
+            return;
+        }
+        brls::Application::injectButton(brls::BUTTON_UP);
+        size_t after = stackDepth();
+        check("十字键 ↑ 打开了播放列表", after > before,
+              "栈深 " + std::to_string(before) + " -> " + std::to_string(after));
+    }});
+
+    // 4.6 收起刚才打开的播放列表，让后面的返回键断言不被对话框截住
+    steps.push_back({400, "关闭播放列表", []() {
+        brls::Application::injectButton(brls::BUTTON_B);
+    }});
+
     // 5. 按 B 返回
+    //
+    // 这一步同时守卫一个语义：**自动显示的控制栏不得吞掉 B 键**。
+    // 进入播放页时控制栏会自动显示并在 4.5 秒内算「活跃」；早先的 B 键处理
+    // 只判 isOsdActive()，于是这里按 B 只会把控制栏收起来、页面不退出，
+    // 用户表现为「返回键没反应，要按两次」。下面直接断言栈深变小，
+    // 就同时在守这条语义（若控制栏又吞掉 B，栈深不变、本项立刻失败）。
+    //
+    // ⚠ 前置条件同 4.5：短素材可能已经播完自动回退，这时栈里没有播放页，
+    // 按 B 自然不会减少深度。不区分「B 失效」与「本来就不在播放页」
+    // 会把正常行为报成缺陷。
     steps.push_back({300, "按 B 返回", []() {
         size_t before = stackDepth();
+        if (before < 2) {
+            brls::Logger::warning(
+                "[smoke] 跳过 B 返回断言：播放页已不在栈上（栈深 {}）。"
+                "短素材播完自动退回属正常行为。", before);
+            return;
+        }
         brls::Application::injectButton(brls::BUTTON_B);
         // 播放器的 B 键行为是 popActivity，深度应当减少
         check("按 B 之后返回了上一页", stackDepth() < before,
-              "栈深 " + std::to_string(before) + " -> " + std::to_string(stackDepth()));
+              "栈深 " + std::to_string(before) + " -> " + std::to_string(stackDepth()) +
+              "（若相等：B 被自动显示的控制栏吞掉了）");
     }});
 
     // 6. 再按一次 B：这一下不再是「退到上一页」，而是「从文件夹退回总览」。

@@ -208,8 +208,14 @@ MPVPlayerView::MPVPlayerView() {
 
     this->registerAction(i18n::tr("common.back", "返回"), brls::ControllerButton::BUTTON_B, [this, handleLocked]([[maybe_unused]] brls::View* view) {
         if (handleLocked()) return true;
-        // 若当前 OSD 正在显示，按 B 键首先关闭 OSD；OSD 已隐藏时按 B 才退出播放页
-        if (isOsdActive()) {
+        // 「按 B 先收控制栏」只对**用户主动唤出**的控制栏成立。
+        //
+        // 进入播放页时控制栏会自动显示一次，并在 4.5 秒内算「活跃」。
+        // 早先这里只判 isOsdActive()，于是用户进页面立刻按 B，
+        // 按键被自动显示的控制栏吞掉：页面不退出，看起来像「返回没反应」，
+        // 必须再按一次。冒烟测试「按 B 之后返回了上一页」因此长期失败。
+        // 现在自动显示的控制栏不拦 B —— 直接退出播放页。
+        if (osd_user_invoked_ && isOsdActive()) {
             showOSD(false);
             return true;
         }
@@ -269,15 +275,28 @@ MPVPlayerView::MPVPlayerView() {
         return true;
     }, false, true);
 
+    // 十字键 ↑ = 打开播放列表。
+    //
+    // 注意这里和下面 BUTTON_NAV_UP（摇杆 ↑）是**两个不同按键**：
+    // 文档承诺「十字键 ↑ 打开播放列表」，而摇杆 ↑ 负责在控制栏里向上移动焦点。
+    // 早先两者都被绑成了「唤出/导航控制栏」，于是手柄用户永远打不开播放列表，
+    // 只有点屏幕上那个图标才行 —— 文档与实现直接冲突。
+    //
+    // 现在的分工：
+    //   · 控制栏被用户主动唤出且仍活跃 → ↑ 在其中向上移动焦点（保持可操作性）
+    //   · 其它情况（控制栏自动显示或已隐藏） → ↑ 直接打开播放列表
     this->registerAction(i18n::tr("player.playlist", "播放列表"), brls::ControllerButton::BUTTON_UP, [this, handleLocked]([[maybe_unused]] brls::View* view) {
         if (handleLocked()) return true;
-        if (isOsdActive()) {
-            navigateOsdFocus(brls::FocusDirection::UP);
-        } else {
-            showOSD(true);
-            osd_focus_ = OsdFocusItem::PlayPause;
-        }
         last_user_action_time_ = std::chrono::steady_clock::now();
+        if (osd_user_invoked_ && isOsdActive()) {
+            navigateOsdFocus(brls::FocusDirection::UP);
+            return true;
+        }
+        if (on_show_playlist_cb_) {
+            on_show_playlist_cb_();
+        } else {
+            brls::Logger::warning("十字键 ↑：没有注册播放列表回调");
+        }
         return true;
     }, false);
 
@@ -567,6 +586,7 @@ void MPVPlayerView::setupGestureSelfTest() {
     // 于是整段逻辑一次都没执行过 —— 界面上表现为「按钮点了没反应」。
     steps.push_back({400, [self]() {
         self->osd_visible_ = true;
+        self->osd_user_invoked_ = true;   // 自检模拟的是用户唤出
         self->last_user_action_time_ = std::chrono::steady_clock::now();
     }, "按下态(显示OSD)"});
 
@@ -902,7 +922,7 @@ void MPVPlayerView::drawHud(NVGcontext* vg, float x, float y, float width, float
         std::chrono::duration<float, std::milli>(now - osd_anim_t0_).count()
             / kOsdAnimMs, 0.0f, 1.0f);
     // 缓出曲线：线性插值在收尾处会有「突然停住」的机械感
-    const float eased = 1.0f - (1.0f - anim_t) * (1.0f - anim_t);
+    const float eased = ui::easeOut(anim_t);
     const float osd_target_alpha = osd_shown ? 1.0f : 0.0f;
     osd_alpha_ = osd_alpha_from_ + (osd_target_alpha - osd_alpha_from_) * eased;
 
@@ -1420,6 +1440,7 @@ void MPVPlayerView::setupGestures() {
                     gesture_double_tap_pending_ = false;
                     toggleTouchLock();
                     osd_visible_ = true;
+                    osd_user_invoked_ = true;   // 用户双击手势唤出，B 键可先收栏
                     last_user_action_time_ = now;
                 } else {
                     gesture_double_tap_pending_ = true;
@@ -1637,6 +1658,12 @@ void MPVPlayerView::initMPV() {
     mpv_ = mpv_create();
     if (!mpv_) return;
 
+    if (std::getenv("MUVIK_MUTE")) {
+        mpv_set_option_string(mpv_, "mute", "yes");
+        mpv_set_option_string(mpv_, "ao", "null");
+        brls::Logger::info("MPVPlayerView: 静音模式已开启（MUVIK_MUTE）");
+    }
+
     // 针对 Steam Deck (AMD APU) 与现代 Linux 深度调优
     // Android 上硬解（MediaCodec → GLES 外部纹理 OES）需要
     // glEGLImageTargetTexture2DOES 等扩展函数，通过 eglGetProcAddress
@@ -1825,16 +1852,22 @@ void MPVPlayerView::openFile(const std::string& path, const std::string& title, 
     if (!stream_headers_.empty()) {
         std::string header_str;
         for (const auto& kv : stream_headers_) {
-            if (!header_str.empty()) header_str += ",";
-            header_str += kv.first + ": " + kv.second;
             if (kv.first == "User-Agent" || kv.first == "user-agent") {
                 mpv_set_property_string(mpv_, "user-agent", kv.second.c_str());
+                continue;
             }
             if (kv.first == "Referer" || kv.first == "referer") {
                 mpv_set_property_string(mpv_, "referrer", kv.second.c_str());
+                continue;
             }
+            if (!header_str.empty()) header_str += ",";
+            header_str += kv.first + ": " + kv.second;
         }
-        mpv_set_property_string(mpv_, "http-header-fields", header_str.c_str());
+        if (!header_str.empty()) {
+            mpv_set_property_string(mpv_, "http-header-fields", header_str.c_str());
+        } else {
+            mpv_set_property_string(mpv_, "http-header-fields", "");
+        }
     } else {
         mpv_set_property_string(mpv_, "http-header-fields", "");
     }
@@ -1889,6 +1922,12 @@ void MPVPlayerView::showOSD(bool show) {
     osd_visible_ = show;
     if (show) {
         last_user_action_time_ = std::chrono::steady_clock::now();
+        // 能走到这里的「显示」都源于一次用户操作（按键 / 手势 / 触摸按钮），
+        // 因此标记为主动唤出。构造时 osd_visible_ 的初值是直接赋值的，
+        // 不经过本函数，所以「进页面自动显示」不会被误标为主动唤出。
+        osd_user_invoked_ = true;
+    } else {
+        osd_user_invoked_ = false;
     }
 }
 
@@ -2276,7 +2315,13 @@ void MPVPlayerView::selectTrack(const std::string& type, int track_id, bool show
         }
     }
 
-    // 立即落盘当前进度与轨道选择，避免退出时丢失
+    // 立即落盘轨道选择，避免「选过不记住」。
+    //
+    // 这里【故意】不加 position>0 判断：文件刚加载时 current_position_ 与
+    // total_duration_ 仍是 0，而此刻正需要把用户选的 sid/aid 存下来。
+    // 「0/0 不得覆盖已有进度」由 PlaybackHistory::updateProgress 统一处理
+    // （它会保留 position/duration/completed，只更新轨道与时间戳）。
+    // 把守卫放在数据层而不是这里，是因为调用点有 6 处，逐个加判断漏一个就复发。
     if (!current_file_path_.empty()) {
         PlaybackHistory::getInstance().updateProgress(
             current_file_path_, current_position_, total_duration_,
