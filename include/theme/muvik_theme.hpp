@@ -60,4 +60,20 @@ bool parseThemeJson(const std::string& json_str, ThemeItem& out_item, std::strin
 // 注册主题切换监听
 void registerThemeChangeListener(std::function<void(const ThemeItem&)> listener);
 
+
+// 派生色：禁用（disabled）态的三种灰阶。
+//
+// 为什么不写死在 applyPaletteTo 里：它们曾经是 8 个硬编码的深灰
+// （0x24262B / 0x3A3D43 / 0x606368 ...），只适合深色主题。
+// 浅色主题下「深灰底压深灰字」对比度只有约 1.9:1，按钮看起来像一块黑斑。
+//
+// 抽成独立函数的目的：**可单测**。测试可以拿任意 palette 直接验证推导结果，
+// 不需要把 borealis 的 Theme 对象塞进测试环境（那要链接整个 UI 栈）。
+struct DisabledColors {
+    NVGcolor text;    // 禁用文字
+    NVGcolor fill;    // 禁用底色
+    NVGcolor border;  // 禁用描边
+};
+DisabledColors deriveDisabledColors(const ui::Palette& p);
+
 } // namespace muvik

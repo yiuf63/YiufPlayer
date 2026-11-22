@@ -7,6 +7,8 @@
 #include <borealis/core/application.hpp>
 #include <borealis/core/logger.hpp>
 #include <cmath>
+#include <string>
+#include <algorithm>
 
 namespace muvik {
 
@@ -57,15 +59,21 @@ void QRCodeView::draw(NVGcontext* vg, float x, float y, float width, float heigh
 
     nvgBeginPath(vg);
     nvgRoundedRect(vg, rx, ry, side, side, ui::radius::md);
+    // 纯白 / 深墨黑是**二维码规范要求**，不能跟随主题：
+    //   · 浅色主题下如果按 palette 取底，白底会变成米色，扫码率下降；
+    //   · 深色主题下如果反色（白码黑底），很多手机识别不了。
+    // 这两处字面量是刻意的，不是漏改 —— 统一成 token 反而会弄坏功能。
     nvgFillColor(vg, nvgRGB(255, 255, 255));
     nvgFill(vg);
 
     if (!valid_ || qr_size_ <= 0) {
         nvgBeginPath(vg);
-        nvgFontSize(vg, 14.0f);
+        nvgFontSize(vg, ui::font::detail);
         nvgFontFaceId(vg, brls::Application::getDefaultFont());
         nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-        nvgFillColor(vg, nvgRGB(120, 120, 120));
+        // 提示文案画在**白底卡片上**，所以要用中灰而不是主题色 ——
+        // 深色主题的 text 是接近白色，压在白底上会完全看不见。
+        nvgFillColor(vg, ui::hex(0x787878));
         nvgText(vg, rx + side * 0.5f, ry + side * 0.5f, "二维码生成失败", nullptr);
         return;
     }
@@ -88,7 +96,7 @@ void QRCodeView::draw(NVGcontext* vg, float x, float y, float width, float heigh
             }
         }
     }
-    nvgFillColor(vg, nvgRGB(16, 18, 20)); // 深墨黑
+    nvgFillColor(vg, nvgRGB(16, 18, 20)); // 深墨黑（见上：规范要求，固定值）
     nvgFill(vg);
 }
 
@@ -106,7 +114,7 @@ void QRCodeView::showDialog(const std::string& title,
     if (!title.empty()) {
         auto* title_label = new brls::Label();
         title_label->setText(title);
-        title_label->setFontSize(22.0f);
+        title_label->setFontSize(ui::font::title);
         title_label->setTextColor(ui::palette().text);
         title_label->setMarginBottom(16.0f);
         container->addView(title_label);
@@ -121,7 +129,7 @@ void QRCodeView::showDialog(const std::string& title,
     if (!hint_text.empty()) {
         auto* hint_label = new brls::Label();
         hint_label->setText(hint_text);
-        hint_label->setFontSize(14.0f);
+        hint_label->setFontSize(ui::font::detail);
         hint_label->setTextColor(ui::palette().textMute);
         hint_label->setMarginBottom(12.0f);
         container->addView(hint_label);

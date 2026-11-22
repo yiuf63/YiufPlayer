@@ -138,6 +138,17 @@ NVGcolor mix(NVGcolor a, NVGcolor b, float t) {
                   a.b + (b.b - a.b) * t, a.a + (b.a - a.a) * t);
 }
 
+float easeOut(float t) {
+    t = std::clamp(t, 0.0f, 1.0f);
+    // 二次缓出：y = 1 - (1-t)^2
+    //   t=0.0 → 0.00   起步斜率 2.0（立刻有响应）
+    //   t=0.5 → 0.75   中点已走完 3/4 路程
+    //   t=1.0 → 1.00   收尾斜率为 0，停得稳
+    // 用二次而非三次：120ms 里三次缓出的「快段」太短，肉眼几乎看不出差别，
+    // 反而在低帧率设备上更容易显出跳帧。
+    return 1.0f - (1.0f - t) * (1.0f - t);
+}
+
 NVGcolor hex(unsigned int rgb, float alpha) {
     return c8((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF,
               std::clamp(alpha, 0.0f, 1.0f));

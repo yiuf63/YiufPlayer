@@ -16,6 +16,7 @@
 //   2. 文字截断、进度条、描边这些细节 borealis 控件不提供；
 //   3. 一次 draw() 画完，没有子视图，滚动长列表时开销更低。
 
+#include <chrono>
 #include <string>
 
 #include <borealis/core/box.hpp>
@@ -59,6 +60,20 @@ private:
     bool chevron_ = false;
     bool has_thumb_ = false;
     ui::SceneSpec thumb_;
+
+    // ── 焦点过渡（0 = 未选中，1 = 完全选中）──
+    //
+    // 为什么需要：原本选中态是硬切 —— 焦点一移动，底色、光晕、图标颜色
+    // 在同一帧全部跳变。手柄连按方向键时，一屏十几行会变成一片闪烁，
+    // 眼睛抓不住「现在选的是哪个」。加约 120ms 的插值之后，选中态像被
+    // 推过去，视线能跟住。
+    //
+    // 实现上不引 tween 库：borealis 主循环每帧都会调 draw()，这里按墙钟
+    // 时间算进度即可（与 mpv_player 的 OSD 用同一套办法）。
+    float focus_anim_ = 0.0f;                           // 当前插值结果
+    bool focus_last_ = false;                           // 上一帧是否选中
+    std::chrono::steady_clock::time_point focus_t0_{};  // 本次过渡起点
+    float focus_from_ = 0.0f;                           // 过渡起点的值
 };
 
 // 分组标题：小号大写感 + 大留白，负责把列表切成「段落」。

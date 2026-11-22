@@ -2,6 +2,7 @@
 
 #include <borealis/core/view.hpp>
 #include <string>
+#include <vector>
 
 namespace muvik {
 

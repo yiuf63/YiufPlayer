@@ -2,6 +2,7 @@
 #include "view/media_cell.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <utility>
 
 #include <borealis.hpp>
@@ -45,6 +46,27 @@ void MediaCell::draw(NVGcontext* vg, float x, float y, float width, float height
     const auto& pal = ui::palette();
     const bool focused = this->isFocused();
 
+    // ── 焦点过渡插值 ──
+    //
+    // focus_anim_ 是 0..1 的「选中程度」，所有选中态视觉都乘它，
+    // 这样底色、光晕、图标颜色会一起渐变，而不是各自跳变。
+    //
+    // 起点重算的条件是「选中态变了」。用上一帧的 focus_last_ 比较，
+    // 而不是自己存一个定时器：视图被重建时（切标签、重新扫描）会得到
+    // 一个新对象，动画自然从头开始，不会残留半截状态。
+    if (focused != focus_last_) {
+        focus_last_ = focused;
+        focus_from_ = focus_anim_;              // 从当前值继续，支持中途反向
+        focus_t0_   = std::chrono::steady_clock::now();
+    }
+    if (focus_anim_ != (focused ? 1.0f : 0.0f)) {
+        const float elapsed = std::chrono::duration<float, std::milli>(
+            std::chrono::steady_clock::now() - focus_t0_).count();
+        const float t = std::clamp(elapsed / 120.0f, 0.0f, 1.0f);
+        focus_anim_ = focus_from_ + ((focused ? 1.0f : 0.0f) - focus_from_) * ui::easeOut(t);
+    }
+    const float fa = focus_anim_;
+
     // 卡片：左右各留 14，上下各留 6 —— 相邻两行之间有 12px 空隙，
     // 卡片才会「浮」起来，而不是像表格一样贴在一起。
     const float card_x = x + 14.0f;
@@ -52,19 +74,25 @@ void MediaCell::draw(NVGcontext* vg, float x, float y, float width, float height
     const float card_w = width - 28.0f;
     const float card_h = height - 12.0f;
 
-    // 选中态背景：提亮并融入适量主题色，形成清晰可辨的选中光晕
+    // 选中态背景：提亮并融入适量主题色，形成清晰可辨的选中光晕。
+    // 用 fa 插值——未选中时是纯 surface，选中时混入 16% 强调色。
     ui::fillRoundRect(vg, card_x, card_y, card_w, card_h, ui::radius::md,
-                      focused ? ui::mix(pal.surfaceRaised, pal.accent, 0.16f) : pal.surface);
+                      fa > 0.0f ? ui::mix(pal.surface, ui::mix(pal.surfaceRaised, pal.accent, 0.16f), fa)
+                                : pal.surface);
 
-    if (focused) {
-        // 选中态多层氛围光晕：柔光漫射 + 内层实线描边，电视/掌机距离下极为醒目
-        ui::drawFocusGlow(vg, card_x, card_y, card_w, card_h, ui::radius::md, pal.accent);
-        // 选中态左侧短竖条：锚定视觉焦点
-        ui::fillRoundRect(vg, card_x + 5.0f, y + height * 0.5f - 16.0f, 4.5f, 32.0f,
-                          2.25f, pal.accent);
-    } else {
-        ui::strokeRoundRect(vg, card_x, card_y, card_w, card_h, ui::radius::md,
-                            ui::rgba(pal.outline, 0.75f), 1.0f);
+    // 描边常驻（未选中淡、选中被光晕盖住），这样过渡中不会出现「边框消失」
+    ui::strokeRoundRect(vg, card_x, card_y, card_w, card_h, ui::radius::md,
+                        ui::rgba(pal.outline, 0.75f * (1.0f - fa)), 1.0f);
+
+    if (fa > 0.01f) {
+        // 选中态多层氛围光晕：柔光漫射 + 内层实线描边，电视/掌机距离下极为醒目。
+        // 光晕强度随 fa 渐入 —— 直接按 1.0 画会在过渡开头闪一下。
+        ui::drawFocusGlow(vg, card_x, card_y, card_w, card_h, ui::radius::md,
+                          ui::rgba(pal.accent, fa));
+        // 选中态左侧短竖条：锚定视觉焦点。高度和透明度都跟着 fa 长出来。
+        const float bar_h = 32.0f * fa;
+        ui::fillRoundRect(vg, card_x + 5.0f, y + height * 0.5f - bar_h * 0.5f,
+                          4.5f, bar_h, 2.25f, ui::rgba(pal.accent, fa));
     }
 
     // 左侧：16:9 缩略图或类型图标块。
@@ -77,8 +105,8 @@ void MediaCell::draw(NVGcontext* vg, float x, float y, float width, float height
         const float tx = card_x + 18.0f;
         const float ty = y + height * 0.5f - th * 0.5f;
         ui::drawScene(vg, tx, ty, tw, th, 8.0f, 8.0f, 8.0f, 8.0f, thumb_);
-        if (focused) {
-            ui::strokeRoundRect(vg, tx, ty, tw, th, 8.0f, pal.accent, 2.0f);
+        if (fa > 0.01f) {
+            ui::strokeRoundRect(vg, tx, ty, tw, th, 8.0f, ui::rgba(pal.accent, fa), 2.0f);
         }
         content_x = tx + tw + 14.0f;
     } else {
@@ -87,12 +115,13 @@ void MediaCell::draw(NVGcontext* vg, float x, float y, float width, float height
         const float tile_x = card_x + 22.0f;
         const float tile_y = y + height * 0.5f - tile * 0.5f;
         ui::fillRoundRect(vg, tile_x, tile_y, tile, tile, 13.0f,
-                          focused ? ui::rgba(pal.accent, 0.22f)
-                                  : ui::rgba(pal.surfaceSunken, 0.55f));
+                          ui::mix(ui::rgba(pal.surfaceSunken, 0.55f),
+                                  ui::rgba(pal.accent, 0.22f), fa));
         // 图标只在选中时用强调色。以前整列都是橙色，一屏十几个橙色图标，
         // 焦点反而看不出来 —— 强调色必须稀缺才有意义。
         ui::drawIcon(vg, icon_, tile_x + tile * 0.5f, tile_y + tile * 0.5f, tile * 0.5f,
-                     focused ? pal.accent : ui::rgba(pal.textDim, 0.85f), focused ? 2.2f : 1.9f);
+                     ui::mix(ui::rgba(pal.textDim, 0.85f), pal.accent, fa),
+                     1.9f + 0.3f * fa);
         content_x = tile_x + tile + 16.0f;
     }
 
@@ -104,12 +133,12 @@ void MediaCell::draw(NVGcontext* vg, float x, float y, float width, float height
                               : ui::textWidth(vg, ui::font::detail, badge_);
     if (!badge_.empty()) {
         ui::text(vg, badge_right, y + height * 0.5f, ui::font::detail,
-                 focused ? pal.accent : pal.textMute,
+                 ui::mix(pal.textMute, pal.accent, fa),
                  NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE, badge_);
     }
     if (chevron_) {
         ui::drawIcon(vg, ui::Icon::ChevronRight, right - 7.0f, y + height * 0.5f, 16.0f,
-                     focused ? pal.accent : ui::rgba(pal.textMute, 0.8f), 1.8f);
+                     ui::mix(ui::rgba(pal.textMute, 0.8f), pal.accent, fa), 1.8f);
     }
 
     // 文字区
@@ -126,13 +155,13 @@ void MediaCell::draw(NVGcontext* vg, float x, float y, float width, float height
 
     if (!title_.empty()) {
         ui::textClipped(vg, text_x, title_y,
-                        ui::font::body, focused ? ui::hex(0xFFFFFF) : pal.text,
+                        ui::font::body, ui::mix(pal.text, ui::hex(0xFFFFFF), fa),
                         NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE,
                         title_, text_max);
     }
     if (has_subtitle) {
         ui::textClipped(vg, text_x, y + height * 0.5f + (has_progress ? 12.0f : 14.0f),
-                        ui::font::caption, focused ? pal.text : pal.textDim,
+                        ui::font::caption, ui::mix(pal.textDim, pal.text, fa),
                         NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, subtitle_, text_max);
     }
 

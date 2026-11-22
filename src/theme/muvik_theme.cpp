@@ -28,6 +28,19 @@
 
 namespace muvik {
 
+DisabledColors deriveDisabledColors(const ui::Palette& p) {
+    const bool is_dark = (p.bg.r < 0.5f);
+    DisabledColors out;
+    // 禁用文字：从主文字向背景靠 58% —— 明显变暗，但仍可辨认
+    out.text   = ui::mix(p.text, p.bg, 0.58f);
+    // 禁用底色：从二级表面向背景靠。浅色主题靠得更多（0.55），
+    // 否则浅底上的「稍深一点的面」看起来像一块脏斑。
+    out.fill   = ui::mix(p.surfaceRaised, p.bg, is_dark ? 0.30f : 0.55f);
+    // 禁用描边：介于两者之间，给按钮留一圈轮廓
+    out.border = ui::mix(p.outline, p.bg, 0.25f);
+    return out;
+}
+
 namespace {
 
 bool applied = false;
@@ -39,10 +52,28 @@ void set(brls::Theme& t, const char* key, NVGcolor c) {
 }
 
 void applyPaletteTo(brls::Theme& t, const ui::Palette& p) {
+    // ── 禁用态（disabled）必须按主题推导，不能写死深色 ──
+    //
+    // 这里原先有 8 个硬编码的深灰（0x3A3D43 / 0x24262B / 0x606368 ...）。
+    // 它们是照着深色主题选的：深灰字压在深灰底上，对比度刚好够看。
+    // 但浅色主题的底是 0xF2F1ED 这种亮米色 —— 深灰**文字**仍然读得清，
+    // 而深灰**底色**（0x24262B）在浅色界面上会变成一块突兀的黑斑，
+    // 压在上面的深灰字（0x606368）对比度只剩约 1.9:1，基本看不出轮廓。
+    //
+    // 修法：禁用态一律从调色板推导。
+    //   · 深色：在 text 与 bg 之间取偏 bg 的一段 → 灰暗但不消失
+    //   · 浅色：同一公式方向相反 → 得到浅灰而不是黑块
+    // 三套主题（深 / OLED / 浅）各自得到合理的灰阶，无需分别调参。
+    const bool is_dark = (p.bg.r < 0.5f);
+    const DisabledColors dc = deriveDisabledColors(p);
+    const NVGcolor text_disabled   = dc.text;
+    const NVGcolor fill_disabled   = dc.fill;
+    const NVGcolor border_disabled = dc.border;
+
     set(t, "brls/background", p.bg);
     set(t, "brls/clear",      p.bg);
     set(t, "brls/text",       p.text);
-    set(t, "brls/text_disabled", nvgRGB(0x50, 0x53, 0x58));
+    set(t, "brls/text_disabled", text_disabled);
     set(t, "brls/backdrop",   nvgRGBA(0, 0, 0, 190));
     set(t, "brls/accent",     p.accent);
 
@@ -52,7 +83,6 @@ void applyPaletteTo(brls::Theme& t, const ui::Palette& p) {
     set(t, "brls/highlight/color2", p.outlineStrong);
 
     set(t, "brls/sidebar/background",  p.surface);
-    bool is_dark = (p.bg.r < 0.5f);
     set(t, "brls/sidebar/active_item", is_dark ? nvgRGB(255, 255, 255) : p.accent);
     set(t, "brls/sidebar/inactive_item", p.textDim);
     set(t, "brls/sidebar/separator",   p.outline);
@@ -62,17 +92,17 @@ void applyPaletteTo(brls::Theme& t, const ui::Palette& p) {
     set(t, "brls/header/subtitle",   p.textDim);
 
     set(t, "brls/button/primary_enabled_background", p.accent);
-    set(t, "brls/button/primary_disabled_background", nvgRGB(0x3A, 0x3D, 0x43));
+    set(t, "brls/button/primary_disabled_background", fill_disabled);
     set(t, "brls/button/primary_enabled_text",  p.accentInk);
-    set(t, "brls/button/primary_disabled_text", nvgRGB(0x70, 0x73, 0x78));
+    set(t, "brls/button/primary_disabled_text", text_disabled);
     set(t, "brls/button/default_enabled_background",  p.surfaceRaised);
-    set(t, "brls/button/default_disabled_background", nvgRGB(0x24, 0x26, 0x2B));
+    set(t, "brls/button/default_disabled_background", fill_disabled);
     set(t, "brls/button/default_enabled_text",  p.text);
-    set(t, "brls/button/default_disabled_text", nvgRGB(0x60, 0x63, 0x68));
+    set(t, "brls/button/default_disabled_text", text_disabled);
     set(t, "brls/button/highlight_enabled_text",  p.accent);
-    set(t, "brls/button/highlight_disabled_text", nvgRGB(0x80, 0x83, 0x88));
+    set(t, "brls/button/highlight_disabled_text", text_disabled);
     set(t, "brls/button/enabled_border_color",  p.accent);
-    set(t, "brls/button/disabled_border_color", nvgRGB(0x40, 0x43, 0x48));
+    set(t, "brls/button/disabled_border_color", border_disabled);
 
     set(t, "brls/list/listItem_value_color", p.textDim);
     set(t, "brls/spinner/bar_color", ui::rgba(p.accent, 0.43f));

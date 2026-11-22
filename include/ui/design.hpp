@@ -85,6 +85,18 @@ NVGcolor mix(NVGcolor a, NVGcolor b, float t);
 NVGcolor hex(unsigned int rgb, float alpha = 1.0f);
 NVGcolor hex(const std::string& hexStr, float defaultAlpha = 1.0f);
 
+// ── 动效工具 ────────────────────────────────────────────────────────────
+//
+// 全局只对外暴露一个缓动函数 easeOut(t)。
+// 为什么只有这一种：本项目所有过渡都是「对用户操作做出响应」的短动画
+// （焦点移动 120ms、OSD 显隐 240ms）。这类动画用缓出最自然——起步快、
+// 立刻感到响应；收尾慢、不会显得顿住。bounce / elastic 会让每次按方向键
+// 都像在晃，操作久了很累。
+//
+// 抽成纯函数的目的：可单测。此前这种缓动在视图里各写一遍
+// `1 - (1-t)*(1-t)`，多处拷贝，改一处忘两处。
+float easeOut(float t);   // 入参自动 clamp 到 0..1，返回 0..1
+
 // ── 绘制基元 ────────────────────────────────────────────────────────────
 void fillRoundRect(NVGcontext* vg, float x, float y, float w, float h,
                    float r, NVGcolor color);
