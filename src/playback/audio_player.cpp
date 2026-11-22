@@ -11,6 +11,7 @@
 #include <cstring>
 #include <filesystem>
 #include <algorithm>
+#include <cstdlib>
 
 namespace fs = std::filesystem;
 
@@ -41,24 +42,30 @@ void AudioPlayer::initMPV() {
     // 纯音频：不启用视频输出，也不创建 GL 渲染上下文，因此可以被安全地
     // 放在后台，且不会与视频播放器争夺 OpenGL 上下文。
     mpv_set_option_string(mpv_, "vid", "no");
+    if (std::getenv("MUVIK_MUTE")) {
+        mpv_set_option_string(mpv_, "mute", "yes");
+        mpv_set_option_string(mpv_, "ao", "null");
+        brls::Logger::info("AudioPlayer: 静音模式已开启（MUVIK_MUTE）");
+    } else {
 #if defined(__APPLE__)
-    // macOS 上显式指定 coreaudio：mpv 的自动探测在部分机器上会先试
-    // 别的后端再回退，导致启动时有短暂无声。
-    mpv_set_option_string(mpv_, "ao", "coreaudio");
+        // macOS 上显式指定 coreaudio：mpv 的自动探测在部分机器上会先试
+        // 别的后端再回退，导致启动时有短暂无声。
+        mpv_set_option_string(mpv_, "ao", "coreaudio");
 #elif defined(ANDROID)
-    // Android 必须用 OpenSL ES（或 AAudio）。**不要**在这里写死具体名字，
-    // 让 mpv 自己选：不同 Android 版本可用的后端不同（audiotrack /
-    // opensles / aaudio），写死会在部分设备上直接没有声音。
-    //
-    // 曾经写死 "coreaudio"（macOS 专属），导致 Android 上音频初始化失败、
-    // 界面里出现的是 mpv 探测到的**系统音频设备名**（如外接显示器），
-    // 而不是任何有意义的内容。
-    mpv_set_option_string(mpv_, "ao", "audiotrack,opensles,aaudio");
+        // Android 必须用 OpenSL ES（或 AAudio）。**不要**在这里写死具体名字，
+        // 让 mpv 自己选：不同 Android 版本可用的后端不同（audiotrack /
+        // opensles / aaudio），写死会在部分设备上直接没有声音。
+        //
+        // 曾经写死 "coreaudio"（macOS 专属），导致 Android 上音频初始化失败、
+        // 界面里出现的是 mpv 探测到的**系统音频设备名**（如外接显示器），
+        // 而不是任何有意义的内容。
+        mpv_set_option_string(mpv_, "ao", "audiotrack,opensles,aaudio");
 #else
-    // Linux / SteamOS：pulse → pipewire → alsa 依次回退。
-    // 不写死单一后端，掌机上 pulse 经常不可用（无桌面会话）。
-    mpv_set_option_string(mpv_, "ao", "pulse,pipewire,alsa");
+        // Linux / SteamOS：pulse → pipewire → alsa 依次回退。
+        // 不写死单一后端，掌机上 pulse 经常不可用（无桌面会话）。
+        mpv_set_option_string(mpv_, "ao", "pulse,pipewire,alsa");
 #endif
+    }
     mpv_set_option_string(mpv_, "keep-open", "no");
     mpv_set_option_string(mpv_, "idle", "yes");        // 空闲时保持实例存活，便于连续播放
     mpv_set_option_string(mpv_, "gapless-audio", "yes");

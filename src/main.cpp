@@ -243,12 +243,14 @@ int main(int argc, char* argv[]) {
         }
         brls::Application::pushActivity(new muvik::FileBrowserActivity());
     } else if (std::getenv("MUVIK_OPEN_BROWSER")) {
-        // 直接进入第一个含视频源插件的浏览界面，验证远程目录渲染
+        // 直接进入指定或第一个含视频源插件的浏览界面，验证远程目录渲染
         brls::Application::pushActivity(new muvik::FileBrowserActivity());
+        const char* target_plugin = std::getenv("MUVIK_PLUGIN_ID");
         auto plugins = muvik::PluginManager::getInstance().getPlugins();
         for (const auto& p : plugins) {
+            if (target_plugin && p.id != target_plugin) continue;
             if (p.has_video_source) {
-                brls::Logger::info("打开插件浏览: {}", p.name);
+                brls::Logger::info("打开插件浏览: {} ({})", p.name, p.id);
                 auto* act = new muvik::PluginBrowserActivity(p.path, p.name);
                 if (const char* sub = std::getenv("MUVIK_BROWSE_PATH")) {
                     act->setInitialPath(sub);

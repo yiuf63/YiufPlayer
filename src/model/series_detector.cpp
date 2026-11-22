@@ -5,6 +5,8 @@
 #include <filesystem>
 #include <regex>
 #include <unordered_map>
+#include <vector>
+#include <string>
 #include "utils/playback_history.hpp"
 
 namespace fs = std::filesystem;
