@@ -1,0 +1,18 @@
+Yiuf Player @ 408b3f5 | macOS arm64 | 2026-11-26
+Rebuilt native Release with Homebrew system libmpv, isolated source/config/cache.
+通过: 17   失败: 0
+23:03:14.627[INFO] [smoke] PASS  启动后有活动页面
+23:03:17.134[INFO] [smoke] PASS  扫描完成后视频库非空
+23:03:17.445[INFO] [smoke] PASS  顶层是 FileBrowserActivity
+23:03:17.746[INFO] [smoke] PASS  按 A 进入文件夹
+23:03:18.167[INFO] [smoke] PASS  按 A 之后压入了播放页
+23:03:19.350[INFO] [smoke] PASS  播放页稳定存在
+23:03:20.070[INFO] [smoke] PASS  十字键 ↑ 打开了播放列表
+23:03:20.781[INFO] [smoke] PASS  按 B 之后返回了上一页
+23:03:21.183[INFO] [smoke] PASS  B 从文件夹退回总览
+23:03:21.489[INFO] [smoke] === 全部通过 ===
+resume-12 seconds; opened=True; player start option=(none)
+resume-18 seconds; opened=True; player start option=18
+3 registered test folders, 4 generated local video files; test images do not depict personal content.
+Full macOS: 4 .rgba cache images. Fresh cache with thumbnail extraction disabled: 0.
+Existing mac checkout build-steamos/CMakeCache.txt: MUVIK_ENABLE_THUMBNAILS:BOOL=OFF. SteamOS/TrimUI physical devices were not run in this review.

@@ -1,0 +1,50 @@
+{
+  "baselineCommit": "408b3f55a592c7613b43e641f7af79fbeac1b3cb",
+  "cases": [
+    {
+      "name": "search-by-display-title",
+      "input": {"path": "/fixture/Movies/cam_0042.mp4", "metadataTitle": "蓝调时刻", "queries": ["蓝调时刻", "cam_0042"]},
+      "observedHitCounts": [0, 1],
+      "expectedHitCounts": [1, 1],
+      "expectedIdentity": "/fixture/Movies/cam_0042.mp4"
+    },
+    {
+      "name": "recent-additions-independent-of-name-sort",
+      "input": [
+        {"file": "a_old.mp4", "mtime": 100, "firstIndexedAt": 20},
+        {"file": "m_middle.mp4", "mtime": 200, "firstIndexedAt": 30},
+        {"file": "z_new.mp4", "mtime": 300, "firstIndexedAt": 10}
+      ],
+      "observedByMtime": ["z_new.mp4", "m_middle.mp4", "a_old.mp4"],
+      "observedAfterDefaultViewSort": ["a_old.mp4", "m_middle.mp4", "z_new.mp4"],
+      "expectedByFirstIndexAfterRescan": ["m_middle.mp4", "a_old.mp4", "z_new.mp4"]
+    },
+    {
+      "name": "mixed-directory-with-missing-episodes",
+      "input": {"oneFolder": ["Harbor.S01E05.mkv", "Harbor.S01E08.mkv", "RacingCapture.mp4"], "lastWatchedFile": "Harbor.S01E08.mkv", "positionSec": 756, "durationSec": 1730},
+      "observed": {"groupedItems": 3, "standaloneItems": 0, "lastWatchedIndex": 1},
+      "expected": {"episodes": ["S01E05", "S01E08"], "standalone": ["RacingCapture.mp4"], "resumeLabelIncludes": "S01E08"}
+    },
+    {
+      "name": "resume-eligibility",
+      "durationSec": 45,
+      "inputPositionsSec": [12, 15, 18, 45],
+      "completed": [false, false, false, true],
+      "expectedActions": ["start", "start", "resume", "replay-or-next"],
+      "expectedResumeSec": [null, null, 18, null],
+      "observation": "此前原生播放器以 12 和 18 秒实测，15 秒为根据现有严格大于比较补充的边界用例。"
+    },
+    {
+      "name": "restore-focus-by-item",
+      "input": {"directories": ["海岸旅行", "海港手记", "游戏录屏"], "enter": "游戏录屏", "events": ["back", "thumbnail-refresh", "reorder"]},
+      "expectedFocusedDirectory": "游戏录屏",
+      "expectedVisible": true
+    },
+    {
+      "name": "confirm-scrape-before-saving",
+      "input": {"file": "沿岸.1080p.mkv", "candidates": [{"id": "coast-2019", "year": 2019}, {"id": "coast-2023", "year": 2023}]},
+      "expectedAfterCancel": "preserve-original-metadata",
+      "expectedAfterChoosingSecondAndConfirming": {"externalId": "coast-2023", "year": 2023, "preserveFileAndProgress": true}
+    }
+  ]
+}
