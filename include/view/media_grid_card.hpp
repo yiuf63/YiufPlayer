@@ -27,6 +27,10 @@ public:
     void setTitle(std::string title);
     void setSubtitle(std::string subtitle);
     void setProgress(float ratio) { progress_ = ratio; }
+
+    // 这一张代表哪个条目（媒体绝对路径）。用于重建后按身份恢复焦点。
+    void setIdentity(std::string id) { identity_ = std::move(id); }
+    const std::string& identity() const { return identity_; }
     // 右上角的短标签（「已看完」/「★ 8.2」）
     void setBadge(std::string badge) { badge_ = std::move(badge); }
 
@@ -34,6 +38,7 @@ public:
               brls::Style style, brls::FrameContext* ctx) override;
 
 private:
+    std::string identity_;
     MediaItem item_;
     std::string title_;
     std::string subtitle_;

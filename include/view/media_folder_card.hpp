@@ -44,6 +44,11 @@ public:
 
     const std::string& path() const { return path_; }
 
+    // 与 MediaCell / MediaGridCard 统一的身份接口：
+    // 目录卡的身份就是它指向的文件夹路径。
+    void setIdentity(std::string id) { path_ = std::move(id); }
+    const std::string& identity() const { return path_; }
+
 private:
     std::string name_;
     std::string path_;

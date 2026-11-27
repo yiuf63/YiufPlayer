@@ -2,11 +2,13 @@
 
 #include <atomic>
 #include <memory>
+#include <map>
 #include <string>
 #include <vector>
 #include <borealis.hpp>
 #include "model/media_item.hpp"
 #include "model/media_library.hpp"
+#include "view/resume_hero.hpp"
 #include <vector>
 #include <string>
 #include <atomic>
@@ -129,6 +131,20 @@ private:
 
     // 当前进入的文件夹（空 = 文件夹总览）
     std::string open_folder_;
+
+    // 每一层「焦点停在哪一项」，按**路径身份**记录。
+    //
+    // 键：层标识 —— 总览是空串，文件夹是它的绝对路径。
+    // 值：该层最后获得焦点的条目路径（文件路径或子目录路径）。
+    //
+    // 为什么不能记序号：列表会因为缩略图到达、筛选变化、重扫而重建，
+    // 同一序号在重建后可能是另一个条目。实测缺陷（fixture:
+    // restore-focus-by-item）：从第三个目录返回总览后焦点回到第 1 项，
+    // 用户得重新找一遍刚才看的那一行。
+    std::map<std::string, std::string> focus_identity_;
+
+    // 组装首页「继续观看」主视觉的数据。没有可显示的记录时返回 false。
+    bool buildResumeHero(struct ResumeHeroSpec& out) const;
     // 本次运行中已经为哪些「空文件夹」触发过扫描。
     // 没有它，一个真实的空目录会让人每次进媒体库都全量重扫一遍。
     std::vector<std::string> empty_checked_;

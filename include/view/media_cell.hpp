@@ -42,6 +42,14 @@ public:
     void setBadge(std::string badge);
     // 续播进度 0..1；传 <0 隐藏。
     void setProgress(float ratio);
+
+    // 这一行代表哪个条目（媒体绝对路径，或目录路径）。
+    //
+    // 为什么要挂在视图上：列表会被重建（缩略图到达、筛选变化、重扫），
+    // 重建后按「第几项」恢复焦点是不可靠的 —— 同一序号可能已经是另一部片子。
+    // 记身份才能在重建后回到同一个条目（fixture: restore-focus-by-item）。
+    void setIdentity(std::string id) { identity_ = std::move(id); }
+    const std::string& identity() const { return identity_; }
     // 目录 / 需要进入下一层的条目显示右箭头
     void setChevron(bool show);
     // 用 16:9 缩略图替代左侧的类型图标块。
@@ -53,6 +61,8 @@ public:
 
 private:
     ui::Icon icon_;
+    // 这条视图代表哪个条目（路径）。见 setIdentity() 的注释。
+    std::string identity_;
     std::string title_;
     std::string subtitle_;
     std::string badge_;

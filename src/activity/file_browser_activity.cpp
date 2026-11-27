@@ -902,6 +902,7 @@ brls::View* FileBrowserActivity::makeVideoCard(const MediaItem& item,
                                                size_t idx) {
     const CellMeta m = readVideoMeta(item);
     auto* card = new MediaGridCard(item, m.title, m.sub, m.progress);
+    card->setIdentity(item.path);   // 身份 = 媒体绝对路径
     if (!m.badge.empty()) card->setBadge(m.badge);
 
     card->registerClickAction([playlist = std::move(playlist), idx](brls::View*) {
@@ -937,6 +938,7 @@ brls::View* FileBrowserActivity::makeAudioCard(const MediaItem& item,
     // 「一张看似截图的图 + 音符标」比纯色块更容易被误读成视频。
     auto* card = new MediaGridCard(item, item.name,
                                    MediaScanner::formatFileSize(item.size));
+    card->setIdentity(item.path);
     card->registerClickAction([playlist = std::move(playlist), idx](brls::View*) {
         AudioPlayer::getInstance().playPlaylist(playlist, idx);
         brls::Application::notify(i18n::tr("audio.now_playing_prefix", "正在播放：") + playlist[idx].name);
@@ -1118,9 +1120,42 @@ brls::View* FileBrowserActivity::createLibraryView() {
     return library_root_;
 }
 
+// 当前哪些视图带身份（三个卡片类都有 identity()）。
+namespace {
+template <typename T>
+const std::string* identityOf(brls::View* v) {
+    if (auto* c = dynamic_cast<T*>(v)) {
+        const std::string& id = c->identity();
+        if (!id.empty()) return &id;
+    }
+    return nullptr;
+}
+
+// 取一个视图的身份；不是卡片就返回 nullptr。
+const std::string* viewIdentity(brls::View* v) {
+    if (!v) return nullptr;
+    if (auto* id = identityOf<MediaCell>(v)) return id;
+    if (auto* id = identityOf<MediaGridCard>(v)) return id;
+    if (auto* id = identityOf<MediaFolderCard>(v)) return id;
+    return nullptr;
+}
+} // namespace
+
 void FileBrowserActivity::openFolder(const std::string& path) {
+    // 离开当前层之前，先记住焦点停在哪一项。
+    //
+    // 时机必须在这里：renderLibraryContent() 会 clearViews()，
+    // 之后原来的视图对象就没了，身份也就无从查起。
+    if (library_list_) {
+        brls::View* cur = brls::Application::getCurrentFocus();
+        if (const std::string* id = viewIdentity(cur)) {
+            focus_identity_[open_folder_] = *id;
+        }
+    }
+
     open_folder_ = path;
     renderLibraryContent();
+    (void)0;
     // 进 / 出文件夹是一次导航：焦点必须落在新一层的第一项上。
     // 不接管的话，原来那张卡片已经被删除，焦点是空的 ——
     // 手柄按 A 没反应，看起来像「界面卡住了」。
@@ -1131,17 +1166,44 @@ void FileBrowserActivity::openFolder(const std::string& path) {
     // giveFocus 推迟到下一帧：刚 addView 的子项还没走完一次布局，
     // 冷缓存时（抽帧回调随时会再重建一次列表）立即 giveFocus 偶发失效，
     // 焦点留在返回行上 —— 下一按 A 就退出了文件夹。
+    //
+    // 焦点选择：优先按**身份**回到上次停的那一项；没有记录才退回默认。
+    // 默认值分两种：进文件夹跳过第 0 项（那是返回行），回总览从第 0 项开始。
     if (library_list_) {
         auto alive = std::make_shared<std::atomic<bool>>(true);
         alive_flags_.push_back(alive);
         const bool entering = !path.empty();
-        brls::sync([this, alive, entering]() {
+        const std::string want_id = [this]() {
+            auto it = focus_identity_.find(open_folder_);
+            return it == focus_identity_.end() ? std::string() : it->second;
+        }();
+        brls::sync([this, alive, entering, want_id]() {
             if (!alive->load() || !library_list_) return;
             std::vector<brls::View*> items;
             collectFocusables(library_list_, items);
             if (items.empty()) return;
-            const size_t idx = (entering && items.size() > 1) ? 1 : 0;
-            brls::View* want = items[idx];
+
+            brls::View* want = nullptr;
+            if (!want_id.empty()) {
+                for (auto* v : items) {
+                    if (const std::string* id = viewIdentity(v); id && *id == want_id) {
+                        want = v;
+                        break;
+                    }
+                }
+                // 那条已经不在了（被删 / 被筛掉）：落到相邻项而不是跳回顶部，
+                // 用户至少还在原来那一片区域。
+                if (!want) {
+                    for (size_t i = 0; i < items.size(); ++i) {
+                        const std::string* id = viewIdentity(items[i]);
+                        if (id && *id > want_id) { want = items[i]; break; }
+                    }
+                }
+            }
+            if (!want) {
+                const size_t idx = (entering && items.size() > 1) ? 1 : 0;
+                want = items[idx];
+            }
             brls::Application::giveFocus(want);
         });
     }
@@ -1343,6 +1405,70 @@ void FileBrowserActivity::renderLibraryContent() {
     }
 }
 
+// 挑出「最该续播」的那一条，组装成首页主视觉的数据。
+//
+// 优先级：
+//   1. 有断点（canResume）的记录里，最近播放的那条；
+//   2. 没有可续播的，最近打开过的第一条（用于显示「最近打开 · 从头播放」）。
+//
+// 为什么要「最近播放」而不是「进度最多」：用户上次是被打断的，
+// 想接着那部看；进度最多的可能是很久以前的另一部。
+bool FileBrowserActivity::buildResumeHero(ResumeHeroSpec& out) const {
+    auto recent = PlaybackHistory::getInstance().getRecentList(20);
+    if (recent.empty()) return false;
+
+    const HistoryRecord* pick = nullptr;
+    for (const auto& r : recent) {
+        if (canResume(r)) { pick = &r; break; }
+    }
+    if (!pick) {
+        // 退而求其次：最近打开过的、未完成的
+        for (const auto& r : recent) {
+            if (!r.completed && r.position > 0) { pick = &r; break; }
+        }
+    }
+    if (!pick) return false;
+
+    // 从当前库里找这个文件对应的条目，拿它的名称与大小等信息。
+    // 找不到说明文件已被删除 / 移出库 —— 不显示主视觉，避免点开报错。
+    auto items = MediaLibrary::getInstance().getItems();
+    auto it = std::find_if(items.begin(), items.end(),
+        [&](const MediaItem& m) { return m.path == pick->path; });
+    if (it == items.end()) return false;
+
+    out = ResumeHeroSpec{};
+    out.item = *it;
+    out.title = it->displayTitle();
+    out.position = pick->position;
+    out.duration = pick->duration;
+    out.can_resume = canResume(*pick);
+
+    // 剧集信息：用真实季集号，不要用下标。
+    //
+    // 只在「这个文件确实属于某部被识别为剧集的目录」时才填。
+    // SeriesDetector::detect 是按目录聚类的，这里把该文件所在目录的
+    // 同批视频丢进去即可，代价一屏几十条，可以接受。
+    std::vector<MediaItem> siblings;
+    const std::string dir = fs::path(it->path).parent_path().string();
+    for (const auto& m : items) {
+        if (m.is_video() && fs::path(m.path).parent_path().string() == dir)
+            siblings.push_back(m);
+    }
+    if (siblings.size() >= 2) {
+        auto det = SeriesDetector::detect(siblings);
+        for (const auto& sg : det.series) {
+            for (size_t i = 0; i < sg.episodes.size(); ++i) {
+                if (sg.episodes[i].path != it->path) continue;
+                out.series_title = sg.title;
+                out.season = sg.seasonOf(i);
+                out.episode = sg.episodeOf(i);
+                return true;
+            }
+        }
+    }
+    return true;
+}
+
 void FileBrowserActivity::renderLibraryOverview(const std::vector<MediaLibrary::Group>& groups) {
     auto& lib = MediaLibrary::getInstance();
 
@@ -1363,11 +1489,62 @@ void FileBrowserActivity::renderLibraryOverview(const std::vector<MediaLibrary::
         return;
     }
 
+    // ── 继续观看：首页第一块 ──
+    //
+    // 放在文件夹之前，是因为用户打开播放器的第一件事通常是「接着看」，
+    // 而不是「找文件夹」。修复前这条记录藏在「最近添加」第四行、靠近底栏，
+    // 首焦点还给了第一个文件夹（交接文档 01-findings.md 实测）。
+    //
+    // 只在「按文件夹 + 不筛内容 + 不筛进度」时出现 —— 条件与「最近添加」
+    // 一致：平铺视图里再插一块就是同一批内容出现两次；筛「仅视频」时
+    // 还在这一块里放音乐，用户会以为筛选没生效。
+    // 抽帧队列：续播主视觉 + 每张目录卡的前四个条目，统一排队。
+    // 声明放在这里是因为续播块比文件夹区更早出现。
+    std::vector<MediaItem> want_thumbs;
+
+    ResumeHeroSpec hero_spec;
+    if (LibraryViewOptions::get().showsRecent() && buildResumeHero(hero_spec)) {
+        // 主视觉自己也要抽帧。
+        //
+        // 实测问题：首页只对「文件夹卡的前四个条目」排队抽帧，续播块
+        // 不在其中 —— 于是它永远走无图紧凑行，即使缓存里已经有那部片的帧。
+        // 两张卡片读的是同一个 ThumbnailCache，漏了谁就永远是占位。
+        want_thumbs.push_back(hero_spec.item);
+
+        auto* hero = new ResumeHero(hero_spec);
+        hero->setWidthPercentage(100.0f);
+        hero->setHeight(hero->isCompact() ? ResumeHero::COMPACT_H : ResumeHero::HEIGHT);
+        hero->setIdentity(hero_spec.item.path);
+        const MediaItem hero_item = hero_spec.item;
+        const bool hero_resume = hero_spec.can_resume;
+        const int64_t hero_pos = hero_spec.position;
+        hero->registerClickAction([hero_item, hero_resume, hero_pos](brls::View*) {
+            auto items = MediaLibrary::getInstance().getVideos();
+            size_t idx = 0;
+            for (size_t i = 0; i < items.size(); ++i) {
+                if (items[i].path == hero_item.path) { idx = i; break; }
+            }
+            if (items.empty()) return true;
+            // 断点由 PlayerActivity 自己按 canResume() 决定，
+            // 这里不传位置 —— 避免出现「首页说续播、播放器说从头」的第二套判断。
+            (void)hero_resume;
+            (void)hero_pos;
+            brls::Application::pushActivity(new PlayerActivity(items, idx));
+            return true;
+        });
+        library_list_->addView(hero);
+
+        if (hero->isCompact()) {
+            // 无图时补一行说明，否则用户会以为「这里本该有封面却坏了」。
+            auto* note = new SectionHeader(
+                i18n::tr("library.no_art_note", "无缩略图：直接按 A 继续播放"));
+            library_list_->addView(note);
+        }
+    }
+
     library_list_->addView(
         new SectionHeader(i18n::tr("common.folders", "文件夹") + " · " + std::to_string(groups.size())));
 
-    // 目录卡的四宫格也要真实帧：收集每张卡的前四个条目，统一排队抽帧
-    std::vector<MediaItem> want_thumbs;
 
     // 一行 4 张。卡片自己左右各让 8，"缝"就有了，容器不需要管间距。
     brls::Box* row = nullptr;
@@ -1400,6 +1577,7 @@ void FileBrowserActivity::renderLibraryOverview(const std::vector<MediaLibrary::
                                          std::move(covers),
                                          static_cast<int>(g.videos.size()),
                                          static_cast<int>(g.audios.size()));
+        card->setIdentity(g.folder.path);   // 身份 = 文件夹路径
         card->setWidthPercentage(25.0f);
         const std::string fpath = g.folder.path;
         const std::string fname = g.folder.display_name;

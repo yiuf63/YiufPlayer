@@ -10,6 +10,8 @@
 // 只需要在 drawScene() 里优先读 `thumb_path` 指向的 PNG，所有位置一起换掉。
 
 #include <cstdint>
+#include <filesystem>
+#include <string>
 #include <string>
 
 #include <borealis/extern/nanovg/nanovg.h>
@@ -32,6 +34,25 @@ void drawScene(NVGcontext* vg, float x, float y, float w, float h,
 uint32_t hashString(const std::string& s);
 
 // 缩略图缓存是否已经有这张图（抽帧完成后用于判断要不要重画占位）
+//
+// ⚠ 注意它检查的是 **nanoVG 句柄是否已加载**，而句柄只在 drawScene()
+// 里懒加载。因此在「还没绘制过」的时机（比如控件构造时）它恒为 false，
+// 即使文件明明存在。判断「要不要按有图布局」请用下面那个。
 bool sceneImageReady(const std::string& path);
+
+// 缩略图文件是否存在且可读（不要求已经加载成纹理）。
+//
+// 用于构造期决定布局：有图走大卡、无图收成紧凑行。用上一个是错的 ——
+// 那时句柄必然还没加载，会永远判成无图。
+//
+// 内联实现是为了能脱离 nanoVG 单独测试：它纯粹是文件系统判断，
+// 和渲染无关，不该被拖进 GL 依赖里。
+inline bool sceneImageFileExists(const std::string& path) {
+    if (path.empty()) return false;
+    std::error_code ec;
+    const auto sz = std::filesystem::file_size(path, ec);
+    // 太小的多半是写到一半被强杀留下的空壳
+    return !ec && sz > 128;
+}
 
 } // namespace muvik::ui
