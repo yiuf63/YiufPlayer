@@ -99,6 +99,60 @@ int main() {
     CHECK_EQ(lib.getAudios().size(), (size_t)2, "音乐不受影响");
     CHECK_FALSE(lib.removeFolder("/tmp/not_in_library"), "移除不存在的文件夹返回 false");
 
+    // ── 旧缓存升级（v2 无 first_indexed → v3 自动迁移）──
+    //
+    // 实测过的问题：只做内存兜底、不回写文件。塞一份 v2 缓存进去
+    // 启动一次，文件仍是 v2 且第 7 列为空 —— 等于永远不升级，
+    // 每次启动都要重新兜一次，而且用户看到的「最近添加」顺序
+    // 在升级前后可能不一致。
+    TEST_BEGIN("媒体库 / 旧缓存自动升级到 v3");
+    {
+        const std::string cfgroot = "/tmp/muvik_test_library/yiufplayer";
+        const std::string cache = cfgroot + "/library_cache.dat";
+        const std::string libs  = cfgroot + "/libraries.dat";
+
+        fs::create_directories(cfgroot);
+        {
+            std::ofstream lf(libs);
+            lf << "# Muvik media libraries v1\n";
+            lf << "/tmp/muvik_test_media/media|media|0|1700000000\n";
+        }
+        // 手工写一份 **v2** 缓存：6 列，没有 first_indexed
+        {
+            std::ofstream cf(cache);
+            cf << "# Muvik library cache v2\n";
+            cf << "# path|name|type|size|ext|mtime\n";
+            cf << "/tmp/muvik_test_media/media/a.mp4|a.mp4|v|2|mp4|1546272000\n";
+            cf << "/tmp/muvik_test_media/media/b.mp4|b.mp4|v|2|mp4|1704038400\n";
+        }
+
+        // 重新加载：应当读入旧格式并回写
+        auto& lib2 = MediaLibrary::getInstance();
+        lib2.load();
+
+        std::ifstream in(cache);
+        std::string header, cols;
+        std::getline(in, header);
+        std::getline(in, cols);
+        const bool v3 = header.find("v3") != std::string::npos;
+        CHECK_TRUE(v3, v3 ? "缓存版本已升到 v3" : "缓存未升级到 v3");
+        CHECK_TRUE(cols.find("first_indexed") != std::string::npos,
+                   "列头含 first_indexed");
+
+        // 旧条目缺入库时间时回退成 mtime，而不是「现在」
+        std::string line;
+        bool saw_a = false;
+        while (std::getline(in, line)) {
+            if (line.empty() || line[0] == '#') continue;
+            if (line.find("a.mp4") == std::string::npos) continue;
+            saw_a = true;
+            const bool ok_ep = line.find("|1546272000|1546272000") != std::string::npos;
+            CHECK_TRUE(ok_ep, ok_ep ? "a.mp4 的 first_indexed 回退成 mtime"
+                                    : "first_indexed 未回退成 mtime");
+        }
+        CHECK_TRUE(saw_a, "a.mp4 仍在缓存里");
+    }
+
     TEST_END();
     std::system("rm -rf /tmp/muvik_test_media");
     return TEST_SUMMARY();

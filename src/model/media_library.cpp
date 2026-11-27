@@ -387,6 +387,10 @@ void MediaLibrary::rebuild(const ProgressCallback& on_progress) {
 // ---------------- 持久化 ----------------
 
 void MediaLibrary::load() {
+    // 旧格式缓存（v2 及更早没有 first_indexed 列）读进来时只是内存兜底，
+    // 不落盘的话下次启动还要再兜一次。读到旧格式就置位，末尾回写一次。
+    bool needs_upgrade = false;
+
     // 1) 文件夹配置
     {
         std::ifstream infile(librariesFilePath());
@@ -471,11 +475,23 @@ void MediaLibrary::load() {
                 if (f.size() >= 7) {
                     try { item.first_indexed = std::stoll(f[6]); } catch (...) { item.first_indexed = 0; }
                 }
-                if (item.first_indexed <= 0) item.first_indexed = item.modified;
+                if (item.first_indexed <= 0) {
+                    item.first_indexed = item.modified;   // 旧缓存兜底
+                    needs_upgrade = true;
+                }
                 items_.push_back(std::move(item));
             }
         }
     }
+
+    // 旧缓存只做了内存兜底，回写一次完成迁移。
+    //
+    // 为什么必须在 load() 里做：save() 原本只在 rebuild（扫描）和
+    // 「添加目录」时被调用，纯启动永远不会回写 —— 实测一份 v2 缓存
+    // 放进去、启动一次，文件仍是 v2 且第 7 列为空，等于永远不升级。
+    //
+    // 放在锁外：save() 内部自己加锁，这里再持锁会自死锁（同 AGENTS.md 陷阱 21）。
+    if (needs_upgrade) save();
 }
 
 void MediaLibrary::save() const {
