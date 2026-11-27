@@ -52,6 +52,18 @@ public:
     const std::string& identity() const { return identity_; }
     // 目录 / 需要进入下一层的条目显示右箭头
     void setChevron(bool show);
+
+    // 勾选状态（用于「选择要扫描的目录」这类多选场景）。
+    //
+    // 三态：
+    //   -1 = 不显示勾选框（默认，绝大多数列表）
+    //    0 = 显示未勾选
+    //    1 = 显示已勾选
+    // 用 -1 而不是 bool，是因为「这一行本来就没有勾选框」和
+    // 「有勾选框但没勾」在视觉上必须区分得开 —— 后者要占位，
+    // 否则整列的标题会随是否多选而左右跳。
+    void setCheckState(int state) { check_state_ = state; }
+    int checkState() const { return check_state_; }
     // 用 16:9 缩略图替代左侧的类型图标块。
     // 只在视频行上调用 —— 音频没有画面，硬塞一张占位图只会让列表更花。
     void setThumbnail(ui::SceneSpec spec);
@@ -68,6 +80,7 @@ private:
     std::string badge_;
     float progress_ = -1.0f;
     bool chevron_ = false;
+    int check_state_ = -1;
     bool has_thumb_ = false;
     ui::SceneSpec thumb_;
 

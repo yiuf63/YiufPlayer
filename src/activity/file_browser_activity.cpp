@@ -39,6 +39,7 @@
 #include "model/series_detector.hpp"
 #include "activity/series_activity.hpp"
 #include "model/library_view_options.hpp"
+#include "model/setup_selection.hpp"
 #include "model/network_source.hpp"
 #include "activity/network_browser_activity.hpp"
 #include "utils/webdav_client.hpp"
@@ -1278,6 +1279,13 @@ void FileBrowserActivity::renderLibraryContent() {
     auto& lib = MediaLibrary::getInstance();
     if (lib.getFolders().empty()) {
         auto detected = detectLocalMediaSources();
+        // 清洗不再存在的排除项：拔卡后插回，应当重新默认选中。
+        {
+            std::vector<std::string> paths;
+            paths.reserve(detected.size());
+            for (const auto& [p, name] : detected) paths.push_back(p);
+            pruneExcluded(setup_excluded_, paths);
+        }
         if (!detected.empty()) {
             library_list_->addView(new EmptyState(
                 ui::Icon::Video, i18n::tr("library.welcome_title", "欢迎使用 Yiuf Player"),
@@ -1292,22 +1300,56 @@ void FileBrowserActivity::renderLibraryContent() {
                 i18n::tr("library.will_scan", "将扫描这些位置") + " · " +
                 std::to_string(detected.size())));
 
+            // 可勾选：默认全选，按 A 切换这一条。
+            //
+            // 修复前是「检测到多少就全导入」，用户无法排除下载目录或
+            // 整张卡（交接文档 02-ux.md：播放器能导入的范围应当由用户决定）。
             for (const auto& [path, label] : detected) {
-                // 用不可聚焦的展示行：这里只回答「会扫哪」，
-                // 挑选是下一步的事（第二批以后再做勾选）。
+                const bool excluded = setup_excluded_.count(path) > 0;
                 auto* row = new MediaCell(ui::Icon::Folder, label, path);
-                row->setFocusable(false);
+                row->setCheckState(excluded ? 0 : 1);
+                row->setIdentity(path);
+                const std::string p2 = path;
+                row->registerClickAction([this, p2](brls::View*) {
+                    // 切换后重建：勾选框状态由 setup_excluded_ 决定，
+                    // 直接改视图状态会在下一次重建时丢失。
+                    toggleExcluded(setup_excluded_, p2);
+                    renderLibraryContent();
+                    return true;
+                });
                 library_list_->addView(row);
+            }
+
+            size_t chosen = 0;
+            for (const auto& [p, name] : detected) {
+                if (isSelected(setup_excluded_, p)) ++chosen;
             }
 
             auto* one_click = new MediaCell(
                 ui::Icon::Play, i18n::tr("library.one_click_setup", "一键建立影院"),
-                i18n::tr("library.one_click_setup", "一键建立影院") + " (" + std::to_string(detected.size()) + " " + i18n::tr("library.folders_count", "个文件夹") + ")");
+                chosen == detected.size()
+                    ? i18n::tr("library.one_click_setup", "一键建立影院") + " (" +
+                          std::to_string(chosen) + " " + i18n::tr("library.folders_count", "个文件夹") + ")"
+                    : i18n::tr("library.one_click_setup", "一键建立影院") + " (" +
+                          std::to_string(chosen) + " / " + std::to_string(detected.size()) + ")");
             one_click->setChevron(true);
+            if (chosen == 0) {
+                // 一个都没选时不给按 —— 按下去什么也不会发生，
+                // 用户会以为按钮坏了。
+                one_click->setFocusable(false);
+            }
             one_click->registerClickAction([this, detected](brls::View*) {
                 auto& ml = MediaLibrary::getInstance();
+                size_t n = 0;
                 for (const auto& [p, name] : detected) {
+                    if (!isSelected(setup_excluded_, p)) continue;   // 用户取消勾选的不导入
                     ml.addFolder(p, name);
+                    ++n;
+                }
+                if (n == 0) {
+                    brls::Application::notify(
+                        i18n::tr("library.none_selected", "没有选中任何目录"));
+                    return true;
                 }
                 ml.save();
                 brls::Application::notify(i18n::tr("library.folder_added_scanning", "已添加，正在扫描…"));

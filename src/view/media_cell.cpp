@@ -125,9 +125,39 @@ void MediaCell::draw(NVGcontext* vg, float x, float y, float width, float height
         content_x = tile_x + tile + 16.0f;
     }
 
+    // 勾选框：放在最右，比角标更靠外。
+    //
+    // 只在多选场景显示（check_state_ >= 0）。位置固定在右端而不是紧贴标题，
+    // 是因为一列里各条标题长度差别很大 —— 贴着标题会让勾选框参差不齐，
+    // 扫一眼看不出哪些勾了。
+    const float check_w = 26.0f;
+    const float right_edge = card_x + card_w - 18.0f;
+    const float check_x = right_edge - check_w;
+    if (check_state_ >= 0) {
+        const float cy = y + height * 0.5f;
+        const float box = 18.0f;
+        const float bx = check_x + (check_w - box) * 0.5f;
+        const float by = cy - box * 0.5f;
+        if (check_state_ > 0) {
+            ui::fillRoundRect(vg, bx, by, box, box, 5.0f,
+                              ui::mix(pal.surfaceSunken, pal.accent,
+                                      0.35f + 0.45f * fa));
+            ui::drawIcon(vg, ui::Icon::Check, bx + box * 0.5f, cy, 6.5f,
+                         pal.accentInk, 2.4f);
+        } else {
+            // 未勾选：只画描边。用 surfaceSunken 打底与背景分离，
+            // 否则纯描边在深色卡片上几乎看不见。
+            ui::fillRoundRect(vg, bx, by, box, box, 5.0f,
+                              ui::rgba(pal.surfaceSunken, 0.9f));
+            ui::strokeRoundRect(vg, bx, by, box, box, 5.0f,
+                                ui::rgba(pal.outlineStrong, 1.0f), 1.5f);
+        }
+    }
+
     // 右侧：元信息 + 指示箭头
     const float right = card_x + card_w - 18.0f;
-    float badge_right = right - (chevron_ ? 22.0f : 0.0f);
+    float badge_right = right - (chevron_ ? 22.0f : 0.0f)
+                        - (check_state_ >= 0 ? check_w : 0.0f);
     const float badge_w = badge_.empty()
                               ? 0.0f
                               : ui::textWidth(vg, ui::font::detail, badge_);

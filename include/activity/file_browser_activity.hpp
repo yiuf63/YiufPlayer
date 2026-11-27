@@ -3,6 +3,7 @@
 #include <atomic>
 #include <memory>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 #include <borealis.hpp>
@@ -159,6 +160,23 @@ private:
 
     // 组装首页「继续观看」主视觉的数据。没有可显示的记录时返回 false。
     bool buildResumeHero(struct ResumeHeroSpec& out) const;
+
+    // 首次建库时，哪些探测到的目录**不**导入。
+    //
+    // 存「被排除的」而不是「被选中的」：默认全选是现有行为，
+    // 这样新增一个探测位置时它自动被选中，不会因为以前存过一份
+    // 「选中列表」而被漏掉。
+    // 用路径而非下标：重建列表会重排，下标对不上。
+    std::set<std::string> setup_excluded_;
+
+public:
+    // 供自动化测试：首次建库界面里，被用户取消勾选的目录数。
+    //
+    // 没有它就只能测「界面上有个方块」—— 勾选状态存在哪个字段、
+    // 按 A 会不会真的切换，全都没被覆盖。
+    size_t setupExcludedCountForTest() const { return setup_excluded_.size(); }
+
+private:
 
     // 换层后要恢复到的目标身份（由 openFolder 设置，render 消费后清空）。
     //
