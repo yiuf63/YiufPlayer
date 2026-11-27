@@ -246,6 +246,86 @@ void runFunctionalSmoke() {
               " 栈深 " + std::to_string(before) + " -> " + std::to_string(stackDepth()));
     }});
 
+    // 7. 焦点按**身份**恢复，而不是按序号。
+    //
+    // 这是第二批最重要的改动，也是最容易「看起来改了、其实没生效」的地方：
+    // 旧实现写死 `idx = entering ? 1 : 0`，如果测试只断言「有焦点」，
+    // 两种实现在只看宽度/像素时都能通过。
+    //
+    // 做法：先向下移动 2 次到**第 3 项**（不是默认的第 1 项），记下它的身份，
+    // 进文件夹再返回，断言语义完全一致。若实现退回按序号，返回后会落在
+    // 第 1 项 —— 身份对不上，本项立刻失败。
+    //
+    // ⚠ 前置条件：总览至少要有 3 个可聚焦项。只有一个目录时跳过并说明，
+    // 不能把「素材不够」报成缺陷。
+    static std::string g_focus_before;
+    steps.push_back({400, "移动到第 3 项", []() {
+        auto* fb = dynamic_cast<muvik::FileBrowserActivity*>(
+            brls::Application::getTopActivity());
+        if (!fb) { check("回到媒体库", false, "顶层不是 FileBrowserActivity"); return; }
+
+        // 用**横向**移动挑一张非首位的目录卡。
+        //
+        // 为什么不用 DOWN：总览里三张目录卡在同一行，DOWN 会直接跳到
+        // 下一行的「最近添加」媒体行，那时按序号恢复与按身份恢复
+        // 恰好可能落到同一项，测试就测不出区别（实测确实如此）。
+        // 横向走到第 3 张目录卡，它的序号是 2，
+        // 与「返回时取 idx=0」明显不同，才能区分两种实现。
+        brls::Logger::info("[smoke] 移动前身份 = {}", fb->focusedIdentityForTest());
+        brls::Application::injectButton(brls::BUTTON_RIGHT);
+        brls::Application::injectButton(brls::BUTTON_RIGHT);
+        g_focus_before = fb->focusedIdentityForTest();
+        brls::Logger::info("[smoke] 横向移动后身份 = {}（应为目录卡路径）",
+                           g_focus_before);
+        brls::View* f = brls::Application::getCurrentFocus();
+        brls::Logger::info("[smoke] 在文件夹内={} 焦点={} ({}) 身份={}",
+                           fb->libraryInFolderForTest() ? "是" : "否",
+                           (void*)f, f ? f->describe() : "空",
+                           g_focus_before.empty() ? "（空）" : g_focus_before);
+    }});
+
+    // 进文件夹。必须单独一步：步骤之间才有等待，
+    // 同一步内的连续 injectButton 之间没有帧间隔，
+    // 而 openFolder 的焦点恢复是 brls::sync 延后一帧的 —— 连按会读到旧焦点。
+    steps.push_back({900, "进入焦点所在的文件夹", []() {
+        auto* fb = dynamic_cast<muvik::FileBrowserActivity*>(
+            brls::Application::getTopActivity());
+        if (!fb || g_focus_before.empty()) return;
+        brls::Application::injectButton(brls::BUTTON_A);
+        check("按 A 进入了该目录", fb->libraryInFolderForTest(),
+              std::string("在文件夹内=") + (fb->libraryInFolderForTest() ? "是" : "否"));
+    }});
+
+    steps.push_back({900, "返回总览并检查焦点", []() {
+        auto* fb = dynamic_cast<muvik::FileBrowserActivity*>(
+            brls::Application::getTopActivity());
+        if (!fb) return;
+        if (g_focus_before.empty()) {
+            brls::Logger::warning("[smoke] 跳过焦点恢复断言：当前焦点没有身份"
+                                  "（素材不足 3 项，或焦点在工具行上）");
+            return;
+        }
+        brls::Application::injectButton(brls::BUTTON_B);
+        // 焦点恢复走 brls::sync（延后一帧）。120ms 后读到的是「稳定态」——
+        // 用户最终看到的焦点，比「刚 giveFocus 那一刻」更有意义。
+        std::this_thread::sleep_for(std::chrono::milliseconds(600));
+
+        auto* top = dynamic_cast<muvik::FileBrowserActivity*>(
+            brls::Application::getTopActivity());
+        const std::string after = top ? top->focusedIdentityForTest() : "";
+        brls::View* fv = brls::Application::getCurrentFocus();
+        brls::Logger::info("[smoke] 稳定后 在文件夹内={} 焦点视图={} 身份={}",
+                           (top && top->libraryInFolderForTest()) ? "是" : "否",
+                           fv ? fv->describe() : "空", after);
+        check("返回后焦点仍在原来那一项（稳定态）", after == g_focus_before,
+              "期望[" + g_focus_before + "] 实际[" + after + "]");
+        // 注：不在这里断言 rememberedIdentityForTest()。
+        // 它读的是**当前层**的记录，而此刻已经退回到总览，
+        // 总览层记的是「进文件夹之前停在哪张目录卡」—— 不是刚才那个视频。
+        // 早先写成「记录应当等于 g_focus_before」是断言错了对象，
+        // 会稳定地报 FAIL 而代码其实是对的。
+    }});
+
     // 6. 汇总
     steps.push_back({300, "汇总", []() {
         if (g_failures == 0) {

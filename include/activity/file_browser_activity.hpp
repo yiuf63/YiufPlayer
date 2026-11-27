@@ -36,6 +36,20 @@ public:
     // 供自动化测试：媒体库是否停在某个文件夹里（false = 文件夹总览）
     bool libraryInFolderForTest() const { return !open_folder_.empty(); }
 
+    // 供自动化测试：当前获焦视图代表的**条目身份**（媒体路径 / 目录路径）。
+    // 空的表示焦点不在任何带身份的卡片上（工具行、返回行等）。
+    //
+    // 为什么需要它：焦点恢复是本项目最容易「看起来改了、实际没生效」的地方 ——
+    // 测试若只断言「有焦点」，按序号恢复和按身份恢复都能通过。
+    // 必须能读出「是哪一项」才能区分两者。
+    std::string focusedIdentityForTest() const;
+
+    // 供自动化测试：当前层记录的焦点身份（不含 UI 实时状态）。
+    std::string rememberedIdentityForTest() const {
+        auto it = focus_identity_.find(open_folder_);
+        return it == focus_identity_.end() ? std::string() : it->second;
+    }
+
     void navigateTo(const std::string& path, const std::string& title = "");
     void navigateUp();
     void refresh();
@@ -145,6 +159,18 @@ private:
 
     // 组装首页「继续观看」主视觉的数据。没有可显示的记录时返回 false。
     bool buildResumeHero(struct ResumeHeroSpec& out) const;
+
+    // 换层后要恢复到的目标身份（由 openFolder 设置，render 消费后清空）。
+    //
+    // 为什么不能沿用「当前焦点」的身份：换层那一瞬间焦点还停在旧层，
+    // 而**同一个文件在两层的身份字符串是相同的** ——
+    // 文件夹内的那一行是 `x/ep.mp4`，总览「最近添加」里的同一部片
+    // 也是 `x/ep.mp4`。按身份找回时会匹配到后者，
+    // 于是「从文件夹返回」落在某个最近添加的行上，而不是原来那张目录卡。
+    // 实测就是这个现象。
+    std::string pending_focus_identity_;
+    // 本次渲染是不是「换层」引发的（与上面配对，标记一次性的换层渲染）。
+    bool focus_layer_changed_ = false;
     // 本次运行中已经为哪些「空文件夹」触发过扫描。
     // 没有它，一个真实的空目录会让人每次进媒体库都全量重扫一遍。
     std::vector<std::string> empty_checked_;

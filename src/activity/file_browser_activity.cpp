@@ -883,6 +883,10 @@ MediaCell* FileBrowserActivity::makeVideoCell(const MediaItem& item,
     // 列表行也用 16:9 缩略图：一屏十几行「[视频] 01. 开头」的列表，
     // 靠文件名认片比靠画面慢得多
     cell->setThumbnail(sceneSpecFor(item));
+    // 身份 = 媒体路径。焦点按身份恢复依赖它 —— 这条路径（总览的
+    // 「最近添加」、文件夹内列表、单片区）都走这里，漏设的话
+    // 焦点永远回不到这一行（实测冒烟里 focusedIdentity 为空而发现）。
+    cell->setIdentity(item.path);
 
     cell->registerClickAction([playlist = std::move(playlist), idx](brls::View*) {
         brls::Logger::info("[click] 视频条目被点击 idx={} 总数={}", idx, playlist.size());
@@ -1141,6 +1145,18 @@ const std::string* viewIdentity(brls::View* v) {
 }
 } // namespace
 
+std::string FileBrowserActivity::focusedIdentityForTest() const {
+    // 只认焦点视图**自身**的身份。
+    //
+    // 之前这里向上爬 4 层父节点，结果爬到别的卡片上去了 ——
+    // 实测返回的 d3/ep_d3.mp4 根本不是当前焦点，而是祖先链里另一行。
+    // 三个卡片类本身都是可聚焦的，焦点必然直接落在它们上面，
+    // 不需要也不应该向上找。
+    brls::View* v = brls::Application::getCurrentFocus();
+    if (const std::string* id = viewIdentity(v)) return *id;
+    return {};
+}
+
 void FileBrowserActivity::openFolder(const std::string& path) {
     // 离开当前层之前，先记住焦点停在哪一项。
     //
@@ -1154,8 +1170,31 @@ void FileBrowserActivity::openFolder(const std::string& path) {
     }
 
     open_folder_ = path;
+
+    // 换层渲染时**不要**沿用旧层的焦点身份。
+    //
+    // renderLibraryContent() 末尾有一段焦点接回（按身份 / 按序号），
+    // 它读的是「此刻的焦点」。而换层的瞬间焦点还停在旧层那一项上
+    // （比如刚在 d3 里按 B，焦点是 d3/ep_d3.mp4），带到新层里必然找不到，
+    // 于是退回末尾项 —— 把 openFolder 后面那段正确的身份恢复覆盖掉。
+    //
+    // 实测：进入 d3 再返回，giveFocus 确实给了 d3，120ms 后却变成
+    // d3/ep_d3.mp4 所在的层，就是这条路径造成的。
+    //
+    // 做法：换层前先把焦点标记为「已丢失」，让 render 末尾走
+    // focus_was_lost 分支；真正的目标焦点由下面 brls::sync 里的
+    // 身份恢复决定。
+    //
+    // 目标 = 目标层上一次的焦点（进文件夹时通常是空，回总览时是那张目录卡）。
+    // 不能用「此刻的焦点」——它的身份字符串在两层里可能相同（同一个文件
+    // 既在文件夹里、也在总览的「最近添加」里），会匹配到错的那一个。
+    {
+        auto it = focus_identity_.find(path);
+        pending_focus_identity_ = (it == focus_identity_.end()) ? std::string() : it->second;
+        focus_layer_changed_ = true;   // 即使目标为空也要走「换层」分支
+    }
+
     renderLibraryContent();
-    (void)0;
     // 进 / 出文件夹是一次导航：焦点必须落在新一层的第一项上。
     // 不接管的话，原来那张卡片已经被删除，焦点是空的 ——
     // 手柄按 A 没反应，看起来像「界面卡住了」。
@@ -1166,47 +1205,7 @@ void FileBrowserActivity::openFolder(const std::string& path) {
     // giveFocus 推迟到下一帧：刚 addView 的子项还没走完一次布局，
     // 冷缓存时（抽帧回调随时会再重建一次列表）立即 giveFocus 偶发失效，
     // 焦点留在返回行上 —— 下一按 A 就退出了文件夹。
-    //
-    // 焦点选择：优先按**身份**回到上次停的那一项；没有记录才退回默认。
-    // 默认值分两种：进文件夹跳过第 0 项（那是返回行），回总览从第 0 项开始。
-    if (library_list_) {
-        auto alive = std::make_shared<std::atomic<bool>>(true);
-        alive_flags_.push_back(alive);
-        const bool entering = !path.empty();
-        const std::string want_id = [this]() {
-            auto it = focus_identity_.find(open_folder_);
-            return it == focus_identity_.end() ? std::string() : it->second;
-        }();
-        brls::sync([this, alive, entering, want_id]() {
-            if (!alive->load() || !library_list_) return;
-            std::vector<brls::View*> items;
-            collectFocusables(library_list_, items);
-            if (items.empty()) return;
-
-            brls::View* want = nullptr;
-            if (!want_id.empty()) {
-                for (auto* v : items) {
-                    if (const std::string* id = viewIdentity(v); id && *id == want_id) {
-                        want = v;
-                        break;
-                    }
-                }
-                // 那条已经不在了（被删 / 被筛掉）：落到相邻项而不是跳回顶部，
-                // 用户至少还在原来那一片区域。
-                if (!want) {
-                    for (size_t i = 0; i < items.size(); ++i) {
-                        const std::string* id = viewIdentity(items[i]);
-                        if (id && *id > want_id) { want = items[i]; break; }
-                    }
-                }
-            }
-            if (!want) {
-                const size_t idx = (entering && items.size() > 1) ? 1 : 0;
-                want = items[idx];
-            }
-            brls::Application::giveFocus(want);
-        });
-    }
+    // 焦点由 renderLibraryContent() 里统一处理（见 pending_focus_identity_）。
     // 换层之后要回到顶部：进文件夹还停在总览的滚动位置，
     // 首屏直接从第三张卡片开始，看着像内容丢了。
     if (library_scroller_) library_scroller_->setContentOffsetY(0.0f, false);
@@ -1246,6 +1245,15 @@ void FileBrowserActivity::renderLibraryContent() {
     // 重建完按索引接回去 —— 记住指针没用，那个对象马上就没了。
     brls::View* prev = brls::Application::getCurrentFocus();
     int prev_idx = -1;
+    // 同时记下「原来那一项是谁」。
+    //
+    // 只靠序号会在重建后指错项 —— 缩略图到达、筛选变化、重扫都会重建，
+    // 同一序号可能已是另一部片子。这是本项目第二批要解决的核心问题，
+    // 而这一处（renderLibraryContent 末尾）正是最容易漏掉的：
+    // 它同步执行，会**覆盖** openFolder() 里延后一帧的身份恢复。
+    // 实测：openFolder 的 giveFocus 把焦点给了 d3，120ms 后却变回 d2，
+    // 就是被这里的按序号恢复抢走。
+    std::string prev_identity;
     if (prev) {
         std::vector<brls::View*> before;
         collectFocusables(library_list_, before);
@@ -1255,6 +1263,7 @@ void FileBrowserActivity::renderLibraryContent() {
                 break;
             }
         }
+        if (const std::string* id = viewIdentity(prev)) prev_identity = *id;
     }
     const bool focus_was_lost = (prev == nullptr) || brls::Application::isViewDead(prev);
 
@@ -1393,7 +1402,44 @@ void FileBrowserActivity::renderLibraryContent() {
         std::vector<brls::View*> items;
         collectFocusables(library_list_, items);
         if (!items.empty()) {
-            if (prev_idx >= 0) {
+            if (!pending_focus_identity_.empty() || focus_layer_changed_) {
+                // 换层：用**目标层**记录的焦点身份，不用「此刻焦点」的身份。
+                //
+                // 换层瞬间焦点还停在旧层，而同一文件在两层的身份字符串相同
+                //（文件夹里的行 vs 总览「最近添加」里的同一部片），
+                // 按「此刻焦点」找回会匹配到错的那一个 —— 实测表现为
+                // 「从文件夹返回，焦点落在最近添加的某一行上」。
+                const std::string want = pending_focus_identity_;
+                pending_focus_identity_.clear();
+                focus_layer_changed_ = false;
+                if (!want.empty()) {
+                    for (auto* v : items) {
+                        if (const std::string* id = viewIdentity(v);
+                            id && *id == want) {
+                            brls::Application::giveFocus(v);
+                            return;
+                        }
+                    }
+                }
+                // 目标层还没记录（首次进入某个文件夹）：跳过返回行，
+                // 落到第一张真实卡片上 —— 与旧行为一致，
+                // 否则「按 A 又退出来」是最容易让人以为点不动的地方。
+                const size_t idx = (items.size() > 1) ? 1 : 0;
+                brls::Application::giveFocus(items[idx]);
+                return;
+            }
+            if (!prev_identity.empty()) {
+                // 按身份找回。找不到时退回末尾项，而不是跳回顶部 ——
+                // 用户至少还在原来那一片区域。
+                brls::View* hit = nullptr;
+                for (auto* v : items) {
+                    if (const std::string* id = viewIdentity(v);
+                        id && *id == prev_identity) { hit = v; break; }
+                }
+                if (!hit) hit = items[std::min(prev_idx >= 0 ? prev_idx : 0,
+                                              static_cast<int>(items.size()) - 1)];
+                brls::Application::giveFocus(hit);
+            } else if (prev_idx >= 0) {
                 // 原来在哪一项就还给哪一项（越界时退到最后一项）
                 const int idx = std::min(prev_idx, static_cast<int>(items.size()) - 1);
                 brls::Application::giveFocus(items[idx]);
