@@ -1060,7 +1060,13 @@ brls::View* FileBrowserActivity::createLibraryView() {
     library_list_ = new DynamicBox(library_slot_);
     *library_slot_ = library_list_;
     library_list_->setAxis(brls::Axis::COLUMN);
-    library_list_->setPaddingBottom(28.0f);
+    // 底部留白必须盖过底栏高度（brls/applet_frame/footer_height = 64）。
+    //
+    // 修复前这里是 28，而底栏占 64 —— 实测 640×360 下最后一条内容
+    // 落在 y=338~350，底栏从 y=328 起，两者**重叠**，
+    // 用户看不到列表最末一项（叠加在新空库的路径清单上尤其明显）。
+    // 28 + 64 = 92，留够一整条底栏再加原本的呼吸距离。
+    library_list_->setPaddingBottom(28.0f + 64.0f);
     library_scroller_->setContentView(library_list_);
     library_root_->addView(library_scroller_);
     root->content_ = library_list_;   // 默认焦点指向内容区第一个卡片
@@ -1275,7 +1281,25 @@ void FileBrowserActivity::renderLibraryContent() {
         if (!detected.empty()) {
             library_list_->addView(new EmptyState(
                 ui::Icon::Video, i18n::tr("library.welcome_title", "欢迎使用 Yiuf Player"),
-                i18n::tr("library.welcome_desc", "已检测到本地存储设备与影音目录\n点击下方按钮一键建立您的专属掌机影院")));
+                i18n::tr("library.welcome_desc", "下面这些位置将加入媒体库\n扫描完成后可随时增删")));
+
+            // 先列出**具体会扫描哪些路径**，再给「一键建立」。
+            //
+            // 修复前这里只写「(2 个文件夹)」—— 用户按 A 之前不知道会扫哪里，
+            // 也不知道会不会把整张卡都扫进去（交接文档 01-findings.md 实测）。
+            // 掌机上一个误扫的代价是几十秒的等待 + 一堆不想看的条目。
+            library_list_->addView(new SectionHeader(
+                i18n::tr("library.will_scan", "将扫描这些位置") + " · " +
+                std::to_string(detected.size())));
+
+            for (const auto& [path, label] : detected) {
+                // 用不可聚焦的展示行：这里只回答「会扫哪」，
+                // 挑选是下一步的事（第二批以后再做勾选）。
+                auto* row = new MediaCell(ui::Icon::Folder, label, path);
+                row->setFocusable(false);
+                library_list_->addView(row);
+            }
+
             auto* one_click = new MediaCell(
                 ui::Icon::Play, i18n::tr("library.one_click_setup", "一键建立影院"),
                 i18n::tr("library.one_click_setup", "一键建立影院") + " (" + std::to_string(detected.size()) + " " + i18n::tr("library.folders_count", "个文件夹") + ")");
