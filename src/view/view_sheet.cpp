@@ -199,7 +199,7 @@ brls::Box* ViewSheet::makeRow(
     row->setHeight(ROW_H);
     row->setWidthPercentage(100.0f);
 
-    auto* name = makeLabel(label, ui::font::caption, pal.textMute);
+    auto* name = makeLabel(label, ui::font::caption(), pal.textMute);
     name->setWidth(LABEL_W);
     row->addView(name);
 
@@ -243,7 +243,7 @@ void ViewSheet::rebuild() {
         head->setWidthPercentage(100.0f);
         head->setMarginBottom(2.0f);
 
-        head->addView(makeLabel(i18n::tr("view_sheet.title", "视图与排序"), ui::font::title, pal.text));
+        head->addView(makeLabel(i18n::tr("view_sheet.title", "视图与排序"), ui::font::title(), pal.text));
 
         auto* closeBtn = new ToolButton(i18n::tr("common.close", "关闭"), ui::Icon::Close, 13.0f);
         closeBtn->setCompact(true);
@@ -254,7 +254,7 @@ void ViewSheet::rebuild() {
         head->addView(closeBtn);
         panel_->addView(head);
 
-        summary_ = makeLabel(p->summary(), ui::font::caption, pal.textMute);
+        summary_ = makeLabel(p->summary(), ui::font::caption(), pal.textMute);
         summary_->setWidthPercentage(100.0f);
         summary_->setMarginBottom(8.0f);
         panel_->addView(summary_);

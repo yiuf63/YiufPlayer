@@ -71,12 +71,38 @@ constexpr float pill = 999.0f;
 } // namespace radius
 
 // 字号（逻辑像素）——只有这五级，禁止再出现第六种。
+//
+// 为什么从 constexpr 常量改成函数：
+//   掌机的握持距离差别很大。Deck 双手握持时屏幕离眼睛约 40cm，
+//   TrimUI Smart Pro 更近；同一套字号在前者清晰、在后者偏小。
+//   常量没法在运行时调，所以改成 `font::body()` 这样的取值函数，
+//   内部乘以字号档位的系数。
+//
+// 兼容性：原来的写法是 `ui::font::body()`（无括号）。加括号是必须的，
+// 编译器会把漏改的地方报成「函数指针不能隐式转 float」，
+// 不会静默变成默认值 —— 这一点是选函数而不是全局变量的原因。
 namespace font {
-constexpr float display = 26.0f; // 页面主标题
-constexpr float title   = 20.0f; // 大标题 / 播放器片名
-constexpr float body    = 17.0f; // 列表行主文字
-constexpr float detail  = 14.0f; // 副文字 / 元信息
-constexpr float caption = 12.5f; // 最小说明文字
+
+// 全局字号缩放。1.0 = 标准。
+//
+// 只影响**自绘文本**（ui::text / textClipped / 卡片文字）。
+// borealis 的 Label 用 setFontSize() 设置，调用方传的是这里算出来的值，
+// 所以同样会缩放。
+//
+// 用 inline 函数的静态局部变量缓存：scale 在运行期只在设置变更时改一次，
+// 而字号读取散布在每帧的绘制里（一屏几十次 / 帧），
+// 每次都走一次非 inline 的函数调用没必要。
+float& scaleRef();          // 由 design.cpp 提供的存储
+inline float scale() { return scaleRef(); }
+void setScale(float s);
+
+// 五级字号。
+inline float display() { return 26.0f * scale(); } // 页面主标题
+inline float title()   { return 20.0f * scale(); } // 大标题 / 播放器片名
+inline float body()    { return 17.0f * scale(); } // 列表行主文字
+inline float detail()  { return 14.0f * scale(); } // 副文字 / 元信息
+inline float caption() { return 12.5f * scale(); } // 最小说明文字
+
 } // namespace font
 
 // ── 颜色工具 ────────────────────────────────────────────────────────────

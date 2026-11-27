@@ -98,6 +98,12 @@ int fontId(NVGcontext* vg) {
 static Palette g_currentPalette = kDark;
 static bool g_paletteInitialized = false;
 
+// 字号缩放存储。见 design.hpp 的说明。
+//
+// 上下限收紧到 0.85~1.30：再小则 caption（12.5 × 0.85 ≈ 10.6）在
+// 640×360 下糊成一团；再大则一行放不下两个中文词，卡片全部截断。
+static float g_fontScale = 1.0f;
+
 const Palette& getBuiltinDarkPalette() { return kDark; }
 const Palette& getBuiltinOledPalette() { return kOled; }
 const Palette& getBuiltinLightPalette() { return kLight; }
@@ -399,5 +405,17 @@ void tabularText(NVGcontext* vg, float x, float y, float size, NVGcolor color,
     }
 }
 #endif
+
+namespace font {
+
+float& scaleRef() { return g_fontScale; }
+
+void setScale(float s) {
+    if (s < 0.85f) s = 0.85f;
+    if (s > 1.30f) s = 1.30f;
+    g_fontScale = s;
+}
+
+} // namespace font
 
 } // namespace muvik::ui

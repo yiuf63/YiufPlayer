@@ -1124,6 +1124,77 @@ def check_search(tmpdir, media):
     record("search", "结果与空结果明显不同", d_ac > 2.0, f"{d_ac:.2f}")
 
 
+def check_font_scale(tmpdir, media):
+    """界面字号档位必须真的改变渲染结果。
+
+    为什么单列一组：这是最容易「看起来做了、其实没生效」的功能 ——
+    档位值确实变了、ui::font 也返回了新值，但界面上看不出差别
+    （实测踩过：只有自绘文字变了，侧栏和标题栏仍是旧字号）。
+
+    判据用**两档抓帧对比**，而且要求差异足够大：
+      只断言「两幅图不同」不够 —— 时间戳、噪点纹理都会让图不同。
+      断言「差异 > 阈值」，才能排除噪声级别的变化。
+    """
+    section("字号档位")
+
+    if not media or "series_dir" not in media:
+        record("font_scale", "字号", True, "跳过：缺少测试媒体")
+        return
+
+    cfg = Path(tmpdir) / "font_scale_cfg"
+    app_cfg = cfg / "yiufplayer"
+    app_cfg.mkdir(parents=True, exist_ok=True)
+    (app_cfg / "libraries.dat").write_text(
+        f"{media['series_dir']}|测试|1|1700000000\n")
+
+    def grab(scale, name):
+        out = Path(tmpdir) / f"fontscale_{name}.ppm"
+        env = {
+            "XDG_CONFIG_HOME": str(cfg),
+            "MUVIK_START_TAB": "0",
+            "MUVIK_FONT_SCALE": scale,
+            "MUVIK_FRAMEGRAB": str(out),
+            "MUVIK_FRAMEGRAB_AT_MS": "3500",
+        }
+        rc, log = run_player(env, timeout=40)
+        if not out.exists():
+            return None
+        return load_ppm(out)
+
+    small = grab("0.85", "small")
+    large = grab("1.20", "large")
+
+    if small is None or large is None:
+        record("font_scale", "抓帧", False, "无法比较")
+        return
+
+    import numpy as np
+    d = float(np.abs(small.astype(int) - large.astype(int)).mean())
+
+    # 阈值 1.35，不是 1.0。
+    #
+    # 实测标定（两档 0.85 vs 1.20 的整图平均差）：
+    #   全部生效（自绘文字 + 侧栏 + 标题栏）  1.53 ~ 1.55
+    #   只让自绘文字生效、主题度量没跟上      1.12
+    #   完全不生效（字号是常量）              约 0.1（噪点纹理级别）
+    #
+    # 我最初写 1.0，然后实测「把 ui::font 的 scale 全去掉」：
+    # 检查**依然通过**（1.12），因为主题里那两处侧栏/标题栏字号还在缩放。
+    # 也就是说 1.0 区分不了「全部生效」和「只生效一部分」——
+    # 而那正是这条检查最该抓住的失败模式。
+    record("font_scale", "两档渲染结果有实质差异", d > 1.35, f"差异 {d:.2f}")
+
+    # 另有一条独立判据：大档不该把内容顶出屏幕
+    # （只比「差异大」会鼓励把字号调到溢出）
+    import numpy as np2
+    h = large.shape[0]
+    ink_large = int((large.mean(axis=2) > 100).sum())
+    ink_small = int((small.mean(axis=2) > 100).sum())
+    record("font_scale", "大字档没有把内容挤出画面",
+           ink_large > ink_small * 0.8,
+           f"亮像素 {ink_small} -> {ink_large}")
+
+
 def check_track_memory(tmpdir, media):
     """选过的字幕轨要记住，下次打开恢复。
 
@@ -1399,6 +1470,7 @@ CHECKS = {
     "feedback": check_input_and_font,
     "functional": check_functional,
     "search": check_search,
+    "font_scale": check_font_scale,
     "asan": check_asan,
     "soak": check_soak,
     "dialog": check_dialog,

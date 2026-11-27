@@ -112,18 +112,18 @@ void MediaFolderCard::draw(NVGcontext* vg, float x, float y, float width, float 
         char buf[24];
         std::snprintf(buf, sizeof(buf), "%d", videos_ + audios_);
         const std::string count = buf;
-        const float bw = std::max(26.0f, ui::textWidth(vg, ui::font::caption, count) + 14.0f);
+        const float bw = std::max(26.0f, ui::textWidth(vg, ui::font::caption(), count) + 14.0f);
         const float bx = cx + cw - 8.0f - bw;
         const float by = cy + thumbH - 8.0f - 22.0f;
         ui::fillRoundRect(vg, bx, by, bw, 22.0f, 6.0f, ui::hex(0x000000, 0.72f));
-        ui::text(vg, bx + bw * 0.5f, by + 11.0f, ui::font::caption, ui::hex(0xF3F4F6),
+        ui::text(vg, bx + bw * 0.5f, by + 11.0f, ui::font::caption(), ui::hex(0xF3F4F6),
                  NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, count);
     }
 
     // 文字区
     const float tx = cx + 12.0f;
     const float maxW = cw - 24.0f;
-    ui::textClipped(vg, tx, cy + thumbH + 22.0f, ui::font::body, focused ? ui::hex(0xFFFFFF) : pal.text,
+    ui::textClipped(vg, tx, cy + thumbH + 22.0f, ui::font::body(), focused ? ui::hex(0xFFFFFF) : pal.text,
                     NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, name_, maxW);
 
     std::string sub;
@@ -133,7 +133,7 @@ void MediaFolderCard::draw(NVGcontext* vg, float x, float y, float width, float 
         sub += std::to_string(audios_) + " " + i18n::tr("common.audios", "音乐");
     }
     if (sub.empty()) sub = i18n::tr("common.empty", "空文件夹");
-    ui::textClipped(vg, tx, cy + thumbH + 44.0f, ui::font::caption, focused ? pal.text : pal.textMute,
+    ui::textClipped(vg, tx, cy + thumbH + 44.0f, ui::font::caption(), focused ? pal.text : pal.textMute,
                     NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, sub, maxW);
 
     if (focused) {

@@ -160,9 +160,9 @@ void MediaCell::draw(NVGcontext* vg, float x, float y, float width, float height
                         - (check_state_ >= 0 ? check_w : 0.0f);
     const float badge_w = badge_.empty()
                               ? 0.0f
-                              : ui::textWidth(vg, ui::font::detail, badge_);
+                              : ui::textWidth(vg, ui::font::detail(), badge_);
     if (!badge_.empty()) {
-        ui::text(vg, badge_right, y + height * 0.5f, ui::font::detail,
+        ui::text(vg, badge_right, y + height * 0.5f, ui::font::detail(),
                  ui::mix(pal.textMute, pal.accent, fa),
                  NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE, badge_);
     }
@@ -185,13 +185,13 @@ void MediaCell::draw(NVGcontext* vg, float x, float y, float width, float height
 
     if (!title_.empty()) {
         ui::textClipped(vg, text_x, title_y,
-                        ui::font::body, ui::mix(pal.text, ui::hex(0xFFFFFF), fa),
+                        ui::font::body(), ui::mix(pal.text, ui::hex(0xFFFFFF), fa),
                         NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE,
                         title_, text_max);
     }
     if (has_subtitle) {
         ui::textClipped(vg, text_x, y + height * 0.5f + (has_progress ? 12.0f : 14.0f),
-                        ui::font::caption, ui::mix(pal.textDim, pal.text, fa),
+                        ui::font::caption(), ui::mix(pal.textDim, pal.text, fa),
                         NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, subtitle_, text_max);
     }
 
@@ -265,7 +265,7 @@ void EmptyState::draw(NVGcontext* vg, float x, float y, float width, float heigh
     ui::strokeCircle(vg, cx, cy - 34.0f, 38.0f, ui::rgba(pal.outline, 0.9f), 1.0f);
     ui::drawIcon(vg, icon_, cx, cy - 34.0f, 32.0f, ui::rgba(pal.accent, 0.9f), 1.8f);
 
-    ui::textClipped(vg, cx, cy + 22.0f, ui::font::body, pal.text,
+    ui::textClipped(vg, cx, cy + 22.0f, ui::font::body(), pal.text,
                     NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, title_,
                     std::max(60.0f, width - 40.0f));
 
@@ -279,7 +279,7 @@ void EmptyState::draw(NVGcontext* vg, float x, float y, float width, float heigh
                                                         ? std::string::npos
                                                         : nl - start);
         if (!line.empty())
-            ui::text(vg, cx, line_y, ui::font::caption,
+            ui::text(vg, cx, line_y, ui::font::caption(),
                      ui::rgba(pal.textDim, 0.78f),
                      NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, line);
         line_y += 20.0f;

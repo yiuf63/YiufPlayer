@@ -109,8 +109,8 @@ void ResumeHero::draw(NVGcontext* vg, float x, float y, float width, float heigh
             : 0.0f;
         if (spec_.can_resume && spec_.duration > 0) {
             const std::string t2 = timeLabel(spec_.duration);
-            const float t2w = ui::textWidth(vg, ui::font::caption, t2);
-            ui::text(vg, x + width - pad - t2w, ty - 14.0f, ui::font::caption,
+            const float t2w = ui::textWidth(vg, ui::font::caption(), t2);
+            ui::text(vg, x + width - pad - t2w, ty - 14.0f, ui::font::caption(),
                      ui::rgba(pal.textDim, 0.9f), NVG_ALIGN_LEFT | NVG_ALIGN_BASELINE, t2);
 
             const float barW = std::min(260.0f, width * 0.34f);
@@ -124,7 +124,7 @@ void ResumeHero::draw(NVGcontext* vg, float x, float y, float width, float heigh
         // 片名（左下）
         const std::string title = spec_.title.empty() ? spec_.item.name : spec_.title;
         const float titleMaxW = width - pad * 2;
-        ui::textClipped(vg, x + pad, ty, ui::font::display, pal.text,
+        ui::textClipped(vg, x + pad, ty, ui::font::display(), pal.text,
                         NVG_ALIGN_LEFT | NVG_ALIGN_BASELINE, title, titleMaxW);
 
         // 副标题一行：集号 · 状态
@@ -142,7 +142,7 @@ void ResumeHero::draw(NVGcontext* vg, float x, float y, float width, float heigh
             sub += " · ";
             sub += spec_.series_title;
         }
-        ui::textClipped(vg, x + pad, ty - 26.0f, ui::font::body,
+        ui::textClipped(vg, x + pad, ty - 26.0f, ui::font::body(),
                         ui::rgba(pal.textDim, 0.95f),
                         NVG_ALIGN_LEFT | NVG_ALIGN_BASELINE, sub, titleMaxW);
 
@@ -175,7 +175,7 @@ void ResumeHero::draw(NVGcontext* vg, float x, float y, float width, float heigh
         const float tw = width - (tx - x) - pad;
 
         const std::string title = spec_.title.empty() ? spec_.item.name : spec_.title;
-        ui::textClipped(vg, tx, y + height * 0.5f - 4.0f, ui::font::title,
+        ui::textClipped(vg, tx, y + height * 0.5f - 4.0f, ui::font::title(),
                         pal.text, NVG_ALIGN_LEFT | NVG_ALIGN_BASELINE, title, tw);
 
         std::string sub;
@@ -188,7 +188,7 @@ void ResumeHero::draw(NVGcontext* vg, float x, float y, float width, float heigh
             if (!sub.empty()) sub += " · ";
             sub += "从头播放";
         }
-        ui::textClipped(vg, tx, y + height * 0.5f + 20.0f, ui::font::detail,
+        ui::textClipped(vg, tx, y + height * 0.5f + 20.0f, ui::font::detail(),
                         pal.textDim, NVG_ALIGN_LEFT | NVG_ALIGN_BASELINE, sub, tw);
 
         // 进度条贴着行的底部

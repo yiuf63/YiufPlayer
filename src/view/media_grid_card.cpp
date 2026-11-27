@@ -75,19 +75,19 @@ void MediaGridCard::draw(NVGcontext* vg, float x, float y, float width, float he
 
     // 右上角短标签
     if (!badge_.empty() && cw > 90.0f) {
-        const float bw = ui::textWidth(vg, ui::font::caption, badge_) + 14.0f;
+        const float bw = ui::textWidth(vg, ui::font::caption(), badge_) + 14.0f;
         const float bx = cx + cw - 7.0f - bw;
         const float by = cy + 7.0f;
         ui::fillRoundRect(vg, bx, by, bw, 21.0f, 6.0f, ui::hex(0x000000, 0.68f));
-        ui::text(vg, bx + bw * 0.5f, by + 10.5f, ui::font::caption, ui::hex(0xF3F4F6),
+        ui::text(vg, bx + bw * 0.5f, by + 10.5f, ui::font::caption(), ui::hex(0xF3F4F6),
                  NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, badge_);
     }
 
     const float tx = cx + 12.0f;
     const float maxW = cw - 24.0f;
-    ui::textClipped(vg, tx, cy + thumbH + 20.0f, ui::font::body, focused ? ui::hex(0xFFFFFF) : pal.text,
+    ui::textClipped(vg, tx, cy + thumbH + 20.0f, ui::font::body(), focused ? ui::hex(0xFFFFFF) : pal.text,
                     NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, title_, maxW);
-    ui::textClipped(vg, tx, cy + thumbH + 39.0f, ui::font::caption, focused ? pal.text : pal.textMute,
+    ui::textClipped(vg, tx, cy + thumbH + 39.0f, ui::font::caption(), focused ? pal.text : pal.textMute,
                     NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, subtitle_, maxW);
 
     if (focused) {

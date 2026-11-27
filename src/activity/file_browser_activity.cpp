@@ -45,6 +45,7 @@
 #include "utils/webdav_client.hpp"
 #include "utils/thumbnail_cache.hpp"
 #include "utils/display_mode.hpp"
+#include "utils/font_scale.hpp"
 #include "utils/input_settings.hpp"
 #include "utils/keymap.hpp"
 #include "theme/muvik_theme.hpp"
@@ -2205,6 +2206,35 @@ void FileBrowserActivity::renderSettingsContent() {
     }
 
     {
+        const auto& opts = FontScale::options();
+        const size_t idx = FontScale::currentIndex();
+        auto* row = new MediaCell(
+            ui::Icon::Search,
+            i18n::tr("settings.font_scale", "界面字号") + "：" +
+                i18n::tr(opts[idx].label, opts[idx].label),
+            i18n::tr("settings.font_scale_desc",
+                     "按观看距离选择：掌机握持、桌面、外接电视各不相同"));
+        row->registerClickAction([this, row](brls::View*) {
+            FontScale::cycle();
+            const auto& o = FontScale::options();
+            const size_t i = FontScale::currentIndex();
+            row->setTitle(i18n::tr("settings.font_scale", "界面字号") + "：" +
+                          i18n::tr(o[i].label, o[i].label));
+            // 字号变了要按顺序做三件事：
+            //   1. 主题度量重算（侧栏项、标题栏的字号来自 style）
+            //   2. 重建界面（各视图在构造时取值）
+            //   3. 提示用户
+            // 少任何一步都会出现「只有一部分变大了」的现象。
+            applyMuvikTheme();
+            refresh();
+            brls::Application::notify(i18n::tr("settings.font_scale_applied",
+                                               "字号已切换，界面正在重排"));
+            return true;
+        });
+        list->addView(row);
+    }
+
+    {
         const bool fs = DisplayMode::isFullscreen();
         auto* fs_row = new MediaCell(
             ui::Icon::Aspect,
@@ -2371,13 +2401,13 @@ void FileBrowserActivity::showAboutDialog() {
 
     auto* title_lbl = new brls::Label();
     title_lbl->setText(i18n::tr("about.title", "Yiuf Player"));
-    title_lbl->setFontSize(26.0f);
+    title_lbl->setFontSize(ui::font::display());
     title_lbl->setTextColor(brls::Application::getTheme()["brls/sidebar/active_item"]);
     box->addView(title_lbl);
 
     auto* subtitle_lbl = new brls::Label();
     subtitle_lbl->setText(i18n::tr("about.subtitle", "专为大屏与掌机手柄打造的跨平台纯净影音中心"));
-    subtitle_lbl->setFontSize(15.0f);
+    subtitle_lbl->setFontSize(ui::font::detail());
     subtitle_lbl->setMarginTop(4.0f);
     subtitle_lbl->setTextColor(brls::Application::getTheme()["brls/header/subtitle"]);
     box->addView(subtitle_lbl);
@@ -2394,11 +2424,11 @@ void FileBrowserActivity::showAboutDialog() {
         item_box->setMarginBottom(10.0f);
         auto* l1 = new brls::Label();
         l1->setText(label);
-        l1->setFontSize(16.0f);
+        l1->setFontSize(ui::font::body());
         l1->setTextColor(brls::Application::getTheme()["brls/text"]);
         auto* l2 = new brls::Label();
         l2->setText(desc);
-        l2->setFontSize(13.0f);
+        l2->setFontSize(ui::font::caption());
         l2->setMarginTop(2.0f);
         l2->setTextColor(brls::Application::getTheme()["brls/header/subtitle"]);
         item_box->addView(l1);

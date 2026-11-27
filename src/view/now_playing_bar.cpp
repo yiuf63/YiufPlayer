@@ -101,16 +101,16 @@ void NowPlayingBar::draw(NVGcontext* vg, float x, float y, float width, float he
 
     // 右侧展开箭头与时间（等宽数字排版，平稳无抖）
     ui::drawIcon(vg, ui::Icon::ChevronRight, x + width - 20.0f, cy, 14.0f, pal.textMute, 1.6f);
-    const float time_w = ui::tabularTextWidth(vg, ui::font::detail, time_text_);
-    ui::tabularText(vg, x + width - 38.0f, cy, ui::font::detail, pal.textDim,
+    const float time_w = ui::tabularTextWidth(vg, ui::font::detail(), time_text_);
+    ui::tabularText(vg, x + width - 38.0f, cy, ui::font::detail(), pal.textDim,
                     NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE, time_text_);
 
     const float text_x = tile_x + tile + 14.0f;
     const float text_max =
         std::max(60.0f, (x + width - 38.0f - time_w - 20.0f) - text_x);
-    ui::textClipped(vg, text_x, cy - 10.0f, ui::font::body, pal.text,
+    ui::textClipped(vg, text_x, cy - 10.0f, ui::font::body(), pal.text,
                     NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, title_, text_max);
-    ui::textClipped(vg, text_x, cy + 11.0f, ui::font::caption, pal.textMute,
+    ui::textClipped(vg, text_x, cy + 11.0f, ui::font::caption(), pal.textMute,
                     NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE, status_, text_max);
 
     // 进度线贴底：不抢内容，但一眼能看到播到哪

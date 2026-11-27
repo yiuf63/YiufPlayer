@@ -9,6 +9,7 @@
 #include "utils/resource_locator.hpp"
 #include "utils/i18n.hpp"
 #include "utils/display_mode.hpp"
+#include "utils/font_scale.hpp"
 #include "utils/input_settings.hpp"
 #include "utils/keymap.hpp"
 #include "theme/muvik_theme.hpp"
@@ -78,6 +79,15 @@ int main(int argc, char* argv[]) {
     // 全屏显示机制：掌机 / 主机 / 电视场景默认全屏沉浸，
     // 同时支持配置文件持久化、MUVIK_WINDOW/MUVIK_FULLSCREEN 环境变量覆盖。
     VideoContext::FULLSCREEN = muvik::DisplayMode::resolveFullscreen();
+
+    // 界面字号档位。必须在创建窗口和任何界面之前应用 ——
+    // 各视图在构造时就取了字号，之后再改只影响新构建的视图。
+    // 优先级：MUVIK_FONT_SCALE 环境变量 > 配置文件 > 默认标准。
+    {
+        const float applied = muvik::FontScale::resolve();
+        brls::Logger::info("[FONT] 字号档位 scale={} (body={}px)",
+                           applied, muvik::ui::font::body());
+    }
 
     // 适配连接手柄的按键提示字体（Xbox/Steam Deck vs PlayStation vs Switch）
     muvik::Keymap::applyKeymapFont();

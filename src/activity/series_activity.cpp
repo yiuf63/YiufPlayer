@@ -67,7 +67,7 @@ brls::View* SeriesActivity::createContentView() {
 
     auto* title_lbl = new brls::Label();
     title_lbl->setText(full_title);
-    title_lbl->setFontSize(ui::font::title);
+    title_lbl->setFontSize(ui::font::title());
     title_lbl->setTextColor(pal.text);
     title_box->addView(title_lbl);
     hero->addView(title_box);
@@ -84,7 +84,7 @@ brls::View* SeriesActivity::createContentView() {
 
     auto* tag_lbl = new brls::Label();
     tag_lbl->setText(tag_text);
-    tag_lbl->setFontSize(ui::font::caption);
+    tag_lbl->setFontSize(ui::font::caption());
     tag_lbl->setTextColor(pal.accent);
     tag_lbl->setMarginBottom(8.0f);
     hero->addView(tag_lbl);
@@ -93,7 +93,7 @@ brls::View* SeriesActivity::createContentView() {
     if (!series_.overview.empty()) {
         auto* desc_lbl = new brls::Label();
         desc_lbl->setText(series_.overview);
-        desc_lbl->setFontSize(ui::font::body);
+        desc_lbl->setFontSize(ui::font::body());
         desc_lbl->setTextColor(pal.textDim);
         desc_lbl->setLineHeight(1.35f);
         desc_lbl->setMarginBottom(12.0f);

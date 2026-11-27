@@ -68,7 +68,7 @@ void QRCodeView::draw(NVGcontext* vg, float x, float y, float width, float heigh
 
     if (!valid_ || qr_size_ <= 0) {
         nvgBeginPath(vg);
-        nvgFontSize(vg, ui::font::detail);
+        nvgFontSize(vg, ui::font::detail());
         nvgFontFaceId(vg, brls::Application::getDefaultFont());
         nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
         // 提示文案画在**白底卡片上**，所以要用中灰而不是主题色 ——
@@ -114,7 +114,7 @@ void QRCodeView::showDialog(const std::string& title,
     if (!title.empty()) {
         auto* title_label = new brls::Label();
         title_label->setText(title);
-        title_label->setFontSize(ui::font::title);
+        title_label->setFontSize(ui::font::title());
         title_label->setTextColor(ui::palette().text);
         title_label->setMarginBottom(16.0f);
         container->addView(title_label);
@@ -129,7 +129,7 @@ void QRCodeView::showDialog(const std::string& title,
     if (!hint_text.empty()) {
         auto* hint_label = new brls::Label();
         hint_label->setText(hint_text);
-        hint_label->setFontSize(ui::font::detail);
+        hint_label->setFontSize(ui::font::detail());
         hint_label->setTextColor(ui::palette().textMute);
         hint_label->setMarginBottom(12.0f);
         container->addView(hint_label);

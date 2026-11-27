@@ -396,9 +396,14 @@ void applyMuvikTheme(bool force_reapply) {
     applyPaletteTo(brls::Theme::getDarkTheme(), cur.palette);
     applyPaletteTo(brls::Theme::getLightTheme(), cur.palette);
 
-    static bool style_applied = false;
-    if (!style_applied) {
-        style_applied = true;
+    // 记住上次应用时的字号缩放值。
+    //
+    // 原来是一个纯 bool，只生效一次 —— 用户改字号后重新走这里，
+    // 度量不会被刷新，侧栏和标题栏保持旧字号，看起来像「只有列表变了」。
+    // 改为比较缩放值：同一档位重复进入什么也不做，档位变了才重设。
+    static float style_applied_scale = -1.0f;
+    if (style_applied_scale != ui::font::scale()) {
+        style_applied_scale = ui::font::scale();
         brls::Style style = brls::Application::getStyle();
         style.addMetric("brls/tab_frame/sidebar_width", 176.0f);
         style.addMetric("brls/sidebar/padding_left", 20.0f);
@@ -406,14 +411,18 @@ void applyMuvikTheme(bool force_reapply) {
         style.addMetric("brls/sidebar/padding_top", 24.0f);
         style.addMetric("brls/sidebar/padding_bottom", 24.0f);
         style.addMetric("brls/sidebar/item_height", 56.0f);
-        style.addMetric("brls/sidebar/item_font_size", 18.0f);
+        // 这些字号跟随「界面字号」档位。之前是写死的 ——
+        // 用户把字号调大后，侧栏、标题栏仍是原尺寸，
+        // 看起来像「只有列表变大了」。乘 18/29 的基准值而不是直接
+        // 用 font::body()，是因为这两处有自己的设计基准（比 body 大）。
+        style.addMetric("brls/sidebar/item_font_size", 18.0f * ui::font::scale());
         style.addMetric("brls/sidebar/item_accent_rect_width", 3.0f);
         style.addMetric("brls/sidebar/item_accent_margin_sides", 0.0f);
         style.addMetric("brls/sidebar/item_accent_margin_top_bottom", 0.0f);
 
         style.addMetric("brls/applet_frame/header_height", 92.0f);
         style.addMetric("brls/applet_frame/header_padding_sides", 40.0f);
-        style.addMetric("brls/applet_frame/header_title_font_size", 29.0f);
+        style.addMetric("brls/applet_frame/header_title_font_size", 29.0f * ui::font::scale());
         style.addMetric("brls/applet_frame/footer_height", 64.0f);
 
         style.addMetric("brls/highlight/corner_radius", 14.0f);
