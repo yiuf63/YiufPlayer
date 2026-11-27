@@ -90,6 +90,19 @@ void PlaybackHistory::save() {
     }
 }
 
+// 断点续播判定 —— 唯一一处定义。
+//
+// 这个阈值原先在三个文件里各写一遍（列表卡片、播放页列表、实际开播），
+// 条件还不一致，导致「首页显示已看 26%，点进去从头播」。抽到这里之后，
+// 只要调用方都走它，界面承诺和实际行为就不会再分家。
+bool canResume(const HistoryRecord& rec) {
+    return !rec.completed && rec.position > kResumeMinSeconds;
+}
+
+bool hasProgress(const HistoryRecord& rec) {
+    return !rec.completed && rec.position > 0;
+}
+
 void PlaybackHistory::updateProgress(const std::string& path, int64_t position, int64_t duration, int sid, int aid) {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (path.empty()) return;

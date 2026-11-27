@@ -138,7 +138,29 @@ def check_behaviors(src_text, doc_text, verbose):
         check("倍速序列 文档=代码", False, "未找到 speeds[]")
 
     # 续播门槛
-    check("续播门槛 15 秒", "rec.position > 15" in src_text, "")
+    #
+    # 门槛值现在集中在 playback_history.hpp 的 kResumeMinSeconds，
+    # 判定函数是 canResume()。不能再 grep "rec.position > 15" ——
+    # 重构把这个字面量收进了常量，脚本要跟着认新形态，
+    # 否则「检查不到」会被误当成「文档写错」。
+    #
+    # 这里同时验证三件事，任何一件丢了都说明规则散架了：
+    #   1. 常量仍定义在头文件里
+    #   2. 判定函数仍以该常量为界（不是又写死一个数）
+    #   3. 文档里写的秒数与常量一致
+    hdr = (ROOT / "include/utils/playback_history.hpp")
+    hdr_text = hdr.read_text() if hdr.exists() else ""
+    m_const = re.search(r"kResumeMinSeconds\s*=\s*(\d+)", hdr_text)
+    const_val = int(m_const.group(1)) if m_const else -1
+    uses_const = "rec.position > kResumeMinSeconds" in src_text
+    m_doc = re.search(r"断点续播[^。]{0,40}?(\d+)\s*秒", doc_text)
+    doc_val = int(m_doc.group(1)) if m_doc else -1
+
+    check("续播门槛常量已定义", const_val > 0, f"kResumeMinSeconds={const_val}")
+    check("续播判定使用常量而非硬编码", uses_const, "")
+    check(f"续播门槛 {doc_val if doc_val > 0 else 15} 秒",
+          doc_val > 0 and doc_val == const_val,
+          f"文档={doc_val} 常量={const_val}")
 
     # 已看完判定
     has_near = "near_end" in src_text

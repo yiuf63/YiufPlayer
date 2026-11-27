@@ -164,7 +164,7 @@ void AudioPlayer::loadCurrent() {
     int64_t resume = 0;
     HistoryRecord rec;
     if (PlaybackHistory::getInstance().getRecord(item.path, rec)) {
-        if (!rec.completed && rec.position > 15) resume = rec.position;
+        if (canResume(rec)) resume = rec.position;
     }
 
     {

@@ -216,11 +216,34 @@ struct CellMeta {
     float progress = -1.0f;
 };
 
+// 给每个条目补上刮削标题。
+//
+// 只读 MetadataStore 的内存表，不触发任何网络或磁盘写；没有元数据的条目
+// 保持 display_title 为空，displayTitle() 会退回文件名。
+void fillDisplayTitles(std::vector<MediaLibrary::Group>& groups) {
+    auto& store = MetadataStore::getInstance();
+    auto fill = [&store](std::vector<MediaItem>& items) {
+        for (auto& it : items) {
+            if (!it.display_title.empty()) continue;
+            auto meta = store.get(it.path);
+            if (meta && !meta->title.empty()) {
+                it.display_title = meta->title;
+            }
+        }
+    };
+    for (auto& g : groups) {
+        fill(g.videos);
+        fill(g.audios);
+    }
+}
+
 CellMeta readVideoMeta(const MediaItem& item) {
     CellMeta m;
     auto meta = MetadataStore::getInstance().get(item.path);
-    const bool has_meta = meta && !meta->title.empty();
-    m.title = has_meta ? meta->title : item.name;
+    // 统一走 displayTitle()：有刮削用刮削，否则用文件名。
+    // 之前这里和搜索各判一次「有没有元数据」，两边判断可以不一致 ——
+    // 卡片显示刮削标题，搜索却只认文件名，用户按看到的名字搜不到。
+    m.title = item.displayTitle();
 
     if (meta && !meta->is_empty()) {
         if (!meta->release_date.empty()) m.sub = meta->release_date.substr(0, 4);
@@ -250,10 +273,24 @@ CellMeta readVideoMeta(const MediaItem& item) {
         } else if (rec.duration > 0) {
             m.progress = static_cast<float>(static_cast<double>(rec.position) /
                                             static_cast<double>(rec.duration));
-            char buf[32];
-            std::snprintf(buf, sizeof(buf), "已看 %d%%",
-                          static_cast<int>(m.progress * 100.0f));
-            m.badge = buf;
+            // 只有**真的能续播**时才写「已看 N%」。
+            //
+            // 实测问题（fixture: resume-eligibility）：45 秒样片存了 12 秒，
+            // 卡片写「已看 26%」，按 A 进去却从头播 —— 因为播放端要求
+            // position > 15。用户看到「已看 26%」就以为会接着播。
+            //
+            // 不够门槛的显示「最近打开」：承认看过，但不承诺跳转。
+            if (canResume(rec)) {
+                char buf[32];
+                std::snprintf(buf, sizeof(buf), "已看 %d%%",
+                              static_cast<int>(m.progress * 100.0f));
+                m.badge = buf;
+            } else {
+                m.badge = "最近打开";
+                // 进度条也一并藏掉：既然不会跳回去，画一条 26% 的进度
+                // 反而是在暗示「下次从这里继续」。
+                m.progress = -1.0f;
+            }
         }
     }
     return m;
@@ -1221,6 +1258,16 @@ void FileBrowserActivity::renderLibraryContent() {
     auto groups = lib.getGroups();
     auto& opt = LibraryViewOptions::get();
 
+    // 把刮削标题灌进 MediaItem，供搜索与显示使用。
+    //
+    // 为什么放在这里而不是 MediaLibrary 内部：
+    //   MediaLibrary 目前完全不依赖 MetadataStore（一个管扫描、一个管刮削）。
+    //   在 getGroups() 里加依赖会让两个单例互相持锁 —— 这类跨单例加锁
+    //   在本项目已经踩过死锁（见 AGENTS.md 陷阱 21）。
+    //   放在渲染入口只多一次遍历，但依赖方向保持单向：Activity → 两个 store。
+    fillDisplayTitles(groups);
+
+
     // 「全部平铺」与搜索都让文件夹层级不成立：
     // 搜索结果跨文件夹，再套一层「先进文件夹」就没有意义了。
     const bool flat = !library_query_.empty() || opt.group == LibraryGroup::Flat;
@@ -1364,7 +1411,26 @@ void FileBrowserActivity::renderLibraryOverview(const std::vector<MediaLibrary::
     requestThumbnails(want_thumbs);
     if (!LibraryViewOptions::get().showsRecent()) return;
 
-    auto recent = LibraryViewOptions::get().apply(lib.getRecent(8));
+    // 注意：这里**不能**再套 apply()。
+    //
+    // 「最近添加」的定义就是「按首次入库时间倒序」，它有自己的顺序。
+    // 而 apply() 会按用户当前的排序选项（默认是名称）重排一遍 ——
+    // 实测三条记录 z_new/m_middle/a_old 经过 apply 后变成
+    // a_old/m_middle/z_new，这一栏彻底失去意义（fixture:
+    // recent-additions-independent-of-name-sort）。
+    //
+    // 仍然需要 apply 的两个副作用：内容类型筛选、筛选条件。
+    // 所以只做过滤，不动顺序。
+    auto& opt = LibraryViewOptions::get();
+    auto recent_all = lib.getRecent(8);
+    std::vector<MediaItem> recent;
+    recent.reserve(recent_all.size());
+    for (auto& it : recent_all) {
+        // content 是「只看视频/只看音乐」；filter 是「未看完/已看完」。
+        if (opt.content == LibraryContent::VideoOnly && !it.is_video()) continue;
+        if (opt.content == LibraryContent::AudioOnly && !it.is_audio()) continue;
+        recent.push_back(std::move(it));
+    }
     if (recent.empty()) return;
 
     requestThumbnails(recent);

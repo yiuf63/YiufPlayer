@@ -7,6 +7,7 @@
 #include <functional>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include "model/media_library.hpp"
 #include "utils/app_paths.hpp"
@@ -163,9 +164,15 @@ std::vector<MediaItem> MediaLibrary::getAudios() const {
 std::vector<MediaItem> MediaLibrary::getRecent(size_t limit) const {
     std::lock_guard<std::mutex> lock(mutex_);
     std::vector<MediaItem> out = items_;
+    // 按「首次入库时间」倒序，而不是文件修改时间。
+    //
+    // 实测问题（fixture: recent-additions-independent-of-name-sort）：
+    // 拷贝一部 2019 年的老片进来时 mtime 会被保留，于是它在
+    // 「最近添加」里排到最后 —— 用户刚拷的片找不到了。
+    // 旧缓存没有 first_indexed 时已在 load() 里回退成 modified 兜底。
     std::stable_sort(out.begin(), out.end(),
         [](const MediaItem& a, const MediaItem& b) {
-            return a.modified > b.modified;
+            return a.first_indexed > b.first_indexed;
         });
     if (out.size() > limit) out.resize(limit);
     return out;
@@ -346,6 +353,26 @@ void MediaLibrary::rebuild(const ProgressCallback& on_progress) {
 
         {
             std::lock_guard<std::mutex> lock(mutex_);
+
+            // 保留「首次入库时间」：重建是整体替换 items_，如果不搬过来，
+            // 每次重扫都会把 first_indexed 冲刷成 0 → 再补成 now()，
+            // 「最近添加」就会退化成「最近扫描」。
+            //
+            // 按 path 建立旧索引；只对**本次确实扫描到的**路径搬运，
+            // 已删除的文件自然被丢弃（它不在 collected 里）。
+            std::unordered_map<std::string, int64_t> prev_added;
+            prev_added.reserve(items_.size());
+            for (const auto& it : items_) {
+                if (it.first_indexed > 0) prev_added.emplace(it.path, it.first_indexed);
+            }
+
+            const int64_t now = static_cast<int64_t>(std::time(nullptr));
+            for (auto& it : collected) {
+                if (it.first_indexed > 0) continue;         // 扫描器已带回
+                auto found = prev_added.find(it.path);
+                it.first_indexed = (found != prev_added.end()) ? found->second : now;
+            }
+
             items_ = std::move(collected);
         }
     } catch (const std::exception& e) {
@@ -438,6 +465,13 @@ void MediaLibrary::load() {
                 if (f.size() >= 6) {
                     try { item.modified = std::stoll(f[5]); } catch (...) { item.modified = 0; }
                 }
+                // v3 才有第 7 列 first_indexed。老缓存读到 0 时，
+                // 回退到 modified —— 这比用「现在」更接近真相，
+                // 也让升级后「最近添加」不至于整体乱序。
+                if (f.size() >= 7) {
+                    try { item.first_indexed = std::stoll(f[6]); } catch (...) { item.first_indexed = 0; }
+                }
+                if (item.first_indexed <= 0) item.first_indexed = item.modified;
                 items_.push_back(std::move(item));
             }
         }
@@ -464,13 +498,14 @@ void MediaLibrary::save() const {
         // 2) 媒体缓存
         std::ofstream cache(cacheFilePath(), std::ios::trunc);
         if (cache.is_open()) {
-            cache << "# Muvik library cache v2\n";
-            cache << "# path|name|type|size|ext|mtime\n";
+            cache << "# Muvik library cache v3\n";
+            cache << "# path|name|type|size|ext|mtime|first_indexed\n";
             for (const auto& item : items_) {
                 const char* t = item.is_video() ? "v" : (item.is_audio() ? "a" : "u");
                 writePipeLine(cache, {item.path, item.name, t,
                                       std::to_string(item.size), item.extension,
-                                      std::to_string(item.modified)});
+                                      std::to_string(item.modified),
+                                      std::to_string(item.first_indexed)});
             }
         }
     }

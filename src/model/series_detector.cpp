@@ -216,8 +216,16 @@ DetectionResult SeriesDetector::detect(const std::vector<MediaItem>& items) {
             });
 
             sg.episodes.reserve(classified.size());
+            sg.episode_numbers.reserve(classified.size());
             for (auto& ci : classified) {
                 sg.episodes.push_back(std::move(ci.item));
+                // 把解析出来的真实季集号一起留下。
+                //
+                // 未编号素材（OP/ED、花絮）is_ep 为 false，此时 episode 保持 0，
+                // 界面会退回显示下标 —— 但不能把它当成「第 1 集」，
+                // 否则一部 12 集的番剧加上 OP/ED 后集号全错位。
+                sg.episode_numbers.push_back(
+                    SeriesGroup::EpisodeNumber{ci.season, ci.episode});
             }
 
             // 结合播放历史计算在看集数与进度

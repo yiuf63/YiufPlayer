@@ -219,8 +219,19 @@ std::vector<MediaItem> LibraryViewOptions::apply(std::vector<MediaItem> items,
     items.erase(std::remove_if(items.begin(), items.end(),
         [&](const MediaItem& it) {
             if (!matches(it)) return true;
-            if (!q.empty() && lowerAscii(it.name).find(q) == std::string::npos) return true;
-            return false;
+            if (q.empty()) return false;
+            // 同时匹配「刮削后的展示标题」和「磁盘上的文件名」。
+            //
+            // 实测问题：`cam_0042.mp4` 刮削出「蓝调时刻」后，界面上显示的是
+            // 「蓝调时刻」，但搜索只查 name —— 用户按看到的名字搜得到 0 项，
+            // 只有记得原始文件名才找得到。这是「看得到却搜不到」的典型故障。
+            //
+            // 两处都命中同一条路径，返回结果按 path 去重的事由调用方保证
+            // （这里只做过滤，不产生重复项）。
+            if (lowerAscii(it.name).find(q) != std::string::npos) return false;
+            if (!it.display_title.empty() &&
+                lowerAscii(it.display_title).find(q) != std::string::npos) return false;
+            return true;
         }), items.end());
 
     // 每个排序键自带「自然方向」，descending 再翻转。
@@ -230,9 +241,13 @@ std::vector<MediaItem> LibraryViewOptions::apply(std::vector<MediaItem> items,
     // 它记的是「几天前」，升序天然就是最新在前。
     switch (sort) {
         case LibrarySort::Name:
+            // 按**显示名**排，而不是文件名。
+            // 用户看到的是「蓝调时刻」，按名字排序却按 cam_0042 排，
+            // 顺序会和眼睛看到的对不上。fixture 里也明确要求
+            // 「排序与展示标题一致」。
             std::stable_sort(items.begin(), items.end(),
                 [](const MediaItem& a, const MediaItem& b) {
-                    return naturalLess(a.name, b.name);
+                    return naturalLess(a.displayTitle(), b.displayTitle());
                 });
             break;
         case LibrarySort::Recent:

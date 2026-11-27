@@ -24,6 +24,31 @@ struct HistoryRecord {
     bool completed = false; // 是否已看完
 };
 
+// 断点续播的最低门槛（秒）。
+//
+// 低于这个值的进度不自动跳转：刚打开几秒就退出的记录，
+// 用户多半是在试文件，不希望下次从第 8 秒接着播。
+// 注意进度**照常记录**，只是不自动跳 —— 这两件事不要混为一谈
+// （文档里曾把「记录进度」和「自动续播」写成同一件事）。
+constexpr int64_t kResumeMinSeconds = 15;
+
+// 这条记录能不能「按一次 A 接着看」。
+//
+// 为什么必须抽成函数：
+//   修复前有三处各自判断，条件各不相同 ——
+//     列表卡片：只要 duration > 0 就显示百分比
+//     播放页列表：position > 15 才显示「上次看到」
+//     实际开播：position > 15 才设置 start=
+//   结果是首页说「已看 26%」，点进去却从头播放（fixture:
+//   resume-eligibility 记录的 12 秒实测）。用户看到什么就该发生什么。
+//
+// 判据保持现有行为：进度过阈值且未看完。
+bool canResume(const HistoryRecord& rec);
+
+// 这条记录算「看过」（列表上标「最近打开」/显示进度条）。
+// 比 canResume 宽松：只要有进度就算看过，只是不一定够续播门槛。
+bool hasProgress(const HistoryRecord& rec);
+
 class PlaybackHistory {
 public:
     static PlaybackHistory& getInstance();

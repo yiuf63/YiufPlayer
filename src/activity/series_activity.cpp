@@ -103,7 +103,15 @@ brls::View* SeriesActivity::createContentView() {
     // 主操作按钮：继续播放 / 从头播放
     std::string play_label;
     if (series_.last_watched_idx >= 0 && series_.last_watched_idx < (int)series_.episodes.size()) {
-        play_label = "继续播放：第 " + std::to_string(series_.last_watched_idx + 1) + " 集";
+        // 用**真实季集号**，不是下标 +1。
+        //
+        // 实测（fixture: mixed-directory-with-missing-episodes）：
+        // 目录里只有 S01E05 和 S01E08，上次看的是 E08。
+        // E08 的下标是 1，写成「第 2 集」—— 用户会以为文件放错了。
+        // 文件名里没有集号时（OP/ED、录屏）才退回下标。
+        const int real_ep = series_.episodeOf(static_cast<size_t>(series_.last_watched_idx));
+        const int shown_ep = (real_ep > 0) ? real_ep : (series_.last_watched_idx + 1);
+        play_label = "继续播放：第 " + std::to_string(shown_ep) + " 集";
         if (series_.last_watched_pos > 0) {
             play_label += " (" + MediaScanner::formatDuration(series_.last_watched_pos) + ")";
         }

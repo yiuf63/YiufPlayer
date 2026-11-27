@@ -133,7 +133,7 @@ void PlayerActivity::showPlaylistDialog() {
         if (PlaybackHistory::getInstance().getRecord(item.path, rec)) {
             if (rec.completed) {
                 detail += detail.empty() ? i18n::tr("common.played", "已看完") : " · " + i18n::tr("common.played", "已看完");
-            } else if (rec.position > 15) {
+            } else if (canResume(rec)) {
                 const int mins = static_cast<int>(rec.position) / 60;
                 const int secs = static_cast<int>(rec.position) % 60;
                 char buf[32];
@@ -200,7 +200,10 @@ void PlayerActivity::playCurrentIndex() {
     int64_t resume_pos = 0;
     HistoryRecord rec;
     if (PlaybackHistory::getInstance().getRecord(item.path, rec)) {
-        if (!rec.completed && rec.position > 15) {
+        // 与列表、剧集页共用同一个判定（见 playback_history.hpp 的 canResume）。
+        // 这里决定**真的从哪里开始播**，是用户唯一能感知的那一处，
+        // 必须和其它几处说的一致。
+        if (canResume(rec)) {
             resume_pos = rec.position;
         }
     }

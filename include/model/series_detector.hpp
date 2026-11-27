@@ -21,6 +21,38 @@ struct SeriesGroup {
     double rating = -1.0;        // 评分，如 8.4
     std::vector<MediaItem> episodes; // 排序后的所有单集视频
 
+    // 每集在**磁盘文件名里**标称的季号与集号，与 episodes 同下标。
+    //
+    // 为什么必须单独存：
+    //   episodes 只有下标（第几条），而界面要在文案里写「第 8 集」。
+    //   缺集时（S01E05 + S01E08）下标 1 对应的真实集号是 8，
+    //   用下标 +1 会写成「第 2 集」—— 用户以为文件放错了。
+    //   extractEpisodeInfo() 早就解析出了真实编号，但此前只用于
+    //   排序和分组，没有留下来。
+    struct EpisodeNumber {
+        int season = 0;   // 0 表示文件名里没写季号
+        int episode = 0;  // 0 表示没写集号（如 OP/ED、无编号素材）
+    };
+    std::vector<EpisodeNumber> episode_numbers;
+
+    // 某一集的真实集号；缺失（未编号素材 / 越界）时返回 0，
+    // 调用方应退回用下标显示。
+    //
+    // 注意内部约定：SeriesDetector 用 **-1** 表示「文件名里没有集号」
+    // （见 series_detector.cpp 的 EpInfo::episode）。这里是公开接口，
+    // 转成 0 更好用 —— 调用方判 `> 0` 就是「有真实集号」，
+    // 不用记住两个不同的哨兵值。
+    int episodeOf(size_t idx) const {
+        if (idx >= episode_numbers.size()) return 0;
+        const int ep = episode_numbers[idx].episode;
+        return ep > 0 ? ep : 0;
+    }
+    int seasonOf(size_t idx) const {
+        if (idx >= episode_numbers.size()) return 0;
+        const int s = episode_numbers[idx].season;
+        return s > 0 ? s : 0;
+    }
+
     // 续播状态
     int last_watched_idx = -1;   // 上次看到第几集（0-based 索引，-1 表示尚未播放）
     int64_t last_watched_pos = 0;// 播放停留在多少秒

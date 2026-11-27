@@ -84,5 +84,71 @@ int main() {
         }
     }
 
+    // ── 缺集时保留真实季集号（fixture: mixed-directory-with-missing-episodes）──
+    //
+    // 实测缺陷：同目录放 S01E05、S01E08 和一个赛车录屏时，
+    // 界面用「下标 + 1」显示集号，E08 的下标是 1 → 写成「第 2 集」。
+    // 用户会以为文件放错了。
+    TEST_BEGIN("缺集：episode_numbers 保存真实集号，不是下标");
+    {
+        std::vector<MediaItem> items;
+        auto add = [&items](const std::string& folder, const std::string& name) {
+            MediaItem it;
+            it.name = name;
+            it.path = "/fixture/" + folder + "/" + name;
+            it.type = MediaType::Video;
+            items.push_back(it);
+        };
+        add("Harbor", "Harbor.S01E05.mkv");
+        add("Harbor", "Harbor.S01E08.mkv");
+        add("Harbor", "RacingCapture.mp4");
+
+        auto result = SeriesDetector::detect(items);
+        CHECK_EQ(result.series.size(), (size_t)1, "识别出 1 部剧集");
+
+        if (!result.series.empty()) {
+            const auto& sg = result.series[0];
+            CHECK_EQ(sg.episodes.size(), (size_t)3, "两集 + 一条录屏同目录（录屏仍被归入本目录）");
+            // 关键：真实集号 5 和 8，而不是 1 和 2
+            CHECK_EQ(sg.episodeOf(0), 5, "第 1 条的真实集号是 5");
+            CHECK_EQ(sg.episodeOf(1), 8, "第 2 条的真实集号是 8（不是下标+1=2）");
+            CHECK_EQ(sg.seasonOf(0), 1, "季号为 1");
+
+            // 界面文案应写「第 8 集」
+            const int real_ep = sg.episodeOf(1);
+            const int shown = (real_ep > 0) ? real_ep : 2;
+            CHECK_EQ(shown, 8, "续播文案显示第 8 集");
+        }
+    }
+
+    TEST_BEGIN("未编号素材：episodeOf 返回 0，界面应退回下标");
+    {
+        std::vector<MediaItem> items;
+        auto add = [&items](const std::string& name) {
+            MediaItem it;
+            it.name = name;
+            it.path = "/fixture/Show/" + name;
+            it.type = MediaType::Video;
+            items.push_back(it);
+        };
+        add("Show.S01E01.mkv");
+        add("Show.S01E02.mkv");
+        add("Show OP.mkv");          // 无编号
+
+        auto result = SeriesDetector::detect(items);
+        if (!result.series.empty()) {
+            const auto& sg = result.series[0];
+            // 找到无编号的那条，它的 episode 必须是 0
+            bool found_unnumbered = false;
+            for (size_t i = 0; i < sg.episodes.size(); ++i) {
+                if (sg.episodes[i].name == "Show OP.mkv") {
+                    found_unnumbered = true;
+                    CHECK_EQ(sg.episodeOf(i), 0, "未编号素材集号为 0");
+                }
+            }
+            CHECK_TRUE(found_unnumbered, "未编号素材仍在剧集列表里可访问");
+        }
+    }
+
     TEST_END();
 }
