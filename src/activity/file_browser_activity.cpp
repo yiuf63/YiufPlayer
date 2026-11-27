@@ -1292,8 +1292,22 @@ void FileBrowserActivity::renderLibraryContent() {
     std::vector<MediaLibrary::Group> filtered;
     filtered.reserve(groups.size());
     for (auto g : groups) {
-        g.videos = opt.apply(std::move(g.videos));
-        g.audios = opt.apply(std::move(g.audios));
+        // 传搜索词。
+        //
+        // 说明一下为什么现在才传：搜索时 renderLibraryContent() 里的
+        // `flat = !library_query_.empty() || ...` 会强制切到平铺视图，
+        // 而平铺分支本来就传了 query —— 所以默认视图下搜索**一直是有效的**，
+        // 这里不传也不会出错。
+        //
+        // 仍然显式传，是因为那层耦合很脆弱：哪天总览也支持搜索
+        // （比如只搜当前目录），漏掉的这一处就会变成「打字没反应」，
+        // 且很难联想到是这里。两处调用同一个函数，参数就应当一致。
+        //
+        // ⚠ 调试记录：我一度判断「总览搜索完全无效」，用抓帧对比
+        // 「传/不传 query」两版，结果都是 6.64（有内容），
+        // 证明上述 flat 强制切换确实兜住了。差点据此写进错误结论。
+        g.videos = opt.apply(std::move(g.videos), library_query_);
+        g.audios = opt.apply(std::move(g.audios), library_query_);
         // 筛选后为空的目录直接隐藏：这时的「0」不是真的空目录，
         // 而是「这一库没有符合筛选的条目」，摆一排空卡只会让人以为坏了
         if (narrowing && g.total() == 0) continue;

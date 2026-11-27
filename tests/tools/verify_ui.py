@@ -1043,6 +1043,87 @@ def check_dialog(tmpdir, media):
         record("对话框", "插件管理页对话框显示（背景被压暗）", False, "抓帧失败")
 
 
+def check_search(tmpdir, media):
+    """搜索必须同时命中「刮削标题」和「原文件名」。
+
+    为什么单列一组：这是一条**行为承诺**而不是数值 —— 用户看到卡片上
+    写着「蓝调时刻」，就会用这个名字去搜。搜索只认文件名时，
+    搜片名得 0 项、搜 cam_0042 得 1 项，用户会以为片子丢了。
+
+    判据用三路对比，而不是「有没有内容」：
+      · 搜刮削标题  ≈ 搜原文件名（同一批结果）
+      · 两者都显著不同于「搜不存在的词」
+    只比「有内容」会误判 —— 搜索框完全失效时列表照样显示全部条目，
+    看起来一样「有内容」。
+    """
+    section("搜索")
+
+    if not media or "series_dir" not in media:
+        record("search", "搜索", True, "跳过：缺少测试媒体")
+        return
+
+    # 单独准备一份配置：一条媒体 + 一条刮削元数据（标题与文件名不同）
+    cfg = Path(tmpdir) / "search_cfg"
+    app_cfg = cfg / "yiufplayer"
+    app_cfg.mkdir(parents=True, exist_ok=True)
+
+    media_dir = Path(tmpdir) / "search_media"
+    media_dir.mkdir(parents=True, exist_ok=True)
+    src = None
+    for ext in (".mp4", ".mkv", ".avi"):
+        cand = media_dir / f"cam_0042{ext}"
+        if cand.exists():
+            src = cand
+            break
+    if src is None:
+        shutil.copy(str(media["series_dir"]) + "/" + sorted(os.listdir(media["series_dir"]))[0],
+                    media_dir / "cam_0042.mp4")
+        src = media_dir / "cam_0042.mp4"
+
+    (app_cfg / "libraries.dat").write_text(f"{media_dir}|搜索测试|1|1700000000\n")
+    # metadata.dat 是 0x1f 分隔的 11 字段，不是竖线！
+    SEP = "\x1f"
+    row = SEP.join([str(src), "蓝调时刻", "测试简介", "", "", "2023-05-01",
+                    "剧情", "8.2", "112", "tmdb", "1700000000"])
+    (app_cfg / "metadata.dat").write_text(
+        "# Muvik metadata v1 (fields separated by 0x1f)\n" + row + "\n")
+
+    def grab(query, name):
+        out = Path(tmpdir) / f"search_{name}.ppm"
+        env = {
+            "XDG_CONFIG_HOME": str(cfg),
+            "MUVIK_START_TAB": "0",
+            "MUVIK_SEARCH": query,
+            "MUVIK_FRAMEGRAB": str(out),
+            "MUVIK_FRAMEGRAB_AT_MS": "3500",
+        }
+        rc, log = run_player(env, timeout=40)
+        if not out.exists():
+            return None
+        return load_ppm(out)
+
+    a = grab("蓝调时刻", "title")
+    b = grab("cam_0042", "filename")
+    c = grab("根本不存在", "none")
+
+    if a is None or b is None or c is None:
+        record("search", "抓帧", False, "无法比较")
+        return
+
+    import numpy as np
+
+    def ink(x):
+        return int((x.mean(axis=2) > 100).sum())
+
+    d_ab = float(np.abs(a.astype(int) - b.astype(int)).mean())
+    d_ac = float(np.abs(a.astype(int) - c.astype(int)).mean())
+
+    record("search", "搜刮削标题能命中", d_ac > 2.0, f"差异 {d_ac:.2f}")
+    record("search", "搜原文件名能命中", d_ac > 2.0, "")
+    record("search", "两种搜法返回同一批结果", d_ab < 0.5, f"差异 {d_ab:.3f}")
+    record("search", "结果与空结果明显不同", d_ac > 2.0, f"{d_ac:.2f}")
+
+
 def check_track_memory(tmpdir, media):
     """选过的字幕轨要记住，下次打开恢复。
 
@@ -1317,6 +1398,7 @@ CHECKS = {
     "sid": check_track_memory,
     "feedback": check_input_and_font,
     "functional": check_functional,
+    "search": check_search,
     "asan": check_asan,
     "soak": check_soak,
     "dialog": check_dialog,
