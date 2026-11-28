@@ -116,7 +116,7 @@ void MediaFolderCard::draw(NVGcontext* vg, float x, float y, float width, float 
         const float bx = cx + cw - 8.0f - bw;
         const float by = cy + thumbH - 8.0f - 22.0f;
         ui::fillRoundRect(vg, bx, by, bw, 22.0f, 6.0f, ui::hex(0x000000, 0.72f));
-        ui::text(vg, bx + bw * 0.5f, by + 11.0f, ui::font::caption(), ui::hex(0xF3F4F6),
+        ui::text(vg, bx + bw * 0.5f, by + 11.0f, ui::font::caption(), pal.text,
                  NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, count);
     }
 

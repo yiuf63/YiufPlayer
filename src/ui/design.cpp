@@ -24,43 +24,64 @@ constexpr NVGcolor c8(unsigned r, unsigned g, unsigned b, float a = 1.0f) {
 // 标准深色：中性偏冷的三级表面。
 // 之前用的是 #14161A 背景 + #1D1F26 侧栏，两者只差 3 个灰阶，
 // 在掌机小屏上几乎看不出分层，于是整页像「一片黑 + 一堆文字」。
+// 「影院蓝」色板 —— 取自设计交接稿
+// docs/handoff/2026-11-27-handheld-library/reference/cinema-blue.html
+//
+// 之前的调色板是中性的（#0F1114 / #181B20 …），蓝-红通道差只有约 0.6，
+// 实拍统计下来基本等于灰。设计稿是明确的深蓝：同名槽位的 b-r 差在 22~51。
+// 两者不是「同一套色微调」，是两套东西 —— 换成这组之后才有影院感。
+//
+// 设计稿的变量与这里的对应：
+//   --bg      #152431  → surface
+//   --panel   #223545  → surfaceRaised
+//   --raised  #2b4153  → surfaceSunken
+//   --line    #405668  → outlineStrong
+//   --muted   #b5c9d8  → textDim
+//   --ink     #f1f6fa  → text
+//   --ice     #8bdcff  → accent（设计稿里用于焦点描边、主按钮底、进度条）
+//
+// bg 比 --bg 再深一档：设计稿的页面底靠径向渐变叠出来，本项目是纯色平铺，
+// 直接取 #152431 会让整屏偏亮、卡片贴不住底。取 #0c1a27（同一色阶的下两档）。
 constexpr Palette kDark = {
-    /* bg            */ c8(0x0F, 0x11, 0x14),
-    /* surface       */ c8(0x18, 0x1B, 0x20),
-    /* surfaceRaised */ c8(0x21, 0x25, 0x2C),
-    /* surfaceSunken */ c8(0x2A, 0x2F, 0x37),
-    /* outline       */ c8(0x2B, 0x30, 0x38),
-    /* outlineStrong */ c8(0x3C, 0x43, 0x4E),
-    /* text          */ c8(0xF3, 0xF4, 0xF6),
-    /* textDim       */ c8(0xA8, 0xAF, 0xBA),
-    /* textMute      */ c8(0x71, 0x78, 0x84),
-    /* accent        */ c8(0x1A, 0x9F, 0xFF),
-    /* accentInk     */ c8(0x0A, 0x16, 0x24),
-    /* accentSoft    */ c8(0x1A, 0x9F, 0xFF, 0.16f),
-    /* danger        */ c8(0xFF, 0x6B, 0x6B),
-    /* scrim         */ c8(0x00, 0x00, 0x00),
-    /* scrimAlpha    */ 0.55f,
+    /* bg            */ c8(0x0C, 0x1A, 0x27),
+    /* surface       */ c8(0x15, 0x24, 0x31),
+    /* surfaceRaised */ c8(0x22, 0x35, 0x45),
+    /* surfaceSunken */ c8(0x2B, 0x41, 0x53),
+    /* outline       */ c8(0x30, 0x49, 0x5A),
+    /* outlineStrong */ c8(0x40, 0x56, 0x68),
+    /* text          */ c8(0xF1, 0xF6, 0xFA),
+    /* textDim       */ c8(0xB5, 0xC9, 0xD8),
+    /* textMute      */ c8(0x69, 0x87, 0x9C),
+    /* accent        */ c8(0x8B, 0xDC, 0xFF),
+    /* accentInk     */ c8(0x12, 0x24, 0x2F),   // 设计稿 primary 按钮的文字色
+    /* accentSoft    */ c8(0x8B, 0xDC, 0xFF, 0.16f),
+    /* danger        */ c8(0xFF, 0x8A, 0x8A),
+    /* scrim         */ c8(0x04, 0x0C, 0x14),
+    /* scrimAlpha    */ 0.62f,
 };
 
 // OLED 真黑：纯黑背景，表面只提 2-3 个灰阶。
 // A 屏上「发光像素 / 熄灭像素」的对比远比 LCD 强烈，
 // 步进过大反而会把纯黑变成灰底，失去 A 屏黑的意义。
+// OLED 真黑：保留纯黑底（A 屏省电 + 真黑语义），
+// 但色阶与强调色跟影院蓝同一体系 —— 否则切到 OLED 主题后
+// 强调色又变回旧蓝，两套主题的观感会割裂。
 constexpr Palette kOled = {
     /* bg            */ c8(0x00, 0x00, 0x00),
-    /* surface       */ c8(0x0B, 0x0C, 0x0F),
-    /* surfaceRaised */ c8(0x15, 0x17, 0x1B),
-    /* surfaceSunken */ c8(0x1E, 0x21, 0x26),
-    /* outline       */ c8(0x1E, 0x21, 0x26),
-    /* outlineStrong */ c8(0x33, 0x38, 0x41),
-    /* text          */ c8(0xF3, 0xF4, 0xF6),
-    /* textDim       */ c8(0xA8, 0xAF, 0xBA),
-    /* textMute      */ c8(0x6C, 0x73, 0x7E),
-    /* accent        */ c8(0x1A, 0x9F, 0xFF),
-    /* accentInk     */ c8(0x0A, 0x16, 0x24),
-    /* accentSoft    */ c8(0x1A, 0x9F, 0xFF, 0.16f),
-    /* danger        */ c8(0xFF, 0x6B, 0x6B),
+    /* surface       */ c8(0x08, 0x0C, 0x10),
+    /* surfaceRaised */ c8(0x12, 0x17, 0x1E),
+    /* surfaceSunken */ c8(0x1B, 0x22, 0x2B),
+    /* outline       */ c8(0x1B, 0x22, 0x2B),
+    /* outlineStrong */ c8(0x2A, 0x33, 0x3F),
+    /* text          */ c8(0xF1, 0xF6, 0xFA),
+    /* textDim       */ c8(0xA7, 0xB2, 0xBE),
+    /* textMute      */ c8(0x5C, 0x66, 0x72),
+    /* accent        */ c8(0x8B, 0xDC, 0xFF),
+    /* accentInk     */ c8(0x12, 0x24, 0x2F),
+    /* accentSoft    */ c8(0x8B, 0xDC, 0xFF, 0.16f),
+    /* danger        */ c8(0xFF, 0x8A, 0x8A),
     /* scrim         */ c8(0x00, 0x00, 0x00),
-    /* scrimAlpha    */ 0.55f,
+    /* scrimAlpha    */ 0.62f,
 };
 
 // 浅色：暖白纸感底，色值取自 web/ui-review 原型 [data-theme="light"]。

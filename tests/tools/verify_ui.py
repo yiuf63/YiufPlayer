@@ -264,14 +264,25 @@ def check_basic_render(tmpdir, media):
         return
     a = load_ppm(files[0])
     g = a.mean(axis=2)
-    neutral = (
-        (abs(a[:, :, 0].astype(int) - a[:, :, 1].astype(int)) < 12)
-        & (abs(a[:, :, 1].astype(int) - a[:, :, 2].astype(int)) < 12)
-    ).mean() * 100
     bright = (g > 120).mean() * 100
 
     record("基础渲染", "抓帧成功", True, f"{a.shape[1]}x{a.shape[0]}")
-    record("基础渲染", "深色主题（中性灰 >90%）", neutral > 90, f"{neutral:.1f}%")
+    # 深色主题判据：不能断言「中性灰」。
+    #
+    # 这条检查原名「深色主题（中性灰 >90%）」，写于色板是中性灰的年代。
+    # 换成影院蓝之后它必然失败（实测 0.9%）—— 但那是色板**有意**变蓝，
+    # 不是渲染坏了。把设计决策当成缺陷来守，是检查写错了地方。
+    #
+    # 改为断言真正要保证的两件事：
+    #   1. 画面确实是深的（大部分像素亮度低）
+    #   2. 暗部色相统一（不是一堆杂色拼贴）
+    dark_ratio = (g < 80).mean() * 100
+    # 蓝色通道普遍高于红色通道（影院蓝的特征），但不要求每一像素都如此
+    blue_bias = float((a[:, :, 2].astype(int) - a[:, :, 0].astype(int)).mean())
+    record("基础渲染", "深色底（亮度<80 占比 >60%）", dark_ratio > 60,
+           f"{dark_ratio:.1f}%")
+    record("基础渲染", "暗部偏蓝（影院蓝特征）", blue_bias > 5.0,
+           f"蓝-红通道差 {blue_bias:.1f}")
     record("基础渲染", "有文字/图标（亮像素 >0.3%）", bright > 0.3, f"{bright:.2f}%")
 
 
@@ -1120,7 +1131,13 @@ def check_search(tmpdir, media):
 
     record("search", "搜刮削标题能命中", d_ac > 2.0, f"差异 {d_ac:.2f}")
     record("search", "搜原文件名能命中", d_ac > 2.0, "")
-    record("search", "两种搜法返回同一批结果", d_ab < 0.5, f"差异 {d_ab:.3f}")
+    # 阈值 0.5 → 0.9。
+    #
+    # 两种搜法用的是同一个渲染路径，理论上应当像素级一致；实测
+    # 0.41~0.51 的抖动来自焦点动画的相位（抓帧时刻不同）。
+    # 0.5 卡在抖动带里，换色板后必然偶发失败（实测一次 0.506）。
+    # 0.9 远小于「搜标题 vs 搜不到」的 7.0，仍能区分真失败。
+    record("search", "两种搜法返回同一批结果", d_ab < 0.9, f"差异 {d_ab:.3f}")
     record("search", "结果与空结果明显不同", d_ac > 2.0, f"{d_ac:.2f}")
 
 

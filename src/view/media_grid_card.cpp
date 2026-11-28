@@ -79,7 +79,7 @@ void MediaGridCard::draw(NVGcontext* vg, float x, float y, float width, float he
         const float bx = cx + cw - 7.0f - bw;
         const float by = cy + 7.0f;
         ui::fillRoundRect(vg, bx, by, bw, 21.0f, 6.0f, ui::hex(0x000000, 0.68f));
-        ui::text(vg, bx + bw * 0.5f, by + 10.5f, ui::font::caption(), ui::hex(0xF3F4F6),
+        ui::text(vg, bx + bw * 0.5f, by + 10.5f, ui::font::caption(), pal.text,
                  NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, badge_);
     }
 

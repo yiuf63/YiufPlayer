@@ -116,8 +116,10 @@ public:
         const auto& pal = ui::palette();
         const auto state = AudioPlayer::getInstance().getState();
 
-        // 1. 深度暗调背景
-        ui::fillRoundRect(vg, x, y, width, height, 0.0f, ui::hex(0x0C0E14));
+        // 1. 背景：用色板的 bg 而不是写死的 #0C0E14。
+        // 那个值是旧中性色板的同色系补丁，换成影院蓝后它会变成
+        // 一块明显发灰的区域（本页覆盖整屏，最显眼）。
+        ui::fillRoundRect(vg, x, y, width, height, 0.0f, pal.bg);
 
         // 2. 漫射呼吸式氛围背光（Apple Music / OLED 悬浮质感）
         auto now = std::chrono::steady_clock::now();
@@ -161,7 +163,7 @@ public:
 
         // 唱片主体
         ui::fillRoundRect(vg, cover_x, cover_y, cover_size, cover_size, cover_r,
-                          ui::hex(0x16181F));
+                          pal.surfaceRaised);
 
         // 唱片内圈同心微凹槽
         ui::strokeCircle(vg, cover_cx, cover_cy, cover_size * 0.36f,
